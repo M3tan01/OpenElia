@@ -4,6 +4,9 @@
 
 OpenElia is a next-generation cybersecurity operations library designed to handle multi-agent offensive and defensive operations. Powered by LLMs and the Model Context Protocol (MCP), it provides a secure, high-performance ecosystem for simulating realistic attacks and automating real-time defense.
 
+## **Important Note:**
+**Check COMMANDS.txt for Full Guide!**
+
 ## 🚀 5-Tier Security Architecture
 
 1.  **Identity & Configuration**: API keys stored in OS-native keystores (macOS Keychain, Linux Secret Service). Credentials at rest are **Fernet AES-256 encrypted** (`state/vault.bin`). The encryption key never touches disk — stored exclusively in the OS keyring.
@@ -27,9 +30,6 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 *   🛑 **Global Kill-Switch**: A technical fail-safe that allow the operator to instantly pause or terminate all active agents.
 *   📡 **Strategic Message Bus**: Enables real-time inter-agent communication and coordination.
 *   ⚡ **Elite Efficiency**: Built-in **Semantic Caching** (ChromaDB) and **Massive Output Auto-Compression** to slash API costs and latency.
-
-**Important Note:**
-**Check COMMANDS.txt for Full Guide!**
 
 ## 📁 Project Structure
 
