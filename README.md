@@ -28,6 +28,57 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 *   📡 **Strategic Message Bus**: Enables real-time inter-agent communication and coordination.
 *   ⚡ **Elite Efficiency**: Built-in **Semantic Caching** (ChromaDB) and **Massive Output Auto-Compression** to slash API costs and latency.
 
+## 📁 Project Structure
+
+```
+OpenElia/
+├── main.py                 # Main entry point for Python engine
+├── orchestrator.py         # Core orchestration logic
+├── agents/                 # AI agent implementations
+│   ├── base_agent.py       # Base agent class
+│   ├── blue/               # Defensive agents
+│   │   ├── defender_ana.py # Anomaly detection
+│   │   ├── defender_hunt.py# Threat hunting
+│   │   ├── defender_mon.py # Monitoring
+│   │   ├── defender_os.py  # OSINT
+│   │   └── defender_res.py # Response
+│   └── red/                # Offensive agents
+│       ├── pentester_ex.py # Exploitation
+│       ├── pentester_exploit.py
+│       ├── pentester_lat.py# Lateral movement
+│       ├── pentester_os.py # OSINT
+│       └── pentester_recon.py
+├── adversaries/            # Adversary emulation profiles
+│   ├── apt29.json          # APT29 TTPs
+│   └── fin7.json           # FIN7 TTPs
+├── artifacts/              # Generated artifacts and evidence
+├── lab/                    # Testing environment
+│   └── docker-compose.yml  # Lab setup
+├── mcp_servers/            # Model Context Protocol servers
+│   ├── atomic/             # Atomic Red Team integration
+│   ├── blue_remediate/     # Automated remediation
+│   ├── blue_telemetry/     # Telemetry collection
+│   ├── graph/              # Attack surface graph
+│   ├── memory/             # Long-term memory
+│   ├── pivot/              # Pivoting tools
+│   ├── red_recon/          # Reconnaissance
+│   ├── siem/               # SIEM integration
+│   ├── threat_intel/       # Threat intelligence
+│   └── vault/              # Secure credential storage
+├── skills/                 # Domain-specific skill modules
+├── src/                    # TypeScript CLI
+│   ├── cli.ts              # CLI implementation
+│   ├── index.ts            # Entry point
+│   ├── package.json        # Node.js dependencies
+│   └── tsconfig.json       # TypeScript config
+├── state/                  # Persistent state and databases
+├── requirements.txt        # Python dependencies
+├── pyproject.toml          # Python project config
+├── roe.json                # Rules of Engagement
+├── setup.sh & setup.ps1    # Installation scripts
+└── scrub.py                # Data sanitization tool
+```
+
 ## 🏁 Getting Started
 
 ### Prerequisites
