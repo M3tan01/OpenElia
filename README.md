@@ -28,6 +28,9 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 *   📡 **Strategic Message Bus**: Enables real-time inter-agent communication and coordination.
 *   ⚡ **Elite Efficiency**: Built-in **Semantic Caching** (ChromaDB) and **Massive Output Auto-Compression** to slash API costs and latency.
 
+**Important Note:**
+**Check COMMANDS.txt for Full Guide!**
+
 ## 📁 Project Structure
 
 ```
