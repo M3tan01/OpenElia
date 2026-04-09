@@ -308,6 +308,35 @@ class StateManager:
     def is_phase_complete(self, phase: str, engagement_id: str = None) -> bool:
         return self.get_phase_status(phase, engagement_id) == "complete"
 
+    def unlock_phase(self, phase: str, engagement_id: str = None) -> None:
+        """Transition a dormant phase to pending, making it eligible to run."""
+        eid = engagement_id or self.active_engagement_id
+        with self._get_conn() as conn:
+            conn.execute(
+                "UPDATE phases SET status = 'pending' WHERE engagement_id = ? AND name = ? AND status = 'dormant'",
+                (eid, phase),
+            )
+            conn.commit()
+
+    def set_metadata(self, key: str, value, engagement_id: str = None) -> None:
+        """Persist arbitrary key/value metadata for an engagement."""
+        eid = engagement_id or self.active_engagement_id
+        with self._get_conn() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO metadata (engagement_id, key, value) VALUES (?, ?, ?)",
+                (eid, key, json.dumps(value)),
+            )
+            conn.commit()
+
+    def get_metadata(self, key: str, engagement_id: str = None):
+        """Retrieve metadata by key. Returns None if not found."""
+        eid = engagement_id or self.active_engagement_id
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT value FROM metadata WHERE engagement_id = ? AND key = ?", (eid, key)
+            ).fetchone()
+            return _safe_json_loads(row["value"]) if row else None
+
     def update_phase_status(self, phase: str, status: str, engagement_id: str = None) -> None:
         eid = engagement_id or self.active_engagement_id
         with self._get_conn() as conn:

@@ -93,8 +93,9 @@ async def handle_call_tool(
                 return [types.TextContent(type="text", text=f"SSRF Guard: {e}")]
             payload = arguments["payload"]
             try:
-                # response = await client.post(url, json=payload, timeout=5)
-                return [types.TextContent(type="text", text=f"SUCCESS: Event forwarded to {url}")]
+                response = await client.post(url, json=payload, timeout=5)
+                response.raise_for_status()
+                return [types.TextContent(type="text", text=f"SUCCESS: Event forwarded to {url} [{response.status_code}]")]
             except Exception as e:
                 return [types.TextContent(type="text", text=f"SIEM Forward Error: {str(e)}")]
 

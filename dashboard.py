@@ -97,7 +97,8 @@ class Dashboard:
                     if data.get("status") == "AUTHORIZED":
                         ts = data.get("timestamp", "").split("T")[1][:8]
                         log_lines.append(f"[dim]{ts}[/] [bold red]RED[/] -> {data.get('payload', '')[:50]}...")
-        except: log_lines = ["No red team logs found."]
+        except Exception:
+            log_lines = ["No red team logs found."]
         return Panel("\n".join(log_lines), border_style="red", title="[bold]Red Team Activity[/]")
 
     def get_blue_log(self, state) -> Panel:

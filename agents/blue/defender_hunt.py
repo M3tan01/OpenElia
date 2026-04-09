@@ -67,7 +67,7 @@ class DefenderHunt(BaseAgent):
             result = await self._call_with_tools(system, messages, self._get_standard_tools())
             print(f"[defender_hunt] Hunt cycle complete.")
             # Tier 1 doesn't have a specific phase status but we can log activity
-            self.state.write_agent_result("blue", "last_hunt", {
+            self.state.set_metadata("last_hunt", {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "summary": result[:200]
             })
