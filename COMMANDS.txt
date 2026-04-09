@@ -1,0 +1,684 @@
+================================================================================
+  OPENELIA — COMPLETE COMMAND REFERENCE & MODEL CONFIGURATION GUIDE
+================================================================================
+  Version: 1.0.1  |  Python 3.11+  |  Last updated: 2026-04-09
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 1 — SYSTEM COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python main.py check
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Operational readiness check. Run this before every engagement.
+  What it does:
+    [1] Docker daemon reachable and offensive image 'cyber-ops-recon:strict' present
+    [2] Ollama reachable at configured URL and model available
+    [3] CVE Intel API (cve.circl.lu) reachable for vulnerability lookups
+    [4] Write permissions on state/, artifacts/, mcp_servers/ directories
+    [5] RBAC status (Admin vs User, IdP session present or missing)
+  Exit code   : 0 = all pass, 1 = one or more checks failed
+  Example     : python main.py check
+
+
+  python main.py doctor
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Auto-repair the environment. Fixes missing Docker image and
+                missing state directory without manual intervention.
+  What it does:
+    - Detects if 'cyber-ops-recon:strict' Docker image is missing
+    - Rebuilds it from Dockerfile.offensive automatically
+    - Creates the state/ directory if it does not exist
+  Example     : python main.py doctor
+
+
+  python main.py dashboard
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Launch the live War Room TUI (terminal user interface).
+  What it shows:
+    - Top panel  : Active engagement metadata (target, phase, start time)
+    - Left panel : Red team activity log (last 15 AUTHORIZED audit entries)
+    - Center     : Critical findings table (severity, title, MITRE TTP)
+    - Right      : Blue team telemetry (last 10 alerts with severity color)
+    - Bottom     : Stored artifacts and forensic chain of custody
+  Refresh rate: Live (auto-refresh every few seconds)
+  Example     : python main.py dashboard
+
+
+  python main.py status
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Print current engagement status to stdout (no TUI).
+  What it shows: Engagement ID, target, current phase, phase statuses,
+                 finding count, alert count.
+  Example     : python main.py status
+
+
+  python main.py clear [--force | -f]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Clear the active engagement state from the SQLite database.
+  Flags:
+    --force / -f   Skip confirmation prompt (useful in scripts)
+  Example     : python main.py clear
+                python main.py clear --force
+
+
+  python main.py sbom
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Generate a Software Bill of Materials (Supply Chain Tier 5).
+  Output      : state/bom.json — lists all dependencies (from
+                requirements.txt.lock), Docker image base, and infrastructure.
+  Example     : python main.py sbom
+
+
+  python main.py archive
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Package the entire engagement into a signed forensic case file.
+  What it does:
+    - Bundles engagement.db, audit.log, bom.json, and all artifacts/ into a ZIP
+    - Appends a Case_Summary.md inside the archive
+    - Prints the master SHA-256 hash of the archive for chain of custody
+  Output      : state/OpenElia_Case_<engagement_id>.zip
+  Example     : python main.py archive
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 2 — RED TEAM COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python main.py red [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Run the full autonomous red team pipeline against a target.
+  Pipeline    : Recon → Vuln Assessment → Exploitation → Lateral Movement
+                → Exfiltration (each phase gates on the previous completing)
+  Flags:
+    --target <IP|CIDR>    Target IP address or CIDR range (required for new
+                          engagements). CIDR triggers Subnet Swarming — parallel
+                          agent threads for each host in the range.
+    --scope <text>        Brief description of the engagement scope (logged).
+    --task <text>         Override the default task prompt sent to the agent.
+    --stealth             Enable OPSEC mode: randomized jitter, slow timing,
+                          memory-only (LotL) techniques, minimal active scanning.
+    --passive             Run passive OSINT recon only — no active scanning,
+                          no exploitation, no Docker containers launched.
+    --resume              Resume an existing engagement instead of creating a new
+                          one (skips target initialization).
+    --apt <profile>       Emulate an adversary persona. Injects TTP priorities
+                          and behavioral patterns into every agent's system prompt.
+                          Available profiles: apt29, fin7
+    --brain-tier <tier>   Intelligence level: 'local' (default, uses Ollama) or
+                          'expensive' (uses the configured paid API — see
+                          Section 5 for setup).
+    --proxy-port <port>   Route all agent traffic through a SOCKS5 proxy on
+                          localhost:<port> for lateral movement scenarios.
+    --cred-alias <name>   Name of a credential stored in the vault to inject
+                          into the engagement context.
+  Examples:
+    # Single target, stealth mode
+    python main.py red --target 10.10.10.50 --stealth
+
+    # Full CIDR swarm emulating APT29 with expensive brain
+    python main.py red --target 10.10.10.0/29 --apt apt29 --brain-tier expensive
+
+    # Passive OSINT only (no scanning, no containers)
+    python main.py red --target 10.10.10.50 --passive
+
+    # Resume previous engagement with proxy
+    python main.py red --resume --proxy-port 1080
+
+    # Custom task with stored credential
+    python main.py red --target 10.10.10.50 --task "Focus on SMB vulnerabilities" --cred-alias corp_admin
+
+
+  python main.py nmap [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Run a targeted nmap scan outside the full pipeline. Target
+                and arguments are validated against IP/CIDR and shell
+                metacharacter stripping before execution inside Docker.
+  Flags:
+    --target <IP|CIDR>    Target to scan (required)
+    --args <nmap_flags>   Additional nmap arguments (default: -sV -O)
+                          Only alphanumeric, spaces, dots, slashes, equals
+                          allowed — shell metacharacters are stripped.
+    --stealth             Use slow nmap timing and fragmentation (-T1 -f)
+    --proxy-port <port>   Route scan through SOCKS5 proxy
+    --apt <profile>       Adversary persona context for post-scan analysis
+    --brain-tier <tier>   local | expensive
+  Examples:
+    python main.py nmap --target 10.10.10.50
+    python main.py nmap --target 10.10.10.0/24 --stealth
+    python main.py nmap --target 10.10.10.50 --args "-p 80,443,8080 --script http-headers"
+
+
+  python main.py msf [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Run a Metasploit console session inside the sterile Docker
+                container. Commands are written to a signed .rc resource file
+                — never injected as CLI strings (prevents command injection).
+  Flags:
+    --target <IP>         Target IP address (required, must be valid IP)
+    --args <msf_commands> Metasploit module arguments or commands
+                          (default: "show options"). Only word chars, spaces,
+                          dots, slashes, equals, and commas allowed.
+    --cred-alias <name>   Pull a password from the vault and set it as
+                          the PASSWORD variable in the resource file.
+    --brain-tier <tier>   local | expensive
+  Requires    : Docker running + cyber-ops-recon:strict image built
+  Examples:
+    python main.py msf --target 10.10.10.50
+    python main.py msf --target 10.10.10.50 --args "use exploit/windows/smb/ms17_010_eternalblue"
+    python main.py msf --target 10.10.10.50 --cred-alias smb_admin
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 3 — BLUE TEAM COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python main.py blue [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Run the full blue team analysis pipeline against log data.
+  Pipeline    : Tier 1 Monitoring (Sigma rules / regex) →
+                Tier 2 LLM Analysis (triage, verdict, severity) →
+                Tier 3 Threat Hunting (persistence, hidden artifacts) →
+                Tier 4 Response (containment actions, TheHive case creation)
+  Flags:
+    --logs <path>         Path to a log file to analyze (auth.log, syslog,
+                          Windows Event Log export, etc.)
+    --log-text <text>     Inline log text to analyze (can be combined with
+                          --logs; both are concatenated)
+    --brain-tier <tier>   local | expensive
+  Examples:
+    # Analyze a log file
+    python main.py blue --logs /var/log/auth.log
+
+    # Analyze inline suspicious log entry
+    python main.py blue --log-text "Failed password for root from 10.0.0.77 port 54321 ssh2"
+
+    # Both sources combined
+    python main.py blue --logs /var/log/auth.log --log-text "Extra context here"
+
+    # Use expensive LLM for deeper triage
+    python main.py blue --logs /var/log/syslog --brain-tier expensive
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 4 — PURPLE TEAM COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python main.py purple [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Run a collaborative purple team simulation — red and blue
+                agents alternate in iterative attack/defend loops ("Continuous
+                Chaos"). Each iteration red attacks, blue responds, findings
+                are cross-referenced.
+  Flags:
+    --target <IP|CIDR>    Target (required for new engagement). CIDR expands
+                          to a per-host swarm automatically.
+    --scope <text>        Engagement scope description
+    --task <text>         Override the default simulation task prompt
+    --iterations <n>      Number of red/blue cycles to run (default: 2)
+    --stealth             Enable stealth mode for the red team side
+    --resume              Resume an existing engagement
+    --apt <profile>       Adversary persona for red team: apt29, fin7
+    --brain-tier <tier>   local | expensive
+    --proxy-port <port>   SOCKS5 proxy for red team traffic
+  Examples:
+    # 2-round simulation (default)
+    python main.py purple --target 10.10.10.50
+
+    # 5-round deep simulation emulating FIN7 with expensive brain
+    python main.py purple --target 10.10.10.50 --iterations 5 --apt fin7 --brain-tier expensive
+
+    # Resume with more iterations
+    python main.py purple --resume --iterations 3
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 5 — SHARED FLAGS (available on red, blue, purple, nmap)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Flag                  Values          Description
+  ──────────────────────────────────────────────────────────────────────────
+  --brain-tier          local           Use local Ollama (default, free, private)
+                        expensive       Use configured paid API (Claude, Gemini,
+                                        GPT-4 — see Section 6 for setup)
+
+  --stealth             (flag)          Enable OPSEC mode across all agents:
+                                        • Randomized jitter between tool calls
+                                        • Slow nmap timing (-T1) and fragmentation
+                                        • Prefer in-memory / LotL over disk writes
+                                        • Passive enumeration before active scanning
+
+  --apt                 apt29           Inject APT29 (Cozy Bear) behavioral profile:
+                                        spearphishing focus, PowerShell Living-off-Land,
+                                        WMI persistence, credential harvesting
+                        fin7            Inject FIN7 (Carbanak) profile:
+                                        fileless malware, CARBANAK backdoor TTPs,
+                                        POS-focused lateral movement
+
+  --proxy-port          <integer>       Route all agent network traffic through
+                                        SOCKS5 proxy at localhost:<port>. Use with
+                                        SSH tunnels or Chisel for lateral movement.
+
+  --cred-alias          <string>        Reference a named credential from the vault
+                                        (stored via store_credential MCP tool or
+                                        the SecretStore bootstrap). Injected as
+                                        the PASSWORD variable in tool contexts.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 6 — MODEL CONFIGURATION: LOCAL vs EXPENSIVE BRAIN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  All agents use a two-tier brain system controlled by --brain-tier:
+
+  ┌──────────────┬────────────────────────────────────────────────────────────┐
+  │  local       │ Default. Uses Ollama running on your machine. Free,        │
+  │              │ private, no data leaves your host. Requires ollama serve.  │
+  ├──────────────┼────────────────────────────────────────────────────────────┤
+  │  expensive   │ Uses a paid API (Claude, Gemini, GPT-4, etc). More         │
+  │              │ capable reasoning. Requires API key configuration below.   │
+  └──────────────┴────────────────────────────────────────────────────────────┘
+
+  ── 6A. SWITCHING LOCAL OLLAMA MODELS ──────────────────────────────────────
+
+  The default local model is llama3.1:8b. To change it:
+
+  Method 1 — OS Keyring (persistent, secure, recommended):
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('OLLAMA_MODEL', 'mistral:7b')
+    SecretStore.set_secret('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
+    "
+
+  Method 2 — Environment variable (session only, overrides keyring):
+    export OLLAMA_MODEL="mistral:7b"
+    export OLLAMA_BASE_URL="http://localhost:11434/v1"
+
+  Pull the model with Ollama first:
+    ollama pull mistral:7b
+    ollama pull llama3.3:70b
+    ollama pull deepseek-r1:14b
+    ollama pull qwen2.5:14b
+
+  Recommended local models by use case:
+    Fast / low-RAM    : llama3.2:3b, qwen2.5:7b
+    Balanced          : llama3.1:8b (default), mistral:7b
+    High capability   : llama3.3:70b, deepseek-r1:32b (requires 32GB+ VRAM)
+    Code / exploits   : deepseek-coder-v2:16b, qwen2.5-coder:14b
+
+  ── 6B. USING CLAUDE (ANTHROPIC) AS THE EXPENSIVE BRAIN ────────────────────
+
+  Claude uses an OpenAI-compatible endpoint. Add these to your keyring or
+  environment:
+
+    EXPENSIVE_BRAIN_URL  = https://api.anthropic.com/v1
+    EXPENSIVE_BRAIN_KEY  = <your Anthropic API key>
+    EXPENSIVE_MODEL      = claude-opus-4-6          (most capable)
+                        OR claude-sonnet-4-6        (faster, cheaper)
+                        OR claude-haiku-4-5-20251001 (fastest)
+
+  Method 1 — OS Keyring (recommended):
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://api.anthropic.com/v1')
+    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'sk-ant-YOUR_KEY_HERE')
+    SecretStore.set_secret('EXPENSIVE_MODEL', 'claude-sonnet-4-6')
+    "
+
+  Method 2 — Environment variable:
+    export EXPENSIVE_BRAIN_URL="https://api.anthropic.com/v1"
+    export EXPENSIVE_BRAIN_KEY="sk-ant-YOUR_KEY_HERE"
+    export EXPENSIVE_MODEL="claude-sonnet-4-6"
+
+  Get an API key: https://console.anthropic.com
+
+  Run with Claude brain:
+    python main.py red --target 10.10.10.50 --brain-tier expensive
+    python main.py blue --logs /var/log/auth.log --brain-tier expensive
+
+  ── 6C. USING GEMINI (GOOGLE) AS THE EXPENSIVE BRAIN ──────────────────────
+
+  Google provides an OpenAI-compatible endpoint for Gemini models.
+
+    EXPENSIVE_BRAIN_URL  = https://generativelanguage.googleapis.com/v1beta/openai/
+    EXPENSIVE_BRAIN_KEY  = <your Google AI Studio API key>
+    EXPENSIVE_MODEL      = gemini-2.0-flash          (fast, recommended)
+                        OR gemini-2.5-pro-preview-05-06 (most capable)
+                        OR gemini-1.5-pro            (stable)
+
+  Method 1 — OS Keyring (recommended):
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/')
+    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'AIza_YOUR_KEY_HERE')
+    SecretStore.set_secret('EXPENSIVE_MODEL', 'gemini-2.0-flash')
+    "
+
+  Method 2 — Environment variable:
+    export EXPENSIVE_BRAIN_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+    export EXPENSIVE_BRAIN_KEY="AIza_YOUR_KEY_HERE"
+    export EXPENSIVE_MODEL="gemini-2.0-flash"
+
+  The bootstrap prompt will also ask for GEMINI_API_KEY on first run — this
+  stores it in the keyring and is used by the threat intelligence MCP server
+  for its Gemini-powered analysis tools.
+
+  Get an API key: https://aistudio.google.com/app/apikey
+
+  ── 6D. USING OPENAI (GPT-4) AS THE EXPENSIVE BRAIN ───────────────────────
+
+    EXPENSIVE_BRAIN_URL  = https://api.openai.com/v1
+    EXPENSIVE_BRAIN_KEY  = <your OpenAI API key>
+    EXPENSIVE_MODEL      = gpt-4o                   (default fallback if not set)
+                        OR gpt-4o-mini              (cheaper)
+                        OR o3                       (deep reasoning)
+
+  Method 1 — OS Keyring:
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://api.openai.com/v1')
+    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'sk-YOUR_KEY_HERE')
+    SecretStore.set_secret('EXPENSIVE_MODEL', 'gpt-4o')
+    "
+
+  Method 2 — Environment variable:
+    export EXPENSIVE_BRAIN_URL="https://api.openai.com/v1"
+    export EXPENSIVE_BRAIN_KEY="sk-YOUR_KEY_HERE"
+    export EXPENSIVE_MODEL="gpt-4o"
+
+  ── 6E. USING A REMOTE / SELF-HOSTED OLLAMA ────────────────────────────────
+
+  If Ollama runs on a remote machine or a GPU server:
+
+    export OLLAMA_BASE_URL="http://192.168.1.100:11434/v1"
+    export OLLAMA_MODEL="llama3.3:70b"
+
+  Or persistently via keyring:
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('OLLAMA_BASE_URL', 'http://192.168.1.100:11434/v1')
+    SecretStore.set_secret('OLLAMA_MODEL', 'llama3.3:70b')
+    "
+
+  ── 6F. VERIFY CURRENT MODEL CONFIGURATION ─────────────────────────────────
+
+    python -c "
+    from secret_store import SecretStore
+    print('Local  model :', SecretStore.get_secret('OLLAMA_MODEL') or 'llama3.1:8b (default)')
+    print('Local  URL   :', SecretStore.get_secret('OLLAMA_BASE_URL') or 'http://localhost:11434/v1 (default)')
+    print('Exp.   model :', SecretStore.get_secret('EXPENSIVE_MODEL') or 'gpt-4o (default fallback)')
+    print('Exp.   URL   :', SecretStore.get_secret('EXPENSIVE_BRAIN_URL') or 'not set')
+    print('Exp.   key   :', 'SET' if SecretStore.get_secret('EXPENSIVE_BRAIN_KEY') else 'NOT SET')
+    "
+
+  ── 6G. QUICK COMPARISON TABLE ─────────────────────────────────────────────
+
+  Provider  │ Model                     │ Speed  │ Cost   │ Privacy  │ Best for
+  ──────────┼───────────────────────────┼────────┼────────┼──────────┼───────────────────
+  Ollama    │ llama3.1:8b (default)     │ Fast   │ Free   │ Local    │ Development, demos
+  Ollama    │ llama3.3:70b              │ Slow   │ Free   │ Local    │ High-quality local
+  Ollama    │ deepseek-r1:14b           │ Medium │ Free   │ Local    │ Reasoning tasks
+  Claude    │ claude-haiku-4-5          │ Fast   │ $      │ API      │ Fast triage
+  Claude    │ claude-sonnet-4-6         │ Medium │ $$     │ API      │ Balanced
+  Claude    │ claude-opus-4-6           │ Slow   │ $$$$   │ API      │ Deep reasoning
+  Gemini    │ gemini-2.0-flash          │ Fast   │ $      │ API      │ Fast analysis
+  Gemini    │ gemini-2.5-pro            │ Medium │ $$$    │ API      │ Complex tasks
+  OpenAI    │ gpt-4o-mini               │ Fast   │ $      │ API      │ Cheap paid option
+  OpenAI    │ gpt-4o                    │ Medium │ $$$    │ API      │ Reliable fallback
+  OpenAI    │ o3                        │ Slow   │ $$$$   │ API      │ Deep chain reasoning
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 7 — API KEY MANAGEMENT (SECURESTORE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Keys are stored in the OS hardware-backed keychain (macOS Keychain /
+  Linux Secret Service). They are NEVER written to disk or .env files.
+  The bootstrap prompt (first run) asks for missing keys interactively.
+
+  Keys managed by OpenElia:
+  ─────────────────────────────────────────────────────────────────────────────
+  Key name               Purpose
+  ─────────────────────────────────────────────────────────────────────────────
+  OLLAMA_BASE_URL        Local LLM endpoint (default: http://localhost:11434/v1)
+  OLLAMA_MODEL           Local model name (default: llama3.1:8b)
+  EXPENSIVE_BRAIN_URL    Paid API base URL (Claude / Gemini / OpenAI)
+  EXPENSIVE_BRAIN_KEY    Paid API key
+  EXPENSIVE_MODEL        Paid model name (default fallback: gpt-4o)
+  GEMINI_API_KEY         Gemini key for threat_intel MCP server
+  SHODAN_API_KEY         Shodan for passive OSINT (recon MCP server)
+  VT_API_KEY             VirusTotal for malware / IOC lookups
+  GRAYNOISE_API_KEY      GreyNoise for IP reputation
+  THEHIVE_API_KEY        TheHive for case management integration
+  VAULT_ENCRYPTION_KEY   Auto-generated on first use. DO NOT SET MANUALLY.
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Store a key:
+    python -c "from secret_store import SecretStore; SecretStore.set_secret('KEY_NAME', 'value')"
+
+  Read a key (prints only whether it exists, not the value):
+    python -c "
+    from secret_store import SecretStore
+    v = SecretStore.get_secret('SHODAN_API_KEY')
+    print('SET' if v else 'NOT SET')
+    "
+
+  Delete a key:
+    python -c "from secret_store import SecretStore; SecretStore.delete_secret('KEY_NAME')"
+
+  Run the full interactive bootstrap (prompts for all missing keys):
+    python -c "from secret_store import SecretStore; SecretStore.bootstrap()"
+
+  NOTE: If a .env file exists, bootstrap automatically migrates keys into the
+  keychain and warns you to delete the .env file.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 8 — MCP SERVER TOOLS (used by Claude Code, Gemini CLI, agents)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  All 10 MCP servers are auto-started when you open the project in Claude Code
+  or Gemini CLI (.mcp.json in project root). They can also be started manually:
+
+    python mcp_servers/atomic/server.py          # stdio transport
+
+  ── mcp-atomic ─────────────────────────────────────────────────────────────
+  Server  : mcp_servers/atomic/server.py
+  Tools:
+    list_atomic_ttps          List all MITRE ATT&CK TTPs in the local
+                              Atomic Red Team library.
+    get_atomic_test           Retrieve the exact command and details for a
+                              specific TTP test.
+                              Input: ttp_id (e.g. "T1053.005"), test_id (int)
+
+  ── mcp-memory ─────────────────────────────────────────────────────────────
+  Server  : mcp_servers/memory/server.py
+  Tools:
+    search_memory             Semantic search across all historical engagement
+                              logs and tool outputs using ChromaDB.
+                              Input: query (string), limit (int, default 5)
+    index_event               Store a new event in vectorized memory for
+                              future semantic retrieval.
+                              Input: source, event_type, content, metadata
+
+  ── mcp-graph ──────────────────────────────────────────────────────────────
+  Server  : mcp_servers/graph/server.py
+  Tools   : Attack surface knowledge graph queries (NetworkX backend).
+            Node traversal, shortest-path attack chains, asset enumeration.
+
+  ── mcp-siem ───────────────────────────────────────────────────────────────
+  Server  : mcp_servers/siem/server.py
+  Tools:
+    forward_event             Forward a security event to a SIEM webhook.
+                              SSRF-protected via hostname allowlist
+                              (SIEM_WEBHOOK_ALLOWLIST env var).
+                              Input: webhook_url, payload (object)
+    sync_audit_log            Synchronize the last 100 audit entries to SIEM.
+                              Input: webhook_url
+
+  ── mcp-pivot ──────────────────────────────────────────────────────────────
+  Server  : mcp_servers/pivot/server.py
+  Tools   : Network pivoting and lateral movement — tunnel management,
+            SOCKS5 proxy setup, port forwarding helpers.
+
+  ── mcp-red-recon ──────────────────────────────────────────────────────────
+  Server  : mcp_servers/red_recon/server.py
+  Tools   : Reconnaissance — nmap wrapper, OSINT lookups (Shodan, Censys),
+            DNS enumeration, banner grabbing. All targets validated against
+            roe.json scope before execution.
+
+  ── mcp-blue-remediate ─────────────────────────────────────────────────────
+  Server  : mcp_servers/blue_remediate/server.py
+  Tools   : Automated containment actions — isolate_host, block_ip,
+            disable_account, revoke_sessions, rotate_credentials.
+            Actions are logged to the audit trail and flagged for approval
+            if requires_approval = true.
+
+  ── mcp-blue-telemetry ─────────────────────────────────────────────────────
+  Server  : mcp_servers/blue_telemetry/server.py
+  Tools   : Telemetry ingestion — ingest log files, stream syslog events,
+            parse Windows Event Log exports into structured alerts.
+
+  ── mcp-threat-intel ───────────────────────────────────────────────────────
+  Server  : mcp_servers/threat_intel/server.py
+  Tools   : CVE lookups (cve.circl.lu), VirusTotal hash/IP/domain lookups
+            (VT_API_KEY), GreyNoise IP reputation (GRAYNOISE_API_KEY),
+            Shodan passive host intel (SHODAN_API_KEY).
+
+  ── mcp-vault ──────────────────────────────────────────────────────────────
+  Server  : mcp_servers/vault/server.py
+  Tools:
+    store_credential          Encrypt and store a credential by alias.
+                              Input: alias (string), value (string)
+    get_credential            Retrieve a stored credential by alias.
+                              Input: alias (string)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 9 — AGENT TOOL CAPABILITIES (all agents)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Every agent has access to these standard tools via the base_agent framework:
+
+  Tool                  Description
+  ─────────────────────────────────────────────────────────────────────────────
+  read_state            Read current engagement state or a specific phase's data.
+  write_to_state        Write a key/value result into a phase's data store.
+  send_message          Broadcast a coordination message to another agent or
+                        to ALL agents on the message bus.
+  log_finding           Log a security finding with severity, MITRE TTP,
+                        evidence, and description.
+  store_artifact        Store a file artifact (binary or text) with forensic
+                        chain of custody metadata.
+  interactive_handoff   Trigger a Shadow Shell handoff — displays a Rich panel
+                        asking the human operator to take over a live session
+                        (ssh, reverse_shell, msf_session, other).
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Agent-specific tools:
+
+  Red Team (pentester_*)       nmap_scan, run_metasploit, run_atomic_test,
+                               pivot_via_proxy, run_exfil_simulation
+
+  Blue Team (defender_*)       add_blue_alert, escalate_alert,
+                               write_response_action, write_thehive_case,
+                               (+ all MCP remediation/telemetry tools)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Agent autonomy features (always active, no flag required):
+  - Kill-Switch check before every tool execution
+  - PII redaction on all outbound content (PrivacyGuard)
+  - Prompt injection sanitization on all tool results
+  - Semantic caching — identical contexts reuse prior analysis (ChromaDB)
+  - Auto-compression — outputs > 2000 chars compressed by local model
+  - Autonomic retry — tool errors trigger self-healing (max 3 retries)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 10 — CLAUDE CODE & GEMINI CLI INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  The .mcp.json file in the project root configures all 10 MCP servers for
+  Claude Code and Gemini CLI. They auto-start when you open the project.
+
+  ── Claude Code ────────────────────────────────────────────────────────────
+
+    claude code .               # Opens project, starts all 10 MCP servers
+
+  Claude Code agent context switching:
+    /agent Pentester            Red team offensive operations
+    /agent Defender             Blue team defensive operations
+    /agent Reporter             Executive summaries, MITRE heatmaps, reports
+
+  Claude Code example prompts:
+    "Run red team recon on 10.10.10.50 with stealth enabled."
+    "Search memory for prior findings on port 445."
+    "Analyze this auth.log for credential stuffing indicators."
+    "What Atomic Red Team tests exist for T1059.001?"
+    "Generate an executive summary with MITRE ATT&CK heatmap."
+
+  ── Gemini CLI ─────────────────────────────────────────────────────────────
+
+    gemini                      # Opens project, auto-reads .mcp.json
+
+  Requires: GEMINI_API_KEY set (see Section 7)
+  Install : npm install -g @google/gemini-cli
+
+  ── TypeScript CLI ─────────────────────────────────────────────────────────
+
+  Install once:
+    cd src && npm install && npm run build && npm link
+
+  Commands:
+    openelia-cli red --target 10.10.10.50 --stealth
+    openelia-cli blue --logs /var/log/auth.log
+    openelia-cli purple --target 10.10.10.50 --iterations 3
+    openelia-cli check
+    openelia-cli status
+    openelia-cli dashboard
+    openelia-cli interactive     # Enter interactive REPL mode
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 11 — COMMON WORKFLOWS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ── First-time setup ────────────────────────────────────────────────────────
+    pip install -e .
+    ollama serve &
+    ollama pull llama3.1:8b
+    docker build -t cyber-ops-recon:strict -f Dockerfile.offensive .
+    # Edit roe.json with your authorized subnet
+    python main.py check
+
+  ── Quick red team engagement ───────────────────────────────────────────────
+    python main.py check
+    python main.py red --target 10.10.10.50 --stealth
+    python main.py dashboard           # Watch live in another terminal
+    python main.py archive             # Package evidence when done
+
+  ── Quick blue team log analysis ────────────────────────────────────────────
+    python main.py blue --logs /var/log/auth.log --brain-tier expensive
+    python main.py status              # Review findings and alerts
+
+  ── Use Gemini for expensive reasoning on critical targets ──────────────────
+    # Set up Gemini key (once)
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/')
+    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'AIza_YOUR_KEY')
+    SecretStore.set_secret('EXPENSIVE_MODEL', 'gemini-2.0-flash')
+    "
+    # Run with Gemini
+    python main.py red --target 10.10.10.50 --brain-tier expensive
+
+  ── Pre-push sanitization ───────────────────────────────────────────────────
+    python scrub.py                    # Wipe state/, artifacts/, vault
+    python main.py sbom                # Regenerate clean SBOM
+    git add . && git commit -m "clean engagement"
+
+================================================================================
+  END OF COMMAND REFERENCE
+================================================================================
