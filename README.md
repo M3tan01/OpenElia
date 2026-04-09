@@ -5,7 +5,7 @@
 OpenElia is a next-generation cybersecurity operations library designed to handle multi-agent offensive and defensive operations. Powered by LLMs and the Model Context Protocol (MCP), it provides a secure, high-performance ecosystem for simulating realistic attacks and automating real-time defense.
 
 ## **Important Note:**
-**Check COMMANDS.txt for Full Guide!**
+**Check COMMANDS.txt for COMPLETE COMMAND REFERENCE & MODEL CONFIGURATION GUIDE!**
 
 ## 🚀 5-Tier Security Architecture
 
