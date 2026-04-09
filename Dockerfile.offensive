@@ -1,0 +1,16 @@
+FROM python:3.11-alpine
+
+# Tier 3: Sterile Execution Environment
+# Install required packages (nmap, metasploit, python deps)
+RUN apk add --no-cache nmap nmap-scripts ruby ruby-dev ruby-bundler libpcap-dev \
+    && gem install metasploit-framework
+
+RUN pip install --no-cache-dir python-nmap
+
+# Create unprivileged user (Privilege Dropping)
+RUN addgroup -S nobodygroup && adduser -S nobody -G nobodygroup
+
+# Switch to unprivileged user
+USER nobody
+
+WORKDIR /app

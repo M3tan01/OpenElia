@@ -1,0 +1,36 @@
+{
+  "name": "openelia-cli",
+  "version": "1.0.0",
+  "description": "Claude Code-style CLI for OpenElia cybersecurity platform",
+  "main": "dist/index.js",
+  "bin": {
+    "openelia-cli": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "cybersecurity",
+    "cli",
+    "ai",
+    "pentesting"
+  ],
+  "author": "OpenElia Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "inquirer": "^9.2.0",
+    "ora": "^7.0.0"
+  }
+}

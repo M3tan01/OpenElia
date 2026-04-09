@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openelia"
+version = "1.0.0"
+description = "Autonomous AI-Powered Purple Team Orchestration Platform"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [
+    {name = "OpenElia Team"}
+]
+keywords = ["cybersecurity", "ai", "mcp", "pentesting", "purple-team"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "mcp>=1.0.0",
+    "python-nmap>=0.7.1",
+    "pydantic>=2.0.0",
+    "keyring>=24.0.0",
+    "docker>=6.1.0",
+    "networkx>=3.0",
+    "chromadb>=0.4.0",
+    "rich>=13.0.0",
+    "httpx>=0.24.0",
+    "cryptography>=42.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pip-tools>=7.0.0",
+]
+
+[project.scripts]
+openelia = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agents*", "mcp_servers*", "skills*"]

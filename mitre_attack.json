@@ -1,0 +1,11 @@
+{
+  "Initial Access": ["T1190", "T1133", "T1566", "T1078"],
+  "Execution": ["T1059", "T1204", "T1053", "T1569"],
+  "Persistence": ["T1547", "T1037", "T1136", "T1543"],
+  "Privilege Escalation": ["T1548", "T1068", "T1547", "T1053"],
+  "Defense Evasion": ["T1562", "T1070", "T1218", "T1027"],
+  "Credential Access": ["T1003", "T1555", "T1110", "T1552"],
+  "Discovery": ["T1087", "T1018", "T1082", "T1046"],
+  "Lateral Movement": ["T1021", "T1091", "T1570", "T1072"],
+  "Exfiltration": ["T1020", "T1041", "T1048", "T1567"]
+}

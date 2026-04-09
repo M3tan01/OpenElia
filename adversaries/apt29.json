@@ -1,0 +1,9 @@
+{
+  "name": "APT29",
+  "alias": "Cozy Bear",
+  "description": "Russian-based threat group known for stealthy, long-term espionage operations.",
+  "preferred_ttps": ["T1190", "T1053.005", "T1059.001", "T1071.001", "T1021.001"],
+  "stealth_required": true,
+  "tools": ["powershell", "nmap_stealth", "custom_c2"],
+  "rationale": "Prioritize persistence and credential harvesting via stealthy lateral movement."
+}

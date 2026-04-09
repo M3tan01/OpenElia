@@ -1,0 +1,9 @@
+{
+  "name": "FIN7",
+  "alias": "Carbanak",
+  "description": "Financial-motivated threat group known for highly targeted phishing and retail/banking attacks.",
+  "preferred_ttps": ["T1566.001", "T1204.002", "T1059.003", "T1053.005", "T1021.002"],
+  "stealth_required": false,
+  "tools": ["metasploit", "carbanak_malware", "powershell"],
+  "rationale": "Prioritize initial access via phishing followed by rapid lateral movement to POS or banking systems."
+}

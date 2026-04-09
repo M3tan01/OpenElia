@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # Vulnerable Target 1: Web Server
+  web-target:
+    image: vulhub/php:8.1-backdoor
+    networks:
+      isolated_lab_net:
+        ipv4_address: 10.0.0.50
+    ports:
+      - "8080:80"
+
+  # Vulnerable Target 2: Database
+  db-target:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-example}
+    networks:
+      isolated_lab_net:
+        ipv4_address: 10.0.0.100
+
+networks:
+  isolated_lab_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24

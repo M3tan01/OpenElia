@@ -1,0 +1,11 @@
+{
+  "authorized_subnets": ["127.0.0.0/8", "10.0.0.0/24"],
+  "blacklisted_ips": ["10.0.0.1", "10.0.0.254"],
+  "prohibited_tools": ["brute_force"],
+  "quiet_hours": {
+    "enabled": true,
+    "start": "09:00",
+    "end": "17:00",
+    "message": "Operational security: Active scanning is prohibited during business hours (09:00-17:00)."
+  }
+}
