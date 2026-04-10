@@ -531,26 +531,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
- purple_p.add_argument("--resume", action="store_true")
-    purple_p.add_argument("--iterations", type=int, default=2)
-    
-    clear_p = sub.add_parser("clear", help="Clear state")
-    clear_p.add_argument("--force", "-f", action="store_true")
-    return parser
-
-
-def main() -> None:
-    print_openelia_banner()
-    SecretStore.bootstrap()
-    parser = build_parser()
-    args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive}
-    handler = handlers.get(args.command)
-    if handler:
-        asyncio.run(handler(args))
-    else:
-        parser.print_help()
-
-
-if __name__ == "__main__":
-    main()

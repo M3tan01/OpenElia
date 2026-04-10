@@ -1,3 +1,4 @@
 #!/usr/bin/env node
-export {};
+import { Command } from 'commander';
+export declare const program: Command;
 //# sourceMappingURL=index.d.ts.map

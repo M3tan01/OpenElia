@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as readline from 'readline';
 import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
@@ -30,6 +32,7 @@ export class OpenEliaCLI {
   private pythonPath: string;
   private projectRoot: string;
   private currentAgent: string = 'Pentester';
+  private program: any;
 
   constructor() {
     this.projectRoot = path.resolve(__dirname, '..', '..');
@@ -227,6 +230,69 @@ export class OpenEliaCLI {
     }
   }
 
+  async handleDoctor(): Promise<void> {
+    const spinner = ora('Running environment repair...').start();
+
+    try {
+      const result = await this.runPythonCommand(['doctor']);
+
+      spinner.stop();
+
+      if (result.code === 0) {
+        console.log(chalk.green('✅ Environment repair completed'));
+        console.log(result.stdout);
+      } else {
+        console.log(chalk.red('❌ Environment repair failed'));
+        console.log(result.stderr);
+      }
+    } catch (error) {
+      spinner.stop();
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
+  async handleSbom(): Promise<void> {
+    const spinner = ora('Generating Software Bill of Materials...').start();
+
+    try {
+      const result = await this.runPythonCommand(['sbom']);
+
+      spinner.stop();
+
+      if (result.code === 0) {
+        console.log(chalk.green('✅ SBOM generated successfully'));
+        console.log(result.stdout);
+      } else {
+        console.log(chalk.red('❌ SBOM generation failed'));
+        console.log(result.stderr);
+      }
+    } catch (error) {
+      spinner.stop();
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
+  async handleArchive(): Promise<void> {
+    const spinner = ora('Packaging engagement archive...').start();
+
+    try {
+      const result = await this.runPythonCommand(['archive']);
+
+      spinner.stop();
+
+      if (result.code === 0) {
+        console.log(chalk.green('✅ Engagement archived successfully'));
+        console.log(result.stdout);
+      } else {
+        console.log(chalk.red('❌ Archiving failed'));
+        console.log(result.stderr);
+      }
+    } catch (error) {
+      spinner.stop();
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
   async handleNmap(options: CLIOptions): Promise<void> {
     const spinner = ora(`Running nmap scan on ${options.target}...`).start();
 
@@ -292,7 +358,12 @@ export class OpenEliaCLI {
     console.log(chalk.green(`🔄 Switched to ${agent} agent context`));
   }
 
-  async startInteractive(): Promise<void> {
+  private getHistoryFile(): string {
+    return path.join(os.homedir(), '.openelia_history');
+  }
+
+  async startInteractive(program?: any): Promise<void> {
+    this.program = program;
     const W = chalk.white.bold;
     const DG = chalk.gray;
     const G = chalk.green.bold;
@@ -316,65 +387,139 @@ ${W('    /_/                                   ')}
     `;
     console.log(banner);
 
-    while (true) {
-      try {
-        const { command } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'command',
-            message: chalk.cyan(`${this.currentAgent}>`),
-            validate: (input) => input.length > 0
-          }
-        ]);
+    const historyFile = this.getHistoryFile();
+    let history: string[] = [];
+    if (fs.existsSync(historyFile)) {
+      history = fs.readFileSync(historyFile, 'utf8').split('\n').filter(Boolean);
+    }
 
-        const trimmed = command.trim();
+    const commands = program ? program.commands.map((cmd: any) => cmd.name()) : [
+      'red', 'blue', 'purple', 'check', 'doctor', 'status', 'dashboard', 'clear', 'sbom', 'archive', 'nmap', 'msf', 'agent', 'help', 'exit', 'quit'
+    ];
+    
+    // Add aliases if available
+    if (program) {
+      program.commands.forEach((cmd: any) => {
+        if (cmd.alias()) commands.push(cmd.alias());
+      });
+    }
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true,
+      history: history,
+      completer: (line: string) => {
+        const hits = commands.filter((c: string) => c.startsWith(line));
+        return [hits.length ? hits : commands, line];
+      }
+    });
+
+    // Manually add history to the readline interface
+    // Note: In Node.js < 15.8.0, history is not automatically loaded from the array
+    // We can't easily access the private history property safely in all versions
+    // But for most modern versions it's fine.
+
+    const prompt = () => {
+      rl.setPrompt(chalk.cyan(`${this.currentAgent}> `));
+      rl.prompt();
+    };
+
+    prompt();
+
+    return new Promise((resolve) => {
+      rl.on('line', async (line) => {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          prompt();
+          return;
+        }
+
+        // Save to history file
+        if (trimmed !== 'exit' && trimmed !== 'quit') {
+          fs.appendFileSync(historyFile, trimmed + '\n');
+        }
 
         if (trimmed === 'exit' || trimmed === 'quit') {
           console.log(chalk.yellow('Goodbye! 👋'));
-          break;
+          rl.close();
+          return;
         }
 
         if (trimmed === 'help') {
           this.showHelp();
-          continue;
+          prompt();
+          return;
         }
 
-        if (trimmed === 'status') {
-          await this.handleStatus();
-          continue;
+        const args = trimmed.split(/\s+/);
+        const cmd = args[0];
+
+        try {
+          if (cmd === 'agent') {
+            if (args[1]) {
+              await this.switchAgent(args[1]);
+            } else {
+              console.log(chalk.red('Usage: agent <name>'));
+            }
+          } else if (program) {
+            // Try to use commander to parse and execute the command
+            // We need to temporarily disable process.exit for commander
+            const originalExit = process.exit;
+            // @ts-ignore
+            process.exit = () => {};
+            
+            try {
+              // We use ['node', 'index.js', ...args] to simulate CLI call
+              await program.parseAsync(['node', 'index.js', ...args]);
+            } catch (err) {
+              // Commander might throw if command is not found or help is shown
+              if (err instanceof Error && err.name !== 'CommanderError') {
+                console.error(chalk.red('Error:'), err.message);
+              }
+            } finally {
+              process.exit = originalExit;
+            }
+          } else {
+            // Fallback for simple commands if program is not available
+            if (trimmed === 'status') await this.handleStatus();
+            else if (trimmed === 'check') await this.handleCheck();
+            else console.log(chalk.yellow('Unknown command. Type "help" for available commands.'));
+          }
+        } catch (error) {
+          console.error(chalk.red('Error:'), errMsg(error));
         }
 
-        if (trimmed === 'check') {
-          await this.handleCheck();
-          continue;
-        }
+        prompt();
+      });
 
-        if (trimmed.startsWith('agent ')) {
-          const agent = trimmed.split(' ')[1];
-          await this.switchAgent(agent);
-          continue;
-        }
-
-        // For other commands, show help
-        console.log(chalk.yellow('Unknown command. Type "help" for available commands.'));
-
-      } catch (error) {
-        console.error(chalk.red('Error:'), errMsg(error));
-        break;
-      }
-    }
+      rl.on('close', () => {
+        resolve();
+      });
+    });
   }
 
   private showHelp(): void {
     console.log(chalk.bold('\n📋 Available Commands:'));
-    console.log(chalk.gray('  help                    Show this help'));
-    console.log(chalk.gray('  status                  Show engagement status'));
-    console.log(chalk.gray('  check                   Run readiness check'));
-    console.log(chalk.gray('  agent <name>            Switch agent (Pentester/Defender/Reporter)'));
-    console.log(chalk.gray('  exit/quit               Exit interactive mode'));
+    
+    if (this.program) {
+      this.program.commands.forEach((cmd: any) => {
+        const name = cmd.name().padEnd(20);
+        const desc = cmd.description();
+        console.log(chalk.gray(`  ${name}    ${desc}`));
+      });
+    } else {
+      console.log(chalk.gray('  help                    Show this help'));
+      console.log(chalk.gray('  status                  Show engagement status'));
+      console.log(chalk.gray('  check                   Run readiness check'));
+      console.log(chalk.gray('  agent <name>            Switch agent (Pentester/Defender/Reporter)'));
+      console.log(chalk.gray('  exit/quit               Exit interactive mode'));
+    }
+
     console.log(chalk.gray('\n💡 Use command-line flags for full functionality:'));
-    console.log(chalk.gray('  openelia-cli red --target 10.10.10.50'));
-    console.log(chalk.gray('  openelia-cli blue --logs /path/to/logs.txt'));
+    console.log(chalk.gray('  red --target 10.10.10.50'));
+    console.log(chalk.gray('  blue --logs /path/to/logs.txt'));
     console.log('');
   }
 }

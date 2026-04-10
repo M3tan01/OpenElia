@@ -4,18 +4,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.program = void 0;
 const commander_1 = require("commander");
 const chalk_1 = __importDefault(require("chalk"));
 const cli_1 = require("./cli");
-const program = new commander_1.Command();
-program
+exports.program = new commander_1.Command();
+exports.program
     .name('openelia-cli')
     .description('Claude Code-style CLI for OpenElia cybersecurity platform')
     .version('1.0.0');
 // Initialize the CLI
 const cli = new cli_1.OpenEliaCLI();
 // Red Team Commands
-program
+exports.program
     .command('red')
     .description('Launch red team engagement')
     .option('-t, --target <target>', 'Target IP or CIDR range')
@@ -30,7 +31,7 @@ program
     await cli.handleRedTeam(options);
 });
 // Blue Team Commands
-program
+exports.program
     .command('blue')
     .description('Launch blue team analysis')
     .option('-l, --logs <path>', 'Path to log file')
@@ -40,7 +41,7 @@ program
     await cli.handleBlueTeam(options);
 });
 // Purple Team Commands
-program
+exports.program
     .command('purple')
     .description('Launch purple team simulation')
     .option('-t, --target <target>', 'Target IP or CIDR range')
@@ -55,33 +56,51 @@ program
     await cli.handlePurpleTeam(options);
 });
 // Utility Commands
-program
+exports.program
     .command('check')
     .description('Run operational readiness check')
     .action(async () => {
     await cli.handleCheck();
 });
-program
+exports.program
+    .command('doctor')
+    .description('Auto-repair environment issues')
+    .action(async () => {
+    await cli.handleDoctor();
+});
+exports.program
     .command('status')
     .description('Show current engagement status')
     .action(async () => {
     await cli.handleStatus();
 });
-program
+exports.program
     .command('dashboard')
     .description('Launch interactive dashboard')
     .action(async () => {
     await cli.handleDashboard();
 });
-program
+exports.program
     .command('clear')
     .description('Clear engagement state')
     .option('-f, --force', 'Force clear without confirmation')
     .action(async (options) => {
     await cli.handleClear(options);
 });
+exports.program
+    .command('sbom')
+    .description('Generate Software Bill of Materials')
+    .action(async () => {
+    await cli.handleSbom();
+});
+exports.program
+    .command('archive')
+    .description('Package engagement archive')
+    .action(async () => {
+    await cli.handleArchive();
+});
 // Specialized Tools
-program
+exports.program
     .command('nmap')
     .description('Run nmap scan')
     .requiredOption('-t, --target <target>', 'Target IP or CIDR range')
@@ -91,7 +110,7 @@ program
     .action(async (options) => {
     await cli.handleNmap(options);
 });
-program
+exports.program
     .command('msf')
     .description('Run Metasploit console')
     .requiredOption('-t, --target <target>', 'Target IP')
@@ -101,7 +120,7 @@ program
     await cli.handleMetasploit(options);
 });
 // Agent Commands
-program
+exports.program
     .command('agent')
     .description('Switch active agent context')
     .argument('<agent>', 'Agent name (Pentester/Defender/Reporter)')
@@ -109,28 +128,28 @@ program
     await cli.switchAgent(agent);
 });
 // Interactive Mode
-program
+exports.program
     .command('interactive')
     .alias('i')
     .description('Start interactive Claude Code-style session')
     .action(async () => {
-    await cli.startInteractive();
+    await cli.startInteractive(exports.program);
 });
 // Default action - start interactive mode
-program.action(async () => {
-    await cli.startInteractive();
+exports.program.action(async () => {
+    await cli.startInteractive(exports.program);
 });
 // Error handling
-program.exitOverride();
+exports.program.exitOverride();
 try {
-    program.parse();
+    exports.program.parse();
 }
 catch (error) {
-    if (error.code === 'commander.help') {
-        program.outputHelp();
+    if (error instanceof Error && error.code === 'commander.help') {
+        exports.program.outputHelp();
     }
     else {
-        console.error(chalk_1.default.red('Error:'), error.message);
+        console.error(chalk_1.default.red('Error:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
     }
 }

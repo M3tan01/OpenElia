@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { OpenEliaCLI } from './cli';
 
-const program = new Command();
+export const program = new Command();
 
 program
   .name('openelia-cli')
@@ -66,6 +66,13 @@ program
   });
 
 program
+  .command('doctor')
+  .description('Auto-repair environment issues')
+  .action(async () => {
+    await cli.handleDoctor();
+  });
+
+program
   .command('status')
   .description('Show current engagement status')
   .action(async () => {
@@ -85,6 +92,20 @@ program
   .option('-f, --force', 'Force clear without confirmation')
   .action(async (options) => {
     await cli.handleClear(options);
+  });
+
+program
+  .command('sbom')
+  .description('Generate Software Bill of Materials')
+  .action(async () => {
+    await cli.handleSbom();
+  });
+
+program
+  .command('archive')
+  .description('Package engagement archive')
+  .action(async () => {
+    await cli.handleArchive();
   });
 
 // Specialized Tools
@@ -124,12 +145,12 @@ program
   .alias('i')
   .description('Start interactive Claude Code-style session')
   .action(async () => {
-    await cli.startInteractive();
+    await cli.startInteractive(program);
   });
 
 // Default action - start interactive mode
 program.action(async () => {
-  await cli.startInteractive();
+  await cli.startInteractive(program);
 });
 
 // Error handling

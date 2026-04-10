@@ -18,6 +18,7 @@ export declare class OpenEliaCLI {
     private pythonPath;
     private projectRoot;
     private currentAgent;
+    private program;
     constructor();
     private findPythonExecutable;
     private runPythonCommand;
@@ -28,10 +29,14 @@ export declare class OpenEliaCLI {
     handleStatus(): Promise<void>;
     handleDashboard(): Promise<void>;
     handleClear(options: CLIOptions): Promise<void>;
+    handleDoctor(): Promise<void>;
+    handleSbom(): Promise<void>;
+    handleArchive(): Promise<void>;
     handleNmap(options: CLIOptions): Promise<void>;
     handleMetasploit(options: CLIOptions): Promise<void>;
     switchAgent(agent: string): Promise<void>;
-    startInteractive(): Promise<void>;
+    private getHistoryFile;
+    startInteractive(program?: any): Promise<void>;
     private showHelp;
 }
 //# sourceMappingURL=cli.d.ts.map
