@@ -138,10 +138,10 @@ program.exitOverride();
 try {
   program.parse();
 } catch (error) {
-  if (error.code === 'commander.help') {
+  if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'commander.help') {
     program.outputHelp();
   } else {
-    console.error(chalk.red('Error:'), error.message);
+    console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

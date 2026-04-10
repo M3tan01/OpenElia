@@ -5,6 +5,10 @@ import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
 
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export interface CLIOptions {
   target?: string;
   scope?: string;
@@ -107,7 +111,7 @@ export class OpenEliaCLI {
       }
     } catch (error) {
       spinner.stop();
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -134,7 +138,7 @@ export class OpenEliaCLI {
       }
     } catch (error) {
       spinner.stop();
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -166,7 +170,7 @@ export class OpenEliaCLI {
       }
     } catch (error) {
       spinner.stop();
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -187,7 +191,7 @@ export class OpenEliaCLI {
       }
     } catch (error) {
       spinner.stop();
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -196,7 +200,7 @@ export class OpenEliaCLI {
       const result = await this.runPythonCommand(['status']);
       console.log(result.stdout);
     } catch (error) {
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -207,7 +211,7 @@ export class OpenEliaCLI {
       const result = await this.runPythonCommand(['dashboard']);
       console.log(result.stdout);
     } catch (error) {
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -219,7 +223,7 @@ export class OpenEliaCLI {
       const result = await this.runPythonCommand(args);
       console.log(result.stdout);
     } catch (error) {
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -246,7 +250,7 @@ export class OpenEliaCLI {
       }
     } catch (error) {
       spinner.stop();
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -272,7 +276,7 @@ export class OpenEliaCLI {
       }
     } catch (error) {
       spinner.stop();
-      console.error(chalk.red('Error:'), error.message);
+      console.error(chalk.red('Error:'), errMsg(error));
     }
   }
 
@@ -355,7 +359,7 @@ ${W('    /_/                                   ')}
         console.log(chalk.yellow('Unknown command. Type "help" for available commands.'));
 
       } catch (error) {
-        console.error(chalk.red('Error:'), error.message);
+        console.error(chalk.red('Error:'), errMsg(error));
         break;
       }
     }
