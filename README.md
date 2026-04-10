@@ -111,6 +111,12 @@ chmod +x setup.sh && ./setup.sh  # Unix/macOS
 # .\setup.ps1  # Windows
 ```
 
+> **Note (Debian/Ubuntu):** If `python3 -m venv` fails with an `ensurepip` error, install the venv package first:
+> ```bash
+> sudo apt install python3.12-venv
+> ```
+> Then re-run the venv creation steps above.
+
 > **Note:** Always activate the virtual environment before running any `python3 main.py` or `pip install` commands:
 > ```bash
 > source .venv/bin/activate
