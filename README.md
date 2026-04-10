@@ -96,14 +96,25 @@ OpenElia/
 ```bash
 # Clone the Repository
 git clone https://github.com/M3tan01/OpenElia.git
+cd OpenElia
+
+# Create and activate a virtual environment (required on Debian/Ubuntu)
+python3 -m venv .venv
+source .venv/bin/activate        # Linux/macOS
+# .venv\Scripts\activate         # Windows
 
 # Install Python dependencies
 pip install -e .
 
-# Or use setup scripts
+# Or use setup scripts (also handles venv creation)
 chmod +x setup.sh && ./setup.sh  # Unix/macOS
 # .\setup.ps1  # Windows
 ```
+
+> **Note:** Always activate the virtual environment before running any `python3 main.py` or `pip install` commands:
+> ```bash
+> source .venv/bin/activate
+> ```
 
 **TypeScript CLI (Optional but Recommended):**
 ```bash
