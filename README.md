@@ -159,6 +159,11 @@ python3 main.py sbom
 
 ### Usage
 
+> **Before running any command**, activate the virtual environment:
+> ```bash
+> source .venv/bin/activate
+> ```
+
 #### Python CLI (Direct)
 ```bash
 # Verify environment readiness
