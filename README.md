@@ -104,11 +104,17 @@ source .venv/bin/activate        # Linux/macOS
 # .venv\Scripts\activate         # Windows
 
 # Install Python dependencies
+pip install -r requirements.txt
+
+# Or install as editable package
 pip install -e .
 
 # Or use setup scripts (also handles venv creation)
 chmod +x setup.sh && ./setup.sh  # Unix/macOS
 # .\setup.ps1  # Windows
+
+# Verify environment readiness
+python3 main.py check
 ```
 
 > **Note (Debian/Ubuntu):** If `python3 -m venv` fails with an `ensurepip` error, install the venv package first:
