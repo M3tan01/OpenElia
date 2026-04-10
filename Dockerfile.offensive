@@ -1,9 +1,19 @@
-FROM python:3.11-alpine
+FROM python:3.11-slim-bookworm
 
 # Tier 3: Sterile Execution Environment
 # Install required packages (nmap, metasploit, python deps)
-RUN apk add --no-cache nmap nmap-scripts ruby ruby-dev ruby-bundler libpcap-dev \
-    && gem install metasploit-framework
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap \
+    ruby \
+    ruby-dev \
+    ruby-bundler \
+    build-essential \
+    libpcap-dev \
+    libpq-dev \
+    zlib1g-dev \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && gem install metasploit-framework --no-document
 
 RUN pip install --no-cache-dir python-nmap
 
