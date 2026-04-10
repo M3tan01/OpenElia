@@ -131,13 +131,13 @@ docker-compose up -d
 Ensure your data is purged before pushing, or generate forensic artifacts:
 ```bash
 # Purge all local state and artifacts
-python scrub.py
+python3 scrub.py
 
 # Package the entire engagement into a secure, hashed Case File
-python main.py archive
+python3 main.py archive
 
 # Generate Software Bill of Materials
-python main.py sbom
+python3 main.py sbom
 ```
 
 ### Usage
@@ -145,19 +145,19 @@ python main.py sbom
 #### Python CLI (Direct)
 ```bash
 # Verify environment readiness
-python main.py check
+python3 main.py check
 
 # Launch the interactive War Room TUI
-python main.py dashboard
+python3 main.py dashboard
 
 # Run a red team engagement (Single Target)
-python main.py red --target 10.10.10.50 --stealth
+python3 main.py red --target 10.10.10.50 --stealth
 
 # Run a parallel subnet swarm (CIDR Range) emulating APT29
-python main.py red --target 10.10.10.0/29 --apt apt29
+python3 main.py red --target 10.10.10.0/29 --apt apt29
 
 # Run a collaborative purple team loop (2 iterations)
-python main.py purple --target 10.10.10.50 --iterations 2
+python3 main.py purple --target 10.10.10.50 --iterations 2
 ```
 
 #### TypeScript CLI (Enhanced UX)
