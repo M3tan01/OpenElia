@@ -94,6 +94,9 @@ OpenElia/
 
 **Python Engine (Required):**
 ```bash
+# Clone the Repository
+git clone https://github.com/M3tan01/OpenElia.git
+
 # Install Python dependencies
 pip install -e .
 
