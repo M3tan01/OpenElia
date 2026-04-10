@@ -23,6 +23,33 @@ from secret_store import SecretStore
 load_dotenv()
 
 
+def print_openelia_banner():
+    # ANSI Colors: White (Logo), Dark Gray (Borders), Green (Highlights), Reset
+    W = "\033[1;37m"
+    DG = "\033[1;30m"
+    G = "\033[1;32m"
+    R = "\033[0m"
+
+    banner = f"""
+{W}   ____                   _______ __      
+  / __ \\____  ___  ____  / ____/ (_)___ _ 
+ / / / / __ \\/ _ \\/ __ \\/ __/ / / / __ `/ 
+/ /_/ / /_/ /  __/ / / / /___/ / / /_/ /  
+\\____/ .___/\\___/_/ /_/_____/_/_/\\__,_/   
+    /_/                                   {R}
+    
+    {DG}Operations Framework | Version 1.0{R}
+    
+    {DG}--------------------------------------------------{R}
+    [ {G}Initialization{R} ] Core Modules Loaded
+    {DG}--------------------------------------------------{R}
+    
+    Goal:    Initialize defensive agents.
+    Connect: Type 'help' to view available modules.
+    """
+    print(banner)
+
+
 def _is_safe_url(url: str) -> bool:
     parsed = urlparse(url)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
@@ -490,6 +517,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    print_openelia_banner()
+    SecretStore.bootstrap()
+    parser = build_parser()
+    args = parser.parse_args()
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive}
+    handler = handlers.get(args.command)
+    if handler:
+        asyncio.run(handler(args))
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
+ purple_p.add_argument("--resume", action="store_true")
+    purple_p.add_argument("--iterations", type=int, default=2)
+    
+    clear_p = sub.add_parser("clear", help="Clear state")
+    clear_p.add_argument("--force", "-f", action="store_true")
+    return parser
+
+
+def main() -> None:
+    print_openelia_banner()
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()

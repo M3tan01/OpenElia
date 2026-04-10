@@ -289,8 +289,28 @@ export class OpenEliaCLI {
   }
 
   async startInteractive(): Promise<void> {
-    console.log(chalk.bold.blue('🛡️ Welcome to OpenElia CLI'));
-    console.log(chalk.gray('Type "help" for commands or "exit" to quit\n'));
+    const W = chalk.white.bold;
+    const DG = chalk.gray;
+    const G = chalk.green.bold;
+
+    const banner = `
+${W('   ____                   _______ __      ')}
+${W('  / __ \\____  ___  ____  / ____/ (_)___ _ ')}
+${W(' / / / / __ \\/ _ \\/ __ \\/ __/ / / / __ `/ ')}
+${W('/ /_/ / /_/ /  __/ / / / /___/ / / /_/ /  ')}
+${W('\\____/ .___/\\___/_/ /_/_____/_/_/\\__,_/   ')}
+${W('    /_/                                   ')}
+    
+    ${DG('Operations Framework | Version 1.0')}
+    
+    ${DG('--------------------------------------------------')}
+    [ ${G('Initialization')} ] Core Modules Loaded
+    ${DG('--------------------------------------------------')}
+    
+    Goal:    Initialize defensive agents.
+    Connect: Type 'help' to view available modules.
+    `;
+    console.log(banner);
 
     while (true) {
       try {
