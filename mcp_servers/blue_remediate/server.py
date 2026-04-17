@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
+"""
+mcp_servers/blue_remediate/server.py — Automated remediation MCP server.
+
+⚠️  SIMULATION MODE — All actions are DRY-RUN stubs.
+    No real firewall rules, process kills, or account changes are executed.
+    This server logs and reports actions for operator review and HITL approval.
+    To enable live execution, replace each handler with real system calls
+    (e.g. iptables, kill, Active Directory PowerShell) after proper RBAC review.
+"""
 import asyncio
 import json
 import os
+from datetime import datetime, timezone
 from mcp.server.models import InitializationOptions
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -9,12 +19,15 @@ import mcp.types as types
 
 server = Server("mcp-blue-remediate")
 
+_SIM_TAG = "[SIMULATION — no real action taken]"
+
+
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
     return [
         types.Tool(
             name="block_ip",
-            description="Block a malicious IP address using the local firewall (simulation).",
+            description=f"SIMULATION: Log a request to block a malicious IP via the local firewall. {_SIM_TAG}",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -26,7 +39,7 @@ async def handle_list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="kill_process",
-            description="Kill a suspicious process by PID (simulation).",
+            description=f"SIMULATION: Log a request to terminate a suspicious process by PID. {_SIM_TAG}",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -42,19 +55,18 @@ async def handle_list_tools() -> list[types.Tool]:
 async def handle_call_tool(
     name: str, arguments: dict | None
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    ts = datetime.now(timezone.utc).isoformat()
     if name == "block_ip":
         ip = arguments["ip"]
         reason = arguments.get("reason", "Unknown")
-        # Simulation: In a real tool, we'd call iptables or similar
-        print(f"REMEDIATION: Blocking IP {ip} - Reason: {reason}")
-        return [types.TextContent(type="text", text=f"SUCCESS: IP {ip} has been blocked in the firewall.")]
+        print(f"[{ts}] {_SIM_TAG} REMEDIATION: block_ip {ip} — {reason}")
+        return [types.TextContent(type="text", text=f"{_SIM_TAG} Action logged: block_ip {ip} | Reason: {reason} | Real command would be: iptables -I INPUT -s {ip} -j DROP")]
 
     elif name == "kill_process":
         pid = arguments["pid"]
         reason = arguments.get("reason", "Suspicious activity")
-        # Simulation
-        print(f"REMEDIATION: Killing PID {pid} - Reason: {reason}")
-        return [types.TextContent(type="text", text=f"SUCCESS: Process {pid} has been terminated.")]
+        print(f"[{ts}] {_SIM_TAG} REMEDIATION: kill_process PID={pid} — {reason}")
+        return [types.TextContent(type="text", text=f"{_SIM_TAG} Action logged: kill_process PID={pid} | Reason: {reason} | Real command would be: kill -9 {pid}")]
 
     return []
 

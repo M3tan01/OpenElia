@@ -30,11 +30,11 @@ Given a task description and engagement context, output ONLY a JSON object with:
 }
 
 domain definitions:
-- "red"    = penetration testing, exploitation, recon, lateral movement, exfil simulation
-- "blue"   = threat detection, log analysis, incident response, alert triage, hunting
-- "status" = show current state, findings summary, phase status, report generation
-- "purple" = collaborative attack/defend simulation, autonomous purple team loop
-- "unknown" = cannot classify
+- "red"      = penetration testing, exploitation, recon, lateral movement, exfil simulation
+- "blue"     = threat detection, log analysis, incident response, alert triage, hunting
+- "reporter" = generate report, executive summary, MITRE heatmap, findings summary, chain of custody
+- "purple"   = collaborative attack/defend simulation, autonomous purple team loop
+- "unknown"  = cannot classify
 
 Output ONLY the JSON. No preamble, no explanation."""
 
@@ -69,7 +69,7 @@ class Orchestrator:
         )
         print(f"[Orchestrator] Swarm Targets: {', '.join(target_list)}")
 
-        if routing["domain"] not in ("red", "blue", "status", "purple"):
+        if routing["domain"] not in ("red", "blue", "reporter", "purple"):
             print(f"[Orchestrator] Unknown domain — task not routed.")
             return routing
 
@@ -146,8 +146,10 @@ class Orchestrator:
             blue_os = DefenderOS(self.state, brain_tier=brain_tier)
             await blue_os.analyze_logs(log_text=task)
 
-        elif domain == "status":
-            self._print_status()
+        elif domain == "reporter":
+            from agents.reporter_agent import ReporterAgent
+            reporter = ReporterAgent(self.state, brain_tier=brain_tier)
+            await reporter.run(task)
 
         elif domain == "purple":
             await self.run_purple_loop(task, targets, stealth, proxy_port, brain_tier, iterations=2, apt_profile=apt_profile)

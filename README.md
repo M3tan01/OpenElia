@@ -37,20 +37,22 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 OpenElia/
 ├── main.py                 # Main entry point for Python engine
 ├── orchestrator.py         # Core orchestration logic
-├── agents/                 # AI agent implementations
-│   ├── base_agent.py       # Base agent class
-│   ├── blue/               # Defensive agents
-│   │   ├── defender_ana.py # Anomaly detection
-│   │   ├── defender_hunt.py# Threat hunting
-│   │   ├── defender_mon.py # Monitoring
-│   │   ├── defender_os.py  # OSINT
-│   │   └── defender_res.py # Response
-│   └── red/                # Offensive agents
-│       ├── pentester_ex.py # Exploitation
-│       ├── pentester_exploit.py
-│       ├── pentester_lat.py# Lateral movement
-│       ├── pentester_os.py # OSINT
-│       └── pentester_recon.py
+├── agents/                   # AI agent implementations
+│   ├── base_agent.py         # Base agent class
+│   ├── reporter_agent.py     # Executive reporting, MITRE heatmap, chain of custody
+│   ├── blue/                 # Defensive agents
+│   │   ├── defender_ana.py   # Tier 2 LLM-based triage
+│   │   ├── defender_hunt.py  # Proactive threat hunting
+│   │   ├── defender_mon.py   # Tier 1 Sigma/regex monitoring
+│   │   ├── defender_os.py    # Blue team orchestrator
+│   │   └── defender_res.py   # Tier 4 containment & response
+│   └── red/                  # Offensive agents
+│       ├── pentester_os.py   # Red team phase orchestrator
+│       ├── pentester_recon.py# Reconnaissance phase
+│       ├── pentester_vuln.py # Vulnerability assessment
+│       ├── pentester_exploit.py # Exploitation phase
+│       ├── pentester_lat.py  # Lateral movement phase
+│       └── pentester_ex.py   # Exfiltration phase
 ├── adversaries/            # Adversary emulation profiles
 │   ├── apt29.json          # APT29 TTPs
 │   └── fin7.json           # FIN7 TTPs
@@ -69,9 +71,11 @@ OpenElia/
 │   ├── threat_intel/       # Threat intelligence
 │   └── vault/              # Secure credential storage
 ├── skills/                 # Domain-specific skill modules
-├── src/                    # TypeScript CLI
-│   ├── cli.ts              # CLI implementation
-│   ├── index.ts            # Entry point
+├── src/                    # TypeScript CLI (project root)
+│   ├── src/                # TypeScript source files
+│   │   ├── cli.ts          # CLI implementation
+│   │   └── index.ts        # Entry point
+│   ├── dist/               # Compiled JavaScript output
 │   ├── package.json        # Node.js dependencies
 │   └── tsconfig.json       # TypeScript config
 ├── state/                  # Persistent state and databases

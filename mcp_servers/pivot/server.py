@@ -1,117 +1,121 @@
 #!/usr/bin/env python3
+"""
+mcp_servers/pivot/server.py — Network pivoting MCP server.
+
+Pivot records are stored in the engagement SQLite database (pivot_sessions table)
+so they are visible in the dashboard, status command, and forensic archive.
+
+Note: tunnel/proxy creation is currently a simulation stub. Replace the handler
+bodies with real SSH/chisel/ligolo commands once your lab environment is configured.
+"""
 import asyncio
 import json
 import os
+import sys
 from mcp.server.models import InitializationOptions
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from state_manager import StateManager
+
 server = Server("mcp-pivot")
 
-PIVOT_FILE = "state/pivots.json"
 
-def load_pivots():
-    os.makedirs("state", exist_ok=True)
-    if not os.path.exists(PIVOT_FILE):
-        return []
-    try:
-        with open(PIVOT_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return []
+def _get_state() -> StateManager:
+    return StateManager()
 
-def save_pivots(data):
-    os.makedirs("state", exist_ok=True)
-    with open(PIVOT_FILE, "w") as f:
-        json.dump(data, f, indent=2)
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
-    """List available pivot tools."""
     return [
         types.Tool(
             name="create_tunnel",
-            description="Create a secure SSH tunnel to a compromised host.",
+            description="Create a secure SSH tunnel to a compromised host and record it in the engagement database.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "target": {"type": "string", "description": "The compromised host to pivot through"},
-                    "local_port": {"type": "integer", "description": "The local port to listen on"},
-                    "remote_target": {"type": "string", "description": "The destination host inside the target's network"},
-                    "remote_port": {"type": "integer", "description": "The destination port"},
+                    "target":        {"type": "string",  "description": "Compromised host to pivot through"},
+                    "local_port":    {"type": "integer", "description": "Local port to listen on"},
+                    "remote_target": {"type": "string",  "description": "Destination host inside target network"},
+                    "remote_port":   {"type": "integer", "description": "Destination port"},
                 },
                 "required": ["target", "local_port", "remote_target", "remote_port"],
             },
         ),
         types.Tool(
             name="start_socks_proxy",
-            description="Start a SOCKS5 proxy on a local port through a compromised host.",
+            description="Start a SOCKS5 proxy on a local port through a compromised host and record it in the engagement database.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "target": {"type": "string", "description": "The compromised host to pivot through"},
-                    "local_port": {"type": "integer", "description": "The local port to listen on (e.g. 9050)"},
+                    "target":     {"type": "string",  "description": "Compromised host to pivot through"},
+                    "local_port": {"type": "integer", "description": "Local port to listen on (e.g. 9050)"},
                 },
                 "required": ["target", "local_port"],
             },
         ),
         types.Tool(
             name="list_pivots",
-            description="List all active tunnels and proxies managed by the framework.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        )
+            description="List all active tunnels and proxies recorded in the engagement database.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
     ]
+
 
 @server.call_tool()
 async def handle_call_tool(
     name: str, arguments: dict | None
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    pivots = load_pivots()
+    state = _get_state()
+    arguments = arguments or {}
 
     if name == "create_tunnel":
-        if not arguments:
-            raise ValueError("Missing arguments")
-        
-        pivot = {
-            "type": "tunnel",
-            "target": arguments["target"],
-            "local_port": arguments["local_port"],
-            "remote_target": arguments["remote_target"],
-            "remote_port": arguments["remote_port"],
-            "status": "active" # Simulation
-        }
-        
-        pivots.append(pivot)
-        save_pivots(pivots)
-        
-        return [types.TextContent(type="text", text=f"SSH Tunnel created: localhost:{pivot['local_port']} -> {pivot['target']} -> {pivot['remote_target']}:{pivot['remote_port']}")]
+        target      = arguments["target"]
+        local_port  = arguments["local_port"]
+        r_target    = arguments["remote_target"]
+        r_port      = arguments["remote_port"]
+
+        row_id = state.add_pivot(
+            pivot_type="tunnel",
+            target=target,
+            local_port=local_port,
+            remote_target=r_target,
+            remote_port=r_port,
+        )
+        msg = (
+            f"Tunnel recorded (id={row_id}): "
+            f"localhost:{local_port} → {target} → {r_target}:{r_port}\n"
+            f"Command: ssh -L {local_port}:{r_target}:{r_port} user@{target} -N"
+        )
+        return [types.TextContent(type="text", text=msg)]
 
     elif name == "start_socks_proxy":
-        if not arguments:
-            raise ValueError("Missing arguments")
-            
-        pivot = {
-            "type": "socks",
-            "target": arguments["target"],
-            "local_port": arguments["local_port"],
-            "status": "active" # Simulation
-        }
-        
-        pivots.append(pivot)
-        save_pivots(pivots)
-        
-        return [types.TextContent(type="text", text=f"SOCKS5 Proxy started on port {pivot['local_port']} through {pivot['target']}. Use with proxychains or similar.")]
+        target     = arguments["target"]
+        local_port = arguments["local_port"]
+
+        row_id = state.add_pivot(
+            pivot_type="socks",
+            target=target,
+            local_port=local_port,
+        )
+        msg = (
+            f"SOCKS5 proxy recorded (id={row_id}): "
+            f"localhost:{local_port} → {target}\n"
+            f"Command: ssh -D {local_port} user@{target} -N\n"
+            f"Use with: proxychains4 or export ALL_PROXY=socks5://127.0.0.1:{local_port}"
+        )
+        return [types.TextContent(type="text", text=msg)]
 
     elif name == "list_pivots":
+        pivots = state.list_pivots()
         if not pivots:
-            return [types.TextContent(type="text", text="No active pivots found.")]
-        return [types.TextContent(type="text", text=json.dumps(pivots, indent=2))]
+            return [types.TextContent(type="text", text="No pivot sessions recorded for the active engagement.")]
+        return [types.TextContent(type="text", text=json.dumps(pivots, indent=2, default=str))]
 
     return []
+
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):
@@ -120,10 +124,11 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="mcp-pivot",
-                server_version="0.1.0",
+                server_version="0.2.0",
                 capabilities=server.get_capabilities(),
             ),
         )
+
 
 if __name__ == "__main__":
     asyncio.run(main())

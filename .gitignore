@@ -196,6 +196,10 @@ temp/
 ehthumbs.db
 Thumbs.db
 
+# Generated SAST / security scan output
+bandit_report.json
+*.sarif
+
 # Security-sensitive files
 *.key
 *.pem

@@ -71,7 +71,14 @@ def _check_ollama() -> bool:
         return False
 
 
-def _require_api_key() -> None:
+def _require_api_key(brain_tier: str = "local") -> None:
+    if brain_tier == "expensive":
+        key = SecretStore.get_secret("EXPENSIVE_BRAIN_KEY")
+        if not key:
+            print("ERROR: --brain-tier expensive requires EXPENSIVE_BRAIN_KEY to be set.")
+            print("Run: python -c \"from secret_store import SecretStore; SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'your-key')\"")
+            sys.exit(1)
+        return
     if not _check_ollama():
         base_url = SecretStore.get_secret("OLLAMA_BASE_URL") or "http://localhost:11434/v1"
         print(f"ERROR: Ollama is not reachable at {base_url}.")
@@ -207,9 +214,9 @@ async def cmd_red(args) -> None:
             state.initialize_engagement(target, scope)
             print(f"[main] Engagement initialized — target: {target}")
 
-    _require_api_key()
+    _require_api_key(args.brain_tier)
     orch = Orchestrator(state)
-    
+
     if args.passive:
         from agents.red.pentester_recon import PentesterRecon
         for target in targets:
@@ -224,7 +231,7 @@ async def cmd_red(args) -> None:
 
 
 async def cmd_blue(args) -> None:
-    _require_api_key()
+    _require_api_key(args.brain_tier)
     from state_manager import StateManager
     from agents.blue.defender_os import DefenderOS
     state = StateManager()
@@ -309,7 +316,7 @@ async def cmd_nmap(args) -> None:
     recon = PentesterRecon(state, brain_tier=args.brain_tier)
     if not state.read():
         state.initialize_engagement(args.target, "Ad-hoc nmap scan")
-    _require_api_key()
+    _require_api_key(args.brain_tier)
     print(f"[main] Running nmap scan for target {args.target}...")
     nmap_args = args.args or "-sV"
     await recon.run_nmap(args.target, nmap_args=nmap_args)
@@ -336,7 +343,7 @@ async def cmd_msf(args) -> None:
     from state_manager import StateManager
     
     print(f"[*] Launching Metasploit Session for {args.target}...")
-    _require_api_key()
+    _require_api_key(args.brain_tier)
     
     try:
         _validate_ip_target(args.target)
@@ -381,7 +388,7 @@ async def cmd_purple(args) -> None:
             state.initialize_engagement(target, args.scope or "Authorized engagement")
             print(f"[main] Purple Team engagement initialized — target: {target}")
 
-    _require_api_key()
+    _require_api_key(args.brain_tier)
     orch = Orchestrator(state)
     await orch.run_purple_loop(args.task or "Collaborative Purple Team simulation", targets=targets, stealth=args.stealth, proxy_port=args.proxy_port, brain_tier=args.brain_tier, iterations=args.iterations, apt_profile=args.apt)
 
@@ -439,6 +446,19 @@ async def cmd_sbom(args) -> None:
     
     print("✅ SBOM generated: state/bom.json")
     print(f"[*] Total Components Tracked: {len(python_deps) + len(node_deps)}")
+
+
+async def cmd_report(args) -> None:
+    """Generate executive report, MITRE heatmap, and forensic chain of custody."""
+    from state_manager import StateManager
+    from agents.reporter_agent import ReporterAgent
+    state = StateManager()
+    if not state.read():
+        print("ERROR: No active engagement. Run a red or blue engagement first.")
+        sys.exit(1)
+    _require_api_key(args.brain_tier)
+    reporter = ReporterAgent(state, brain_tier=args.brain_tier)
+    await reporter.run(args.task or "Generate full engagement report with MITRE heatmap and forensic chain of custody.")
 
 
 async def cmd_archive(args) -> None:
@@ -603,6 +623,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("archive", parents=[common], help="Package engagement archive")
     sub.add_parser("lock", help="Engage Global Kill-Switch")
     sub.add_parser("unlock", help="Disengage Global Kill-Switch")
+
+    report_p = sub.add_parser("report", parents=[common], help="Generate executive report and MITRE heatmap")
+    report_p.add_argument("--task", help="Override the default report task prompt")
     
     purple_p = sub.add_parser("purple", parents=[common], help="Run purple team loop")
     purple_p.add_argument("--target")
@@ -623,7 +646,7 @@ def main() -> None:
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock}
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report}
     handler = handlers.get(args.command)
     if handler:
         asyncio.run(handler(args))

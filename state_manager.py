@@ -142,6 +142,19 @@ class StateManager:
                     PRIMARY KEY (engagement_id, key),
                     FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS pivot_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    engagement_id TEXT,
+                    type TEXT,
+                    target TEXT,
+                    local_port INTEGER,
+                    remote_target TEXT,
+                    remote_port INTEGER,
+                    status TEXT DEFAULT 'active',
+                    created_at TEXT,
+                    FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
+                );
             """)
             conn.commit()
 
@@ -418,6 +431,26 @@ class StateManager:
                   action_data.get("command"), action_data.get("rationale"),
                   1 if action_data.get("requires_approval") else 0, ts))
             conn.commit()
+
+    def add_pivot(self, pivot_type: str, target: str, local_port: int, remote_target: str = None, remote_port: int = None, engagement_id: str = None) -> int:
+        """Record a new pivot tunnel or SOCKS proxy. Returns the row id."""
+        eid = engagement_id or self.active_engagement_id
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO pivot_sessions (engagement_id, type, target, local_port, remote_target, remote_port, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, 'active', ?)""",
+                (eid, pivot_type, target, local_port, remote_target, remote_port, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            return cur.lastrowid
+
+    def list_pivots(self, engagement_id: str = None) -> list[dict]:
+        """Return all pivot sessions for the active engagement."""
+        eid = engagement_id or self.active_engagement_id
+        with self._get_conn() as conn:
+            return [dict(row) for row in conn.execute(
+                "SELECT * FROM pivot_sessions WHERE engagement_id = ? ORDER BY created_at DESC", (eid,)
+            )]
 
     def set_thehive_case(self, case_data: dict, engagement_id: str = None) -> None:
         eid = engagement_id or self.active_engagement_id

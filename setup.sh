@@ -31,13 +31,20 @@ else
     echo "[!] WARNING: Docker not found. Offensive modules will not function in sterile mode."
 fi
 
-# 4. Configuration
-if [ ! -f ".env" ]; then
-    echo "[+] Creating .env from template..."
-    cp .env.example .env
-    echo "[!] Action required: Update the .env file with your API keys."
+# 4. Configuration — store secrets in OS keyring, not .env
+echo "[+] Bootstrapping OS keyring for secure secret storage..."
+./.venv/bin/python -c "from secret_store import SecretStore; SecretStore.bootstrap()"
+
+# If a legacy .env exists, warn the user to delete it
+if [ -f ".env" ]; then
+    echo ""
+    echo "[!] WARNING: A plaintext .env file exists."
+    echo "    Your secrets are now stored in the OS keyring."
+    echo "    Delete the .env file to prevent accidental secret exposure:"
+    echo "    rm .env"
 fi
 
 echo ""
 echo "✅ Setup complete! You are ready to operate."
-echo "   Run '/agent Pentester' to begin."
+echo "   Run 'python main.py check' to verify your environment."
+echo "   See COMMANDS.txt for full command reference and model configuration."
