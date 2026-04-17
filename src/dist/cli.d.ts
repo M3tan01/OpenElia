@@ -10,9 +10,10 @@ export interface CLIOptions {
     logs?: string;
     logText?: string;
     iterations?: string;
-    force?: boolean;
     args?: string;
     credAlias?: string;
+    proxyPort?: string;
+    force?: boolean;
 }
 export declare class OpenEliaCLI {
     private pythonPath;
@@ -27,6 +28,8 @@ export declare class OpenEliaCLI {
     handlePurpleTeam(options: CLIOptions): Promise<void>;
     handleCheck(): Promise<void>;
     handleStatus(): Promise<void>;
+    handleLock(): Promise<void>;
+    handleUnlock(): Promise<void>;
     handleDashboard(): Promise<void>;
     handleClear(options: CLIOptions): Promise<void>;
     handleDoctor(): Promise<void>;

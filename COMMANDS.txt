@@ -63,6 +63,20 @@
                 python main.py clear --force
 
 
+  python main.py lock
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Engage the Global Kill-Switch. Instantly suspends all autonomous
+                agent execution and records a manual halt event in the audit log.
+  Example     : python main.py lock
+
+
+  python main.py unlock
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Disengage the Global Kill-Switch, allowing autonomous execution
+                to resume.
+  Example     : python main.py unlock
+
+
   python main.py sbom
   ─────────────────────────────────────────────────────────────────────────────
   Description : Generate a Software Bill of Materials (Supply Chain Tier 5).

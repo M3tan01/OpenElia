@@ -221,6 +221,24 @@ class OpenEliaCLI {
             console.error(chalk_1.default.red('Error:'), errMsg(error));
         }
     }
+    async handleLock() {
+        try {
+            const result = await this.runPythonCommand(['lock']);
+            console.log(result.stdout);
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('Error:'), errMsg(error));
+        }
+    }
+    async handleUnlock() {
+        try {
+            const result = await this.runPythonCommand(['unlock']);
+            console.log(result.stdout);
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('Error:'), errMsg(error));
+        }
+    }
     async handleDashboard() {
         console.log(chalk_1.default.blue('🚀 Launching OpenElia War Room Dashboard...'));
         try {
@@ -334,6 +352,10 @@ class OpenEliaCLI {
                 args.push('--args', options.args);
             if (options.credAlias)
                 args.push('--cred-alias', options.credAlias);
+            if (options.stealth)
+                args.push('--stealth');
+            if (options.proxyPort)
+                args.push('--proxy-port', options.proxyPort);
             const result = await this.runPythonCommand(args);
             spinner.stop();
             if (result.code === 0) {
@@ -391,7 +413,7 @@ ${W('    /_/                                   ')}
             history = fs.readFileSync(historyFile, 'utf8').split('\n').filter(Boolean);
         }
         const commands = program ? program.commands.map((cmd) => cmd.name()) : [
-            'red', 'blue', 'purple', 'check', 'doctor', 'status', 'dashboard', 'clear', 'sbom', 'archive', 'nmap', 'msf', 'agent', 'help', 'exit', 'quit'
+            'red', 'blue', 'purple', 'check', 'doctor', 'status', 'dashboard', 'clear', 'sbom', 'archive', 'nmap', 'msf', 'agent', 'lock', 'unlock', 'help', 'exit', 'quit'
         ];
         // Add aliases if available
         if (program) {
@@ -477,6 +499,10 @@ ${W('    /_/                                   ')}
                             await this.handleStatus();
                         else if (trimmed === 'check')
                             await this.handleCheck();
+                        else if (trimmed === 'lock')
+                            await this.handleLock();
+                        else if (trimmed === 'unlock')
+                            await this.handleUnlock();
                         else
                             console.log(chalk_1.default.yellow('Unknown command. Type "help" for available commands.'));
                     }

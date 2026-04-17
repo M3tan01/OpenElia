@@ -108,6 +108,20 @@ program
     await cli.handleArchive();
   });
 
+program
+  .command('lock')
+  .description('Engage Global Kill-Switch')
+  .action(async () => {
+    await cli.handleLock();
+  });
+
+program
+  .command('unlock')
+  .description('Disengage Global Kill-Switch')
+  .action(async () => {
+    await cli.handleUnlock();
+  });
+
 // Specialized Tools
 program
   .command('nmap')
@@ -126,6 +140,8 @@ program
   .requiredOption('-t, --target <target>', 'Target IP')
   .option('--args <args>', 'Metasploit commands')
   .option('--cred-alias <alias>', 'Credential alias')
+  .option('--stealth', 'Enable stealth mode')
+  .option('--proxy-port <port>', 'Proxy port')
   .action(async (options) => {
     await cli.handleMetasploit(options);
   });

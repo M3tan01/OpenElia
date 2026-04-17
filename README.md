@@ -158,6 +158,10 @@ python3 scrub.py
 
 # Package the entire engagement into a secure, hashed Case File
 python3 main.py archive
+# Note: On first run, a GUI prompt will ask you to set a password for the
+# OS keyring ("Choose password for new keyring"). Enter and confirm a password,
+# then click Continue. This keyring protects your API keys and vault encryption key.
+# Leave the password blank only if you are in a headless/server environment.
 
 # Generate Software Bill of Materials
 python3 main.py sbom

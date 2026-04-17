@@ -53,6 +53,36 @@ class DefenderHunt(BaseAgent):
     def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
         super().__init__(state_manager, brain_tier=brain_tier)
 
+    def _get_hunt_tools(self) -> list[dict]:
+        return [
+            {
+                "name": "record_persistence_finding",
+                "description": "Record a suspicious persistence mechanism found during the hunt.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "mechanism": {"type": "string", "enum": ["cron", "ssh_key", "systemd", "registry", "other"]},
+                        "location": {"type": "string"},
+                        "evidence": {"type": "string"},
+                        "severity": {"type": "string", "enum": ["high", "medium", "low"]},
+                        "mitre_ttp": {"type": "string"}
+                    },
+                    "required": ["mechanism", "location", "evidence", "mitre_ttp"]
+                }
+            }
+        ]
+
+    def _execute_hunt_tool(self, tool_name: str, tool_input: dict) -> str:
+        if tool_name == "record_persistence_finding":
+            self.state.add_blue_alert(
+                alert_type=f"PERSISTENCE_{tool_input['mechanism'].upper()}",
+                description=f"Proactive hunt found {tool_input['mechanism']} at {tool_input['location']}",
+                severity=tool_input.get("severity", "medium"),
+                source="defender_hunt"
+            )
+            return f"Hunt finding logged: {tool_input['mechanism']} at {tool_input['location']}"
+        return self._execute_tool(tool_name, tool_input)
+
     async def run(self, task: str = "Perform proactive persistence hunt on current target") -> None:
         """
         Entry point for the proactive hunt.
@@ -62,11 +92,20 @@ class DefenderHunt(BaseAgent):
 
         system = self._build_system_prompt(_BASE_PROMPT)
         messages = [{"role": "user", "content": task}]
+        tools = self._get_standard_tools() + self._get_hunt_tools()
 
         try:
-            result = await self._call_with_tools(system, messages, self._get_standard_tools())
+            result = await self._run_tool_loop(system, messages, tools, self._execute_hunt_tool)
             print(f"[defender_hunt] Hunt cycle complete.")
-            # Tier 1 doesn't have a specific phase status but we can log activity
+            
+            # Store full hunt results as a forensic artifact
+            self.artifact_manager.store_artifact(
+                source_agent=self.AGENT_NAME,
+                filename="proactive_hunt_results.json",
+                content=json.dumps({"task": task, "summary": result, "timestamp": datetime.now(timezone.utc).isoformat()}),
+                metadata={"type": "hunt_log"}
+            )
+            
             self.state.set_metadata("last_hunt", {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "summary": result[:200]

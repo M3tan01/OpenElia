@@ -10,7 +10,7 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
 
 ## Specialized Tools
 - **openelia**: The primary tool for executing cybersecurity tasks.
-  - `command`: 'red', 'blue', 'purple', 'status', 'dashboard', 'check', 'nmap', 'msf', 'sbom'
+  - `command`: 'red', 'blue', 'purple', 'status', 'dashboard', 'check', 'nmap', 'msf', 'sbom', 'archive', 'lock', 'unlock'
   - `target`: IP or CIDR Range (e.g. 10.0.0.0/24).
   - `stealth`: Boolean flag for OPSEC (jitter, slow timing, LotL).
   - `cred_alias`: Reference to a credential in the secure vault.

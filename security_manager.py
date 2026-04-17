@@ -129,12 +129,54 @@ class AuditLogger:
             pass
         return last_hash
 
+    def verify_chain(self) -> bool:
+        """
+        Validate the entire HMAC chain of the audit log.
+        Returns False if any entry has been tampered with or if the chain is broken.
+        """
+        if not os.path.exists(self.log_path):
+            return True # Nothing to verify
+
+        expected_prev_hash = "GENESIS"
+        try:
+            with open(self.log_path, "r") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line: continue
+                    
+                    entry = json.loads(line)
+                    stored_chain = entry.pop("_chain", None)
+                    if not stored_chain:
+                        print(f"[!] Audit Failure: Missing signature at line {line_num}")
+                        return False
+                    
+                    # Recompute HMAC
+                    entry_body = json.dumps(entry, sort_keys=True)
+                    chain_input = f"{expected_prev_hash}:{entry_body}".encode()
+                    computed_hash = hmac.new(self._hmac_key(), chain_input, hashlib.sha256).hexdigest()
+                    
+                    if not hmac.compare_digest(stored_chain, computed_hash):
+                        print(f"[!] Audit Failure: Signature mismatch at line {line_num}")
+                        return False
+                    
+                    expected_prev_hash = stored_chain
+            return True
+        except Exception as e:
+            print(f"[!] Audit Verification Error: {str(e)}")
+            return False
+
     def log_event(self, source: str, target: str, payload: str, status: str, reason: str = ""):
+        """
+        Log a security event with cryptographic chaining and PII redaction.
+        """
+        # Tier 4: Forensic Privacy - Redact before hashing/chaining
+        redacted_payload = PrivacyGuard.redact(payload)
+        
         event = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": source,
             "target": target,
-            "payload": payload,
+            "payload": redacted_payload,
             "status": status,
             "reason": reason,
         }
@@ -152,7 +194,7 @@ class AuditLogger:
                 os.fsync(f.fileno())
         except Exception as e:
             # Tier 4: Fail-Closed Architecture
-            raise RuntimeError(f"AUDIT FAILURE: Unable to write to SIEM log. Execution hard-blocked. Error: {str(e)}")
+            raise RuntimeError(f"AUDIT FAILURE: Unable to write to forensic log. Error: {str(e)}")
 
 class PrivacyGuard:
     # Common PII patterns

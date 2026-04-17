@@ -34,6 +34,10 @@ openelia-cli msf --target 10.10.10.50 --args "use exploit/windows/smb/ms17_010_e
 # System check
 openelia-cli check
 
+# Global Kill-Switch
+openelia-cli lock
+openelia-cli unlock
+
 # Show status
 openelia-cli status
 

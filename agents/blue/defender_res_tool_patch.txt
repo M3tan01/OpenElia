@@ -1,0 +1,21 @@
+    def _execute_res_tool(self, tool_name: str, tool_input: dict) -> str:
+        if tool_name == "write_response_action":
+            # Tier 5 Reliability: Use formal SQL method
+            res = self.state.add_response_action(tool_input)
+            action_id = res.get("id")
+            
+            # Tier 4: Autonomous Remediation (Optional check)
+            if not tool_input.get("requires_approval"):
+                import asyncio
+                # Offload to async execution
+                asyncio.create_task(self.execute_remediation(action_id))
+                return f"Response action logged & auto-executed (ID={action_id})."
+            
+            return f"Response action logged (ID={action_id}). Awaiting approval."
+
+        if tool_name == "write_thehive_case":
+            # Tier 5 Reliability: Use formal SQL method
+            self.state.set_thehive_case(tool_input)
+            return f"TheHive case drafted: {tool_input['title']} [{tool_input['severity']}] TLP:{tool_input['tlp']}"
+
+        return self._execute_tool(tool_name, tool_input)

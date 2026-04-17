@@ -126,7 +126,8 @@ class Orchestrator:
         if domain == "red":
             from agents.red.pentester_os import PentesterOS
             # Parallel Swarm with Concurrency Limits
-            sem = asyncio.Semaphore(10)
+            # Elite Efficiency: Reduced from 10 to 3 to prevent local LLM thrashing
+            sem = asyncio.Semaphore(3)
             
             async def run_with_sem(target_ip):
                 async with sem:
@@ -162,7 +163,8 @@ class Orchestrator:
         from agents.red.pentester_os import PentesterOS
         from agents.blue.defender_os import DefenderOS
 
-        sem = asyncio.Semaphore(10)
+        # Elite Efficiency: Reduced from 10 to 3 to prevent local LLM thrashing
+        sem = asyncio.Semaphore(3)
 
         for i in range(iterations):
             print(f"\n[Purple] --- ITERATION {i+1} START ---")

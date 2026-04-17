@@ -44,6 +44,9 @@ class StateManager:
 
     def _get_conn(self):
         conn = sqlite3.connect(self.db_path, timeout=10)
+        # Elite Efficiency: Enable WAL mode for high concurrency (Swarm Mode)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         conn.row_factory = sqlite3.Row
         return conn
 
