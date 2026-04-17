@@ -8,6 +8,11 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
+import sys
+# Ensure we can import security_manager
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from security_manager import PrivacyGuard
+
 # --- Phase 2.3: Defensive Sub-Agents (Blue Team) ---
 # This server acts as a standardized telemetry aggregator
 server = Server("mcp-blue-telemetry")
@@ -58,7 +63,8 @@ async def handle_call_tool(
             "source": arguments["source"],
             "event_type": arguments["event_type"],
             "severity": arguments["severity"],
-            "details": arguments["details"],
+            # Tier 4: Outbound PII Redaction
+            "details": PrivacyGuard.redact(arguments["details"]),
         }
         
         # Phase 2.3: Writes a standardized JSON event log simulating an SIEM alert.

@@ -14,6 +14,8 @@ class ScopeValidator:
         self.roe_path = roe_path
         self.authorized_subnets = []
         self.blacklisted_ips = []
+        self.prohibited_tools = []
+        self.quiet_hours = {}
         self.roe_loaded = False
         self._load_roe()
 
@@ -31,6 +33,8 @@ class ScopeValidator:
                 ipaddress.ip_address(ip)
                 for ip in roe.get("blacklisted_ips", [])
             ]
+            self.prohibited_tools = roe.get("prohibited_tools", [])
+            self.quiet_hours = roe.get("quiet_hours", {})
             self.roe_loaded = True
         except Exception:
             pass  # roe_loaded stays False → fail-closed
@@ -66,6 +70,35 @@ class ScopeValidator:
                 return result
             except Exception:
                 return False
+
+    def is_tool_allowed(self, tool_name: str) -> bool:
+        """Check if a specific tool is prohibited by the RoE."""
+        if not self.roe_loaded:
+            return False
+        return tool_name not in self.prohibited_tools
+
+    def is_within_quiet_hours(self) -> tuple[bool, str]:
+        """
+        Check if current time is within quiet hours.
+        Returns (is_quiet, message).
+        """
+        if not self.roe_loaded or not self.quiet_hours.get("enabled"):
+            return False, ""
+
+        now = datetime.now().time()
+        try:
+            start_time = datetime.strptime(self.quiet_hours["start"], "%H:%M").time()
+            end_time = datetime.strptime(self.quiet_hours["end"], "%H:%M").time()
+            
+            # Handle overnight ranges (e.g. 22:00 to 06:00)
+            if start_time <= end_time:
+                is_quiet = start_time <= now <= end_time
+            else:
+                is_quiet = now >= start_time or now <= end_time
+            
+            return is_quiet, self.quiet_hours.get("message", "Quiet hours active.")
+        except Exception:
+            return False, ""
 
 class SemanticFirewall:
     DESTRUCTIVE_PATTERNS = [
@@ -206,10 +239,18 @@ class PrivacyGuard:
     }
 
     @classmethod
-    def redact(cls, text: str) -> str:
-        if not isinstance(text, str):
-            return text
-        redacted = text
+    def redact(cls, data: any) -> any:
+        """
+        Recursively redact PII from strings, dictionaries, and lists.
+        """
+        if isinstance(data, dict):
+            return {k: cls.redact(v) for k, v in data.items()}
+        if isinstance(data, list):
+            return [cls.redact(i) for i in data]
+        if not isinstance(data, str):
+            return data
+
+        redacted = data
         for label, pattern in cls.PII_PATTERNS.items():
             redacted = re.sub(pattern, f"[REDACTED_{label}]", redacted)
         return redacted
@@ -219,10 +260,23 @@ def enforce_security_gate(source: str, target: str, payload: str):
     firewall = SemanticFirewall()
     logger = AuditLogger()
 
+    # 1. Target Validation (Mathematical Boundary)
     if target and not validator.is_allowed(target):
         logger.log_event(source, target, payload, "BLOCKED", "Mathematical Boundary Breach")
         raise PermissionError("Mathematical Boundary Breach: Target is not in authorized scope.")
 
+    # 2. Quiet Hours Check
+    is_quiet, quiet_msg = validator.is_within_quiet_hours()
+    if is_quiet:
+        logger.log_event(source, target, payload, "BLOCKED", "Quiet Hours Breach")
+        raise PermissionError(f"Rules of Engagement Breach: {quiet_msg}")
+
+    # 3. Tool Prohibition Check
+    if not validator.is_tool_allowed(source):
+        logger.log_event(source, target, payload, "BLOCKED", "Prohibited Tool Usage")
+        raise PermissionError(f"Rules of Engagement Breach: Tool '{source}' is prohibited by policy.")
+
+    # 4. Semantic Firewall (Destructive Pattern Check)
     if not firewall.is_safe(payload):
         logger.log_event(source, target, payload, "BLOCKED", "Destructive Payload Detected")
         raise PermissionError("Semantic Firewall Breach: Destructive Payload Detected.")

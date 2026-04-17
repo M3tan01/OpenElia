@@ -437,9 +437,9 @@ class BaseAgent(ABC):
 
             for tc in tool_calls:
                 try:
-                    # ... [existing redaction logic] ...
+                    # Tier 4: Outbound PII Redaction for Tool Inputs (Recursive)
                     raw_args = json.loads(tc.function.arguments)
-                    tool_input = {k: (PrivacyGuard.redact(v) if isinstance(v, str) else v) for k, v in raw_args.items()}
+                    tool_input = PrivacyGuard.redact(raw_args)
                 except json.JSONDecodeError:
                     tool_input = {}
 

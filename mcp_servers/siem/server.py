@@ -50,6 +50,10 @@ def _validate_webhook_url(url: str) -> str:
         )
     return url
 
+# Ensure we can import security_manager
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from security_manager import PrivacyGuard
+
 server = Server("mcp-siem")
 
 @server.list_tools()
@@ -91,7 +95,8 @@ async def handle_call_tool(
                 url = _validate_webhook_url(arguments["webhook_url"])
             except ValueError as e:
                 return [types.TextContent(type="text", text=f"SSRF Guard: {e}")]
-            payload = arguments["payload"]
+            # Tier 4: Outbound PII Redaction
+            payload = PrivacyGuard.redact(arguments["payload"])
             try:
                 response = await client.post(url, json=payload, timeout=5)
                 response.raise_for_status()

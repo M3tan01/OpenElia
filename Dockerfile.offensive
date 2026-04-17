@@ -17,10 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir python-nmap
 
-# Create unprivileged user (Privilege Dropping)
-RUN addgroup -S nobodygroup && adduser -S nobody -G nobodygroup
+# Create unprivileged system user
+RUN groupadd --system elia && useradd --system -g elia elia
 
 # Switch to unprivileged user
-USER nobody
+USER elia
 
 WORKDIR /app
