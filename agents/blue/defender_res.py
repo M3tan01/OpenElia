@@ -138,60 +138,83 @@ class DefenderRes(BaseAgent):
             },
         ]
 
+    # Commands the executor is permitted to run. Any DB-stored command that does
+    # not start with one of these prefixes is rejected — this closes the vector
+    # where a compromised DB row could execute arbitrary OS commands.
+    _ALLOWED_CMD_PREFIXES = (
+        "iptables ",           # Linux firewall
+        "ip6tables ",          # Linux IPv6 firewall
+        "kill ",               # Unix/Linux/macOS process signal
+        "killall ",            # Unix/Linux/macOS process termination by name
+        "taskkill ",           # Windows process termination
+        "Disable-ADAccount ",  # Windows PowerShell AD
+        "Set-ADAccountPassword ",             # Windows PowerShell AD
+        "Revoke-AzureADUserAllRefreshToken ", # Windows PowerShell Azure AD
+        "net user ",           # Windows user management
+        "usermod ",            # Linux user management
+    )
+
     async def execute_remediation(self, action_id: int):
-        """Execute a previously logged remediation action after verification."""
+        """Execute a previously logged remediation action after explicit operator approval."""
         with self.state._get_conn() as conn:
-            cursor = conn.execute("SELECT action_type, target, command FROM response_actions WHERE id = ?", (action_id,))
+            cursor = conn.execute(
+                "SELECT action_type, target, command FROM response_actions WHERE id = ?",
+                (action_id,),
+            )
             row = cursor.fetchone()
             if not row:
                 return "Error: Action ID not found."
-            
+
             action_type, target, command = row
-            print(f"[defender_res] 🛡️ ACTIVE REMEDIATION: Executing {action_type} on {target}...")
-            
+
+            # Security gate: only allow known-safe command prefixes (prevents
+            # arbitrary execution if a DB row is tampered with).
+            stripped = command.lstrip()
+            if not any(stripped.startswith(p) for p in self._ALLOWED_CMD_PREFIXES):
+                print(f"[defender_res] BLOCKED: command '{stripped[:60]}' is not in the remediation allowlist.")
+                return (
+                    f"EXECUTION BLOCKED: Command does not match a permitted prefix. "
+                    f"Allowed prefixes: {', '.join(self._ALLOWED_CMD_PREFIXES)}"
+                )
+
+            print(f"[defender_res] Executing approved remediation: {action_type} on {target}")
+
             import subprocess
             import shlex
             try:
-                # Security Gate: Redact PII from command before execution (Double-Check)
-                from security_manager import PrivacyGuard
-                safe_cmd = PrivacyGuard.redact(command)
-                
-                # Mitigate command injection by avoiding shell=True
-                cmd_list = shlex.split(safe_cmd)
-                result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=30)
+                cmd_list = shlex.split(stripped)
+                result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=30)  # nosec: B603
                 status = "SUCCESS" if result.returncode == 0 else "FAILED"
-                output = result.stdout + result.stderr
-                
-                # Update action status in DB
-                conn.execute("UPDATE response_actions SET status = ?, output = ? WHERE id = ?", (status, output, action_id))
+                output = (result.stdout + result.stderr)[:500]
+                conn.execute(
+                    "UPDATE response_actions SET status = ?, output = ? WHERE id = ?",
+                    (status, output, action_id),
+                )
                 return f"Remediation {status}: {output[:200]}"
             except Exception as e:
-                return f"Remediation Execution Error: {str(e)}"
+                return f"Remediation execution error: {e}"
 
-    def _execute_res_tool(self, tool_name: str, tool_input: dict) -> str:
+    async def _execute_res_tool(self, tool_name: str, tool_input: dict) -> str:
         if tool_name == "write_response_action":
-            # Tier 5 Reliability: Use formal SQL method
             res = self.state.add_response_action(tool_input)
             action_id = res.get("id")
-            
-            # Tier 4: Autonomous Remediation (Optional check)
-            if not tool_input.get("requires_approval"):
-                import asyncio
-                # Offload to async execution
-                asyncio.create_task(self.execute_remediation(action_id))
-                return f"Response action logged & auto-executed (ID={action_id})."
-            
-            return f"Response action logged (ID={action_id}). Awaiting approval."
+
+            if tool_input.get("requires_approval"):
+                return (
+                    f"Response action logged (ID={action_id}). "
+                    f"Awaiting IR Manager approval before execution."
+                )
+            # All remediation commands require explicit human approval — never auto-execute.
+            return (
+                f"Response action logged (ID={action_id}). "
+                f"Command: `{tool_input.get('command', '')}` — "
+                f"Execute via: python main.py execute-remediation --action-id {action_id}"
+            )
 
         if tool_name == "write_thehive_case":
-            # Tier 5 Reliability: Use formal SQL method
             self.state.set_thehive_case(tool_input)
-            
-            # Tier 3: Live API Dispatch
-            import asyncio
-            asyncio.create_task(self.dispatch_thehive_case(tool_input))
-            
-            return f"TheHive case drafted & live dispatch triggered: {tool_input['title']}"
+            dispatch_result = await self.dispatch_thehive_case(tool_input)
+            return f"TheHive case saved: {tool_input['title']} — {dispatch_result}"
 
         return self._execute_tool(tool_name, tool_input)
 
@@ -200,19 +223,23 @@ class DefenderRes(BaseAgent):
         return await self._run_tool_loop(system, messages, tools, self._execute_res_tool)
 
     async def dispatch_thehive_case(self, case_data: dict) -> str:
-        """Push a case directly to TheHive REST API (Simulated Tier 3)."""
-        hive_url = SecretStore.get_secret("THEHIVE_API_KEY")
-        if not hive_url:
-            return "Error: THEHIVE_API_KEY (URL) missing. Case saved to local SQLite only."
-        
-        print(f"[defender_res] 🚀 DISPATCHING Live TheHive Case: {case_data['title']}...")
-        
-        # Simulate REST API dispatch
-        import httpx
-        try:
-            # Note: In production, use real TheHive4py or httpx.post
-            # response = await httpx.post(f"{hive_url}/api/case", json=case_data)
-            case_hash = hashlib.sha256(case_data['title'].encode()).hexdigest()[:8]
-            return f"TheHive Case Successfully Dispatched (Simulated API). ID: TH-{case_hash}"
-        except Exception as e:
-            return f"TheHive Dispatch Error: {str(e)}"
+        """Push a case directly to TheHive REST API."""
+        hive_url = SecretStore.get_secret("THEHIVE_URL")
+        api_key = SecretStore.get_secret("THEHIVE_API_KEY")
+        if not hive_url or not api_key:
+            print(f"[defender_res] TheHive dispatch skipped — THEHIVE_URL or THEHIVE_API_KEY not configured. Case saved to local SQLite only.")
+            return "Case saved to local SQLite only. Set THEHIVE_URL and THEHIVE_API_KEY in the vault to enable live dispatch."
+
+        print(f"[defender_res] Dispatching TheHive case (local only until live API is wired): {case_data['title']}")
+        # Wire real httpx POST here when TheHive endpoint is available:
+        # import httpx
+        # async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+        #     response = await client.post(
+        #         f"{hive_url}/api/v1/case",
+        #         json=case_data,
+        #         headers={"Authorization": f"Bearer {api_key}"},
+        #     )
+        #     response.raise_for_status()
+        #     return f"TheHive case created: {response.json().get('_id', 'unknown')}"
+        case_hash = hashlib.sha256(case_data['title'].encode()).hexdigest()[:8]
+        return f"TheHive case saved locally (ID: TH-{case_hash}). Live dispatch pending API wiring."

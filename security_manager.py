@@ -36,8 +36,10 @@ class ScopeValidator:
             self.prohibited_tools = roe.get("prohibited_tools", [])
             self.quiet_hours = roe.get("quiet_hours", {})
             self.roe_loaded = True
-        except Exception:
-            pass  # roe_loaded stays False → fail-closed
+        except Exception as e:
+            import sys
+            print(f"[ScopeValidator] ERROR: Failed to parse {self.roe_path}: {e}", file=sys.stderr)
+            # roe_loaded stays False → fail-closed
 
     def is_allowed(self, target: str) -> bool:
         # Fail closed: no roe.json or empty authorized_subnets → block all
@@ -230,12 +232,19 @@ class AuditLogger:
             raise RuntimeError(f"AUDIT FAILURE: Unable to write to forensic log. Error: {str(e)}")
 
 class PrivacyGuard:
-    # Common PII patterns
+    # Common PII and sensitive credential patterns
     PII_PATTERNS = {
         "CREDIT_CARD": r"\b(?:\d[ -]*?){13,16}\b",
         "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
         "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-        "PRIVATE_KEY": r"-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----"
+        "PRIVATE_KEY": r"-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----",
+        "AWS_ACCESS_KEY": r"\bAKIA[0-9A-Z]{16}\b",
+        "AWS_SECRET_KEY": r"(?i)aws[_\-\s]?secret[_\-\s]?(?:access[_\-\s]?)?key[\s:=]+[A-Za-z0-9/+=]{40}",
+        "BEARER_TOKEN": r"(?i)bearer\s+[A-Za-z0-9\-_\.]{20,}",
+        "DB_CONN_STRING": r"(?i)(?:postgres(?:ql)?|mysql|mssql|mongodb|redis|oracle)://[^\s\"']+",
+        "SLACK_WEBHOOK": r"https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+",
+        "ANTHROPIC_KEY": r"\bsk-ant-[A-Za-z0-9\-_]{20,}\b",
+        "GENERIC_API_KEY": r"(?i)(?:api[_\-]?key|api[_\-]?secret|access[_\-]?token)[\s:=]+['\"]?[A-Za-z0-9\-_\.]{16,}['\"]?",
     }
 
     @classmethod

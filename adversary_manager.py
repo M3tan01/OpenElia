@@ -1,13 +1,21 @@
 import json
 import os
+import re
 
 class AdversaryManager:
+    _APT_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+
     def __init__(self, adversaries_dir="adversaries"):
-        self.adversaries_dir = adversaries_dir
+        self.adversaries_dir = os.path.realpath(adversaries_dir)
 
     def load_profile(self, apt_name: str) -> dict:
         """Load a specific APT JSON profile."""
-        profile_path = os.path.join(self.adversaries_dir, f"{apt_name.lower()}.json")
+        safe_name = apt_name.lower()
+        if not self._APT_NAME_RE.fullmatch(safe_name):
+            raise ValueError(f"Invalid APT profile name: '{apt_name}'")
+        profile_path = os.path.realpath(os.path.join(self.adversaries_dir, f"{safe_name}.json"))
+        if not profile_path.startswith(self.adversaries_dir + os.sep):
+            raise ValueError("Path traversal detected in APT profile name.")
         if os.path.exists(profile_path):
             with open(profile_path, "r") as f:
                 return json.load(f)

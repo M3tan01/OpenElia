@@ -1,7 +1,7 @@
 ================================================================================
   OPENELIA — COMPLETE COMMAND REFERENCE & MODEL CONFIGURATION GUIDE
 ================================================================================
-  Version: 1.0.1  |  Python 3.11+  |  Last updated: 2026-04-09
+  Version: 1.0.2  |  Python 3.11+  |  Last updated: 2026-04-17
 ================================================================================
 
 
@@ -37,11 +37,13 @@
   ─────────────────────────────────────────────────────────────────────────────
   Description : Launch the live War Room TUI (terminal user interface).
   What it shows:
-    - Top panel  : Active engagement metadata (target, phase, start time)
-    - Left panel : Red team activity log (last 15 AUTHORIZED audit entries)
-    - Center     : Critical findings table (severity, title, MITRE TTP)
-    - Right      : Blue team telemetry (last 10 alerts with severity color)
-    - Bottom     : Stored artifacts and forensic chain of custody
+    - Top panel        : Active engagement metadata (target, phase, start time)
+    - Left top         : MITRE ATT&CK coverage heatmap (tactic bar chart)
+    - Left bottom      : Critical findings table (severity, title, MITRE TTP)
+    - Right top        : Red team activity log (last 15 AUTHORIZED audit entries)
+    - Right center     : Blue team telemetry (last 10 alerts with severity color)
+    - Right bottom     : Active pivot sessions (type, target, local port, status)
+    - Bottom footer    : Stored artifact count and interactive command center
   Refresh rate: Live (auto-refresh every few seconds)
   Example     : python main.py dashboard
 
@@ -83,6 +85,41 @@
   Output      : state/bom.json — lists all dependencies (from
                 requirements.txt.lock), Docker image base, and infrastructure.
   Example     : python main.py sbom
+
+
+  python main.py report [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Generate an executive engagement report via the Reporter agent.
+  What it does:
+    - Produces an executive summary with MITRE ATT&CK tactic heatmap
+    - Appends a forensic chain of custody log for all recovered artifacts
+    - Classifies and ranks findings by severity and business impact
+  Flags:
+    --task <text>         Override the default report task prompt (optional).
+                          Example: "Focus on lateral movement findings only."
+    --brain-tier <tier>   local | expensive (default: local)
+  Requires    : An active engagement (run red or purple first)
+  Examples:
+    python main.py report
+    python main.py report --brain-tier expensive
+    python main.py report --task "Summarize all critical findings for the board"
+
+
+  python main.py execute-remediation --action-id <id>
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Execute a previously logged and approved response action.
+  What it does:
+    - Looks up the response action row by ID in the engagement DB
+    - Validates the stored command against _ALLOWED_CMD_PREFIXES before running
+    - Blocked if the command does not start with a known-safe prefix
+      (iptables, ip6tables, kill, killall, net user, usermod, etc.)
+    - Records the execution result (SUCCESS / FAILED) back to the DB
+  Flags:
+    --action-id <int>    Row ID printed by write_response_action (required)
+  Requires    : An active engagement with at least one logged response action
+  Examples:
+    python main.py execute-remediation --action-id 3
+    openelia-cli execute-remediation --action-id 3
 
 
   python main.py archive
@@ -453,19 +490,23 @@
 
   Keys managed by OpenElia:
   ─────────────────────────────────────────────────────────────────────────────
-  Key name               Purpose
+  Key name                    Purpose
   ─────────────────────────────────────────────────────────────────────────────
-  OLLAMA_BASE_URL        Local LLM endpoint (default: http://localhost:11434/v1)
-  OLLAMA_MODEL           Local model name (default: llama3.1:8b)
-  EXPENSIVE_BRAIN_URL    Paid API base URL (Claude / Gemini / OpenAI)
-  EXPENSIVE_BRAIN_KEY    Paid API key
-  EXPENSIVE_MODEL        Paid model name (default fallback: gpt-4o)
-  GEMINI_API_KEY         Gemini key for threat_intel MCP server
-  SHODAN_API_KEY         Shodan for passive OSINT (recon MCP server)
-  VT_API_KEY             VirusTotal for malware / IOC lookups
-  GRAYNOISE_API_KEY      GreyNoise for IP reputation
-  THEHIVE_API_KEY        TheHive for case management integration
-  VAULT_ENCRYPTION_KEY   Auto-generated on first use. DO NOT SET MANUALLY.
+  OLLAMA_BASE_URL             Local LLM endpoint (default: http://localhost:11434/v1)
+  OLLAMA_MODEL                Local model name (default: llama3.1:8b)
+  EXPENSIVE_BRAIN_URL         Paid API base URL (Claude / Gemini / OpenAI)
+  EXPENSIVE_BRAIN_KEY         Paid API key
+  EXPENSIVE_MODEL             Paid model name (default fallback: gpt-4o)
+  GEMINI_API_KEY              Gemini key for threat_intel MCP server
+  SHODAN_API_KEY              Shodan for passive OSINT (recon MCP server)
+  VT_API_KEY                  VirusTotal for malware / IOC lookups
+  GRAYNOISE_API_KEY           GreyNoise for IP reputation
+  THEHIVE_URL                 TheHive instance base URL (e.g. https://thehive.corp.com)
+  THEHIVE_API_KEY             TheHive API key for case management integration
+  BLUE_REMEDIATE_RBAC_TOKEN   RBAC token for blue_remediate live mode.
+                              Must match the BLUE_REMEDIATE_RBAC_TOKEN env var
+                              to authorise real iptables/kill actions.
+  VAULT_ENCRYPTION_KEY        Auto-generated on first use. DO NOT SET MANUALLY.
   ─────────────────────────────────────────────────────────────────────────────
 
   Store a key:
@@ -533,8 +574,17 @@
 
   ── mcp-pivot ──────────────────────────────────────────────────────────────
   Server  : mcp_servers/pivot/server.py
-  Tools   : Network pivoting and lateral movement — tunnel management,
-            SOCKS5 proxy setup, port forwarding helpers.
+  Storage : SQLite pivot_sessions table (visible in dashboard and status)
+  Tools:
+    create_tunnel              Create an SSH port-forward tunnel through a
+                               compromised host and record it in the engagement DB.
+                               Input: target, local_port, remote_target, remote_port
+                               Output: SSH command to execute + row ID
+    start_socks_proxy          Start a SOCKS5 proxy through a compromised host.
+                               Input: target, local_port
+                               Output: SSH -D command + proxychains usage hint
+    list_pivots                List all active tunnels and proxies for the current
+                               engagement from the SQLite database.
 
   ── mcp-red-recon ──────────────────────────────────────────────────────────
   Server  : mcp_servers/red_recon/server.py
@@ -544,10 +594,28 @@
 
   ── mcp-blue-remediate ─────────────────────────────────────────────────────
   Server  : mcp_servers/blue_remediate/server.py
-  Tools   : Automated containment actions — isolate_host, block_ip,
-            disable_account, revoke_sessions, rotate_credentials.
-            Actions are logged to the audit trail and flagged for approval
-            if requires_approval = true.
+  Modes   : SIMULATION (default) — dry-run stubs, no real system changes.
+            LIVE — real iptables/kill execution. Requires RBAC token.
+  Tools:
+    block_ip                   Block a malicious IP via iptables DROP rule.
+                               Input: ip (IPv4/CIDR), reason (optional)
+                               Simulation: logs the iptables command that would run.
+                               Live: executes iptables -I INPUT -s <ip> -j DROP
+    kill_process               Terminate a suspicious process by PID via SIGKILL.
+                               Input: pid (integer), reason (optional)
+                               Simulation: logs the kill command that would run.
+                               Live: executes kill -9 <pid>
+
+  Enabling live mode (Linux only, requires CAP_NET_ADMIN for iptables):
+    # Step 1 — store the RBAC token in the keyring once:
+    python -c "
+    from secret_store import SecretStore
+    SecretStore.set_secret('BLUE_REMEDIATE_RBAC_TOKEN', 'your-token-here')
+    "
+    # Step 2 — set env vars when starting the MCP server:
+    export BLUE_REMEDIATE_LIVE=1
+    export BLUE_REMEDIATE_RBAC_TOKEN=your-token-here
+    python mcp_servers/blue_remediate/server.py
 
   ── mcp-blue-telemetry ─────────────────────────────────────────────────────
   Server  : mcp_servers/blue_telemetry/server.py
@@ -649,9 +717,18 @@
     openelia-cli red --target 10.10.10.50 --stealth
     openelia-cli blue --logs /var/log/auth.log
     openelia-cli purple --target 10.10.10.50 --iterations 3
+    openelia-cli nmap --target 10.10.10.50
+    openelia-cli msf --target 10.10.10.50
+    openelia-cli report
+    openelia-cli report --task "Board-level summary" --brain-tier expensive
     openelia-cli check
     openelia-cli status
     openelia-cli dashboard
+    openelia-cli lock
+    openelia-cli unlock
+    openelia-cli archive
+    openelia-cli sbom
+    openelia-cli doctor
     openelia-cli interactive     # Enter interactive REPL mode
 
 

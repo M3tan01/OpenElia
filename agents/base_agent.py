@@ -329,7 +329,17 @@ class BaseAgent(ABC):
         r"you are now|forget (everything|all)|"
         r"act as (a|an) |"
         r"<\|system\|>|<\|user\|>|<\|assistant\|>|"
-        r"\[INST\]|\[/INST\]|<<SYS>>)",
+        r"\[INST\]|\[/INST\]|<<SYS>>|"
+        # XML / structured tag injection
+        r"<system>|</system>|<instruction>|</instruction>|<prompt>|</prompt>|"
+        # Unicode homoglyph markers (zero-width, directional overrides)
+        r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]|"
+        # Modern jailbreak prefixes
+        r"DAN:|JAILBREAK:|SYSTEM OVERRIDE:|PROMPT INJECTION:|"
+        r"sudo (mode|override|bypass)|developer mode|"
+        r"repeat (after me|the following)|"
+        r"translate (everything|all|the above) (to|into)|"
+        r"print (your|the) (system prompt|instructions|prompt))",
         re.IGNORECASE,
     )
     _MAX_TOOL_RESULT_CHARS = 8_000
@@ -414,13 +424,37 @@ class BaseAgent(ABC):
                 final_text = search_res["metadatas"][0][0].get("response", "")
                 return final_text
 
-            response = await self.client.chat.completions.create(
-                model=self.MODEL,
-                messages=chat_messages,
-                tools=openai_tools,
-                max_tokens=self.MAX_TOKENS,
-                temperature=0,
-            )
+            # T3: LLM call with exponential backoff on transient errors
+            _llm_backoff = 1.0
+            _llm_max_retries = 3
+            for _llm_attempt in range(_llm_max_retries):
+                try:
+                    response = await self.client.chat.completions.create(
+                        model=self.MODEL,
+                        messages=chat_messages,
+                        tools=openai_tools,
+                        max_tokens=self.MAX_TOKENS,
+                        temperature=0,
+                    )
+                    break
+                except Exception as _llm_err:
+                    if _llm_attempt == _llm_max_retries - 1:
+                        raise
+                    import asyncio as _asyncio
+                    await _asyncio.sleep(_llm_backoff)
+                    _llm_backoff = min(_llm_backoff * 2, 30.0)
+            # T6: Audit every outbound LLM call
+            try:
+                from security_manager import AuditLogger
+                AuditLogger().log_event(
+                    source=self.AGENT_NAME,
+                    target="LLM_API",
+                    payload=f"model={self.MODEL} prompt_tokens={response.usage.prompt_tokens if response.usage else '?'}",
+                    status="LLM_CALL",
+                    reason="Outbound inference audit",
+                )
+            except Exception:
+                pass  # Audit failure must never crash the agent
 
             if response.usage:
                 self.cost_tracker.track_usage(self.MODEL, response.usage.prompt_tokens, response.usage.completion_tokens)

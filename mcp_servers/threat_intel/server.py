@@ -55,7 +55,7 @@ async def handle_list_tools() -> list[types.Tool]:
 async def handle_call_tool(
     name: str, arguments: dict | None
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
         if name == "lookup_cve":
             cve_id = arguments["cve_id"]
             try:

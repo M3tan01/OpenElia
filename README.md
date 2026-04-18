@@ -18,9 +18,9 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 ## 🛠️ Key Features
 
 *   🔴 **Red Team (Pentester)**: Autonomous reconnaissance, vulnerability assessment, and exploitation using the **Atomic Red Team** library.
-*   🔵 **Blue Team (Defender)**: Real-time log analysis, SIEM-style telemetry, and active remediation (block IP, kill process).
+*   🔵 **Blue Team (Defender)**: Real-time log analysis, SIEM-style telemetry, and active remediation (block IP via iptables, kill process via SIGKILL). Operates in simulation mode by default; live execution enabled via `BLUE_REMEDIATE_LIVE=1` with RBAC token verification.
 *   🟣 **Purple Team (Simulation)**: Collaborative, iterative attack/defend loops (**Continuous Chaos**) for rapid security drills.
-*   📺 **War Room Dashboard**: Live, real-time TUI for situational awareness over the digital battlefield.
+*   📺 **War Room Dashboard**: Live, real-time TUI with MITRE heatmap, findings, red/blue logs, and active pivot session panel.
 *   🧠 **Autonomic Self-Healing**: Agents automatically detect tool errors, reflect on the cause, and issue corrected commands.
 *   🕵️ **Stealth Mode (OPSEC)**: Randomized jitter and LotL techniques to evade detection.
 *   🐝 **Subnet Swarming**: Launch parallel agent threads to scan and assess entire CIDR ranges simultaneously.
@@ -194,6 +194,13 @@ python3 main.py red --target 10.10.10.0/29 --apt apt29
 
 # Run a collaborative purple team loop (2 iterations)
 python3 main.py purple --target 10.10.10.50 --iterations 2
+
+# Generate executive report with MITRE heatmap and chain of custody
+python3 main.py report
+python3 main.py report --brain-tier expensive
+
+# Execute an approved response action by its logged ID
+python3 main.py execute-remediation --action-id 42
 ```
 
 #### TypeScript CLI (Enhanced UX)
@@ -203,9 +210,21 @@ openelia-cli
 
 # Direct commands
 openelia-cli red --target 10.10.10.50 --stealth
+openelia-cli blue --logs /var/log/auth.log
+openelia-cli purple --target 10.10.10.50 --iterations 3
+openelia-cli nmap --target 10.10.10.50
+openelia-cli msf --target 10.10.10.50
+openelia-cli report
+openelia-cli report --task "Board-level summary" --brain-tier expensive
+openelia-cli execute-remediation --action-id 42
 openelia-cli check
 openelia-cli status
 openelia-cli dashboard
+openelia-cli lock
+openelia-cli unlock
+openelia-cli archive
+openelia-cli sbom
+openelia-cli doctor
 
 # Switch agents in interactive mode
 openelia-cli interactive
@@ -243,7 +262,11 @@ Outbound traffic is automatically redacted for PII by the **Privacy Guard**. All
 |----------------|---------|------------------|
 | `roe.json` with `authorized_subnets` | Defines legal target scope | All operations blocked |
 | `SIEM_WEBHOOK_ALLOWLIST` | Comma-separated approved SIEM hostnames | All webhook forwarding blocked |
+| `THEHIVE_URL` | TheHive instance base URL | TheHive case dispatch silently skipped |
+| `THEHIVE_API_KEY` | TheHive API key | TheHive case dispatch silently skipped |
 | OS Keyring secrets | API keys, vault encryption key | Prompted interactively on first run |
+| `BLUE_REMEDIATE_LIVE` | Set to `1` to enable live iptables/kill execution | Runs in safe simulation mode |
+| `BLUE_REMEDIATE_RBAC_TOKEN` | RBAC token env var (must match keyring value) | Live remediation actions denied |
 
 ### SIEM Webhook Allowlist
 

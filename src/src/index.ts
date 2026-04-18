@@ -146,6 +146,23 @@ program
     await cli.handleMetasploit(options);
   });
 
+program
+  .command('report')
+  .description('Generate engagement report with MITRE heatmap and chain of custody')
+  .option('--task <task>', 'Specific report task or focus area')
+  .option('--brain-tier <tier>', 'Intelligence level (local/expensive)', 'local')
+  .action(async (options) => {
+    await cli.handleReport(options);
+  });
+
+program
+  .command('execute-remediation')
+  .description('Execute an approved response action by its logged ID')
+  .requiredOption('--action-id <id>', 'Response action row ID from write_response_action')
+  .action(async (options) => {
+    await cli.handleExecuteRemediation({ actionId: options.actionId });
+  });
+
 // Agent Commands
 program
   .command('agent')

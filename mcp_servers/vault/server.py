@@ -23,6 +23,13 @@ def _get_fernet() -> Fernet:
     if not key:
         key = Fernet.generate_key().decode()
         SecretStore.set_secret(_VAULT_KEY_NAME, key)
+        # Verify the key was actually persisted — silent failure here would
+        # encrypt data with a key that cannot be recovered on next startup.
+        if SecretStore.get_secret(_VAULT_KEY_NAME) != key:
+            raise RuntimeError(
+                "VAULT INIT FAILURE: Encryption key could not be persisted to the OS keyring. "
+                "Do not proceed — encrypted data would be permanently unrecoverable."
+            )
     raw = key.encode() if isinstance(key, str) else key
     return Fernet(raw)
 

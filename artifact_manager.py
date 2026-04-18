@@ -27,6 +27,11 @@ class ArtifactManager:
         if not key:
             key = Fernet.generate_key().decode()
             SecretStore.set_secret(self._ENC_KEY_NAME, key)
+            # Verify persistence — silent failure would make all artifacts permanently unrecoverable.
+            if SecretStore.get_secret(self._ENC_KEY_NAME) != key:
+                raise RuntimeError(
+                    "ARTIFACT MANAGER INIT FAILURE: Encryption key could not be persisted to the OS keyring."
+                )
         return Fernet(key.encode())
 
     def _get_conn(self):
@@ -57,7 +62,10 @@ class ArtifactManager:
         Encrypt and store a file artifact, update forensic timeline.
         """
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"{timestamp}_{filename}.enc"
+        # Strip any directory components from the caller-supplied filename (H1: path traversal)
+        from pathlib import Path as _Path
+        clean_name = _Path(filename).name or "artifact"
+        safe_filename = f"{timestamp}_{clean_name}.enc"
         file_path = os.path.join(self.base_dir, safe_filename)
         iso_ts = datetime.utcnow().isoformat() + "Z"
 

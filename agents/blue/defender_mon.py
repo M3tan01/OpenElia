@@ -10,9 +10,15 @@ Only emits high-confidence alerts to avoid LLM invocation noise.
 import re
 import sys
 import os
+import time
+from collections import deque
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from state_manager import StateManager
+
+# Default sliding window duration in seconds (1 hour).
+# Override per rule by adding "window_seconds" to the rule dict.
+_DEFAULT_WINDOW_SECONDS = 3600
 
 
 # --------------------------------------------------------------------------- #
@@ -54,8 +60,18 @@ SIGMA_RULES: dict[str, dict] = {
         "mitre": "T1059.001",
     },
     "T1003_LSASS_ACCESS": {
-        "description": "LSASS memory access — credential dumping attempt",
+        "description": "LSASS memory access — credential dumping attempt (Sysmon EventCode 10)",
         "patterns": [r"TargetImage.*lsass\.exe", r"EventCode=10"],
+        "threshold": 1,
+        "severity": "high",
+        "mitre": "T1003.001",
+    },
+    "T1003_MIMIKATZ_CMD": {
+        "description": "Mimikatz credential-dumping command detected in logs",
+        "patterns": [
+            r"sekurlsa::|lsadump::|kerberos::|dpapi::|"
+            r"procdump.*lsass|lsass.*dump|LSASS.*dump|dump.*lsass",
+        ],
         "threshold": 1,
         "severity": "high",
         "mitre": "T1003.001",
@@ -98,7 +114,9 @@ class DefenderMon:
 
     def __init__(self, state_manager: StateManager):
         self.state = state_manager
-        self._counters: dict[str, int] = {}
+        # Each key maps to a deque of float timestamps (epoch seconds).
+        # Only timestamps within the rule's window are counted toward the threshold.
+        self._counters: dict[str, deque] = {}
 
     def analyze(self, log_text: str) -> list[dict]:
         """
@@ -141,12 +159,28 @@ class DefenderMon:
             if not re.search(pattern, log_text, re.IGNORECASE | re.DOTALL):
                 return False
 
-        # Threshold > 1: count occurrences of the first (primary) pattern
+        # Threshold > 1: count occurrences within the sliding time window
         if threshold > 1:
             window_key = rule.get("window_key", f"_count_{patterns[0][:20]}")
-            count = len(re.findall(patterns[0], log_text, re.IGNORECASE))
-            self._counters[window_key] = self._counters.get(window_key, 0) + count
-            return self._counters[window_key] >= threshold
+            window_secs = rule.get("window_seconds", _DEFAULT_WINDOW_SECONDS)
+            now = time.monotonic()
+            cutoff = now - window_secs
+
+            if window_key not in self._counters:
+                self._counters[window_key] = deque()
+
+            bucket = self._counters[window_key]
+
+            # Add one timestamp per match of the primary pattern in this log batch
+            match_count = len(re.findall(patterns[0], log_text, re.IGNORECASE))
+            for _ in range(match_count):
+                bucket.append(now)
+
+            # Evict timestamps older than the window
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+
+            return len(bucket) >= threshold
 
         return True
 
@@ -161,7 +195,7 @@ class DefenderMon:
         return log_text[:max_chars]
 
     def reset_counters(self) -> None:
-        """Reset threshold counters — call at the start of each analysis window."""
+        """Clear all sliding-window buckets (e.g. at engagement start)."""
         self._counters.clear()
 
     def get_unescalated_high_alerts(self) -> list[dict]:

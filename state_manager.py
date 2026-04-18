@@ -368,6 +368,8 @@ class StateManager:
             return _safe_json_loads(row["data"] if row else None)
 
     def write_agent_result(self, phase: str, result_key: str, data, engagement_id: str = None) -> None:
+        if phase not in PHASE_ORDER:
+            raise ValueError(f"Invalid phase '{phase}'. Must be one of {PHASE_ORDER}.")
         eid = engagement_id or self.active_engagement_id
         with self._get_conn() as conn:
             current_data = self.get_phase_data(phase, eid)
@@ -420,17 +422,27 @@ class StateManager:
             """, (eid, alert_id, verdict, severity, reasoning, escalate, json.dumps(analysis_data), ts))
             conn.commit()
 
-    def add_response_action(self, action_data: dict, engagement_id: str = None) -> None:
+    def get_escalated_analysis_count(self, engagement_id: str = None) -> int:
+        """Return the number of blue analyses marked escalate=1 for the active engagement."""
+        eid = engagement_id or self.active_engagement_id
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM blue_analyses WHERE engagement_id = ? AND escalate = 1", (eid,)
+            ).fetchone()
+            return row[0] if row else 0
+
+    def add_response_action(self, action_data: dict, engagement_id: str = None) -> dict:
         eid = engagement_id or self.active_engagement_id
         with self._get_conn() as conn:
             ts = datetime.now(timezone.utc).isoformat()
-            conn.execute("""
+            cursor = conn.execute("""
                 INSERT INTO response_actions (engagement_id, action_type, target, command, rationale, requires_approval, logged_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (eid, action_data.get("action_type"), action_data.get("target"), 
+            """, (eid, action_data.get("action_type"), action_data.get("target"),
                   action_data.get("command"), action_data.get("rationale"),
                   1 if action_data.get("requires_approval") else 0, ts))
             conn.commit()
+            return {"id": cursor.lastrowid}
 
     def add_pivot(self, pivot_type: str, target: str, local_port: int, remote_target: str = None, remote_port: int = None, engagement_id: str = None) -> int:
         """Record a new pivot tunnel or SOCKS proxy. Returns the row id."""

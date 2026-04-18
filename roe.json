@@ -1,5 +1,5 @@
 {
-  "authorized_subnets": ["127.0.0.0/8", "10.0.0.0/24"],
+  "authorized_subnets": ["10.0.0.0/24", "127.0.0.0/8"],
   "blacklisted_ips": ["10.0.0.1", "10.0.0.254"],
   "prohibited_tools": ["brute_force"],
   "quiet_hours": {

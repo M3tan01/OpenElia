@@ -44,6 +44,7 @@ class Dashboard:
         layout["right"].split_column(
             Layout(name="red_log", ratio=1),
             Layout(name="blue_log", ratio=1),
+            Layout(name="pivots", ratio=1),
         )
         return layout
 
@@ -111,6 +112,28 @@ class Dashboard:
             log_lines.append(f"[dim]{ts}[/] [bold blue]BLUE[/] ! [{color}]{a.get('type')}[/] - {a.get('description')[:40]}...")
         return Panel("\n".join(log_lines), border_style="blue", title="[bold]Blue Team Telemetry[/]")
 
+    def get_pivots(self) -> Panel:
+        try:
+            pivots = self.state_manager.list_pivots()
+        except Exception:
+            pivots = []
+        table = Table(expand=True, box=None)
+        table.add_column("Type", style="magenta", width=8)
+        table.add_column("Target", style="cyan")
+        table.add_column("Local Port", justify="right", width=12)
+        table.add_column("Status", width=8)
+        if not pivots:
+            table.add_row("[dim]No pivots recorded[/dim]", "", "", "")
+        else:
+            for p in pivots[-8:]:
+                ptype = p.get("type", "?").upper()
+                target = p.get("target", "?")
+                lport = str(p.get("local_port", "?"))
+                status = p.get("status", "active")
+                color = "green" if status == "active" else "dim"
+                table.add_row(ptype, target, lport, f"[{color}]{status}[/]")
+        return Panel(table, border_style="magenta", title="[bold]Active Pivots[/]")
+
     def get_footer(self) -> Panel:
         artifacts = self.artifact_manager.list_artifacts()
         text = f"📦 Evidence Bag: {len(artifacts)} items | Last Cmd: [cyan]{self.last_command}[/]\n"
@@ -126,6 +149,7 @@ class Dashboard:
                 self.layout["findings"].update(self.get_findings(state))
                 self.layout["red_log"].update(self.get_red_log(state))
                 self.layout["blue_log"].update(self.get_blue_log(state))
+                self.layout["pivots"].update(self.get_pivots())
                 self.layout["footer"].update(self.get_footer())
             time.sleep(1)
 

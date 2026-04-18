@@ -18,12 +18,21 @@ else
     ./.venv/bin/pip install -r requirements.txt
 fi
 
-# 2. State Initialization
-echo "[+] Initializing state directory..."
-mkdir -p state
+# 2. State & Artifacts Initialization
+echo "[+] Initializing directories..."
+mkdir -p state artifacts
 touch state/.gitkeep
 
-# 3. Docker Offensive Image
+# 3. TypeScript CLI
+if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    echo "[+] Building TypeScript CLI..."
+    (cd src && npm install && npm run build)
+else
+    echo "[!] WARNING: Node.js/npm not found. TypeScript CLI (openelia-cli) will not be available."
+    echo "    Install Node.js from https://nodejs.org and re-run setup.sh to enable it."
+fi
+
+# 4. Docker Offensive Image
 if command -v docker &> /dev/null; then
     echo "[+] Building sterile offensive container (cyber-ops-recon:strict)..."
     docker build -t cyber-ops-recon:strict -f Dockerfile.offensive .
@@ -31,7 +40,7 @@ else
     echo "[!] WARNING: Docker not found. Offensive modules will not function in sterile mode."
 fi
 
-# 4. Configuration — store secrets in OS keyring, not .env
+# 5. Configuration — store secrets in OS keyring, not .env
 echo "[+] Bootstrapping OS keyring for secure secret storage..."
 ./.venv/bin/python -c "from secret_store import SecretStore; SecretStore.bootstrap()"
 

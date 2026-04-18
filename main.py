@@ -6,9 +6,13 @@ main.py — OpenElia CLI entry point.
 import argparse
 import asyncio
 import os
+import re
 import sys
+from dotenv import load_dotenv
+load_dotenv()
 import subprocess  # nosec: B404
 import shutil
+import shlex
 import json
 import http.client
 from urllib.parse import urlparse
@@ -17,10 +21,7 @@ import hashlib
 from pathlib import Path
 from datetime import datetime
 
-from dotenv import load_dotenv
 from secret_store import SecretStore
-
-load_dotenv()
 
 
 def print_openelia_banner():
@@ -355,15 +356,34 @@ async def cmd_msf(args) -> None:
     
     # Launch msfconsole with a resource script or direct command
     msf_extra = args.args or "show options"
-    cmd = f"msfconsole -q -x 'set RHOSTS {args.target}; {msf_extra}; exit'"
-    
+
     if args.stealth:
         print("[!] STEALTH enabled: Throttling MSF scanner.")
-        cmd = cmd.replace("run;", "set THREADS 1; run;").replace("exploit;", "set THREADS 1; exploit;")
+        # Inject thread throttling before quoting so the substitution operates on
+        # the plain string, not on shell-quoted output.
+        msf_extra = re.sub(r"\brun\b", "set THREADS 1; run", msf_extra, flags=re.IGNORECASE)
+        msf_extra = re.sub(r"\bexploit\b", "set THREADS 1; exploit", msf_extra, flags=re.IGNORECASE)
+
+    safe_target = shlex.quote(args.target)
+    safe_extra = shlex.quote(msf_extra)
+    cmd = f"msfconsole -q -x 'set RHOSTS {safe_target}; {safe_extra}; exit'"
         
     output = await pos.run_sterile_command(cmd, args.target, proxy_port=args.proxy_port)
     print(output)
     print("✅ MSF operation complete.")
+
+
+async def cmd_execute_remediation(args) -> None:
+    """Execute a previously approved response action by its DB row ID."""
+    from state_manager import StateManager
+    from agents.blue.defender_res import DefenderRes
+    state = StateManager()
+    if not state.read():
+        print("ERROR: No active engagement. Run blue first to generate response actions.")
+        sys.exit(1)
+    res = DefenderRes(state, brain_tier="local")
+    result = await res.execute_remediation(args.action_id)
+    print(result)
 
 
 async def cmd_purple(args) -> None:
@@ -418,7 +438,7 @@ async def cmd_sbom(args) -> None:
     # 3. Docker Inventory
     docker_info = "Local Fallback"
     if os.path.exists("Dockerfile.offensive"):
-        docker_info = "openelia-offensive:latest (Debian Bookworm + Metasploit)"
+        docker_info = "cyber-ops-recon:strict (Debian Bookworm + Metasploit)"
 
     bom = {
         "project": "OpenElia",
@@ -548,35 +568,13 @@ async def cmd_doctor(args) -> None:
     # 4. Check Sterile Image
     if sys.platform != "win32":
         try:
-            client.images.get("openelia-offensive:latest")
+            client.images.get("cyber-ops-recon:strict")
             results.add_row("Offensive Image", "[green]PASS[/green]", "Sterile container image found locally")
         except Exception:
             results.add_row("Offensive Image", "[yellow]WARN[/yellow]", "Image missing - Run 'docker build -f Dockerfile.offensive .'")
 
     console.print(results)
     console.print("\n[bold green]Doctor's Verdict: System operational with warnings.[/bold green]\n")
-    print("🩺 OpenElia System Doctor")
-    print("="*40)
-    try:
-        import docker
-        client = docker.from_env()
-        try:
-            client.images.get("cyber-ops-recon:strict")
-            print("[✓] Offensive image 'cyber-ops-recon:strict' is present.")
-        except:
-            print("[!] Offensive image missing. Building now...")
-            docker_path = shutil.which("docker")
-            if not docker_path:
-                raise RuntimeError("Docker executable not found in PATH")
-            subprocess.run([docker_path, "build", "-t", "cyber-ops-recon:strict", "-f", "Dockerfile.offensive", "."], check=True)  # nosec: B603
-            print("[✓] Offensive image built successfully.")
-    except Exception as e:
-        print(f"[✗] Docker error: {e}")
-    if not os.path.exists("state"):
-        os.makedirs("state")
-        print("[✓] Created state directory.")
-    print("="*40)
-    print("✅ Doctor's check complete.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -627,6 +625,9 @@ def build_parser() -> argparse.ArgumentParser:
     report_p = sub.add_parser("report", parents=[common], help="Generate executive report and MITRE heatmap")
     report_p.add_argument("--task", help="Override the default report task prompt")
     
+    exec_p = sub.add_parser("execute-remediation", help="Execute an approved response action by ID")
+    exec_p.add_argument("--action-id", type=int, required=True, help="Response action row ID from write_response_action")
+
     purple_p = sub.add_parser("purple", parents=[common], help="Run purple team loop")
     purple_p.add_argument("--target")
     purple_p.add_argument("--scope")
@@ -646,7 +647,7 @@ def main() -> None:
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report}
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation}
     handler = handlers.get(args.command)
     if handler:
         asyncio.run(handler(args))

@@ -27,6 +27,7 @@ export interface CLIOptions {
   credAlias?: string;
   proxyPort?: string;
   force?: boolean;
+  actionId?: string;
 }
 
 export class OpenEliaCLI {
@@ -291,6 +292,32 @@ export class OpenEliaCLI {
     }
   }
 
+  async handleReport(options: CLIOptions): Promise<void> {
+    const spinner = ora('Generating engagement report...').start();
+
+    try {
+      const args = ['report'];
+
+      if (options.task) args.push('--task', options.task);
+      if (options.brainTier) args.push('--brain-tier', options.brainTier);
+
+      const result = await this.runPythonCommand(args);
+
+      spinner.stop();
+
+      if (result.code === 0) {
+        console.log(chalk.green('✅ Report generated successfully'));
+        console.log(result.stdout);
+      } else {
+        console.log(chalk.red('❌ Report generation failed'));
+        console.log(result.stderr);
+      }
+    } catch (error) {
+      spinner.stop();
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
   async handleArchive(): Promise<void> {
     const spinner = ora('Packaging engagement archive...').start();
 
@@ -360,6 +387,28 @@ export class OpenEliaCLI {
       } else {
         console.log(chalk.red('❌ Metasploit session failed'));
         console.log(result.stderr);
+      }
+    } catch (error) {
+      spinner.stop();
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
+  async handleExecuteRemediation(options: CLIOptions): Promise<void> {
+    if (!options.actionId) {
+      console.error(chalk.red('Error: --action-id is required'));
+      process.exit(1);
+    }
+    const spinner = ora(`Executing approved remediation action ID ${options.actionId}...`).start();
+    try {
+      const result = await this.runPythonCommand(['execute-remediation', '--action-id', options.actionId]);
+      spinner.stop();
+      if (result.code === 0) {
+        console.log(chalk.green('✅ Remediation executed'));
+        console.log(result.stdout);
+      } else {
+        console.log(chalk.red('❌ Remediation blocked or failed'));
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();

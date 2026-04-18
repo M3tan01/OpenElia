@@ -51,25 +51,30 @@ class DefenderOS:
         await self.hunt.run()
 
         # 3. Escalation and Analysis
-        if alerts:
-            print(f"[DefenderOS] ! TIER 1 ALERT FIRE: {len(alerts)} alerts generated.")
-        else:
-            # If no direct regex alerts, check if there's enough interesting context for LLM
-            if len(combined_text) > 100:
-                print("[DefenderOS] No Tier 1 alerts, but log volume significant. Escalating to Tier 3 for anomaly check.")
-            else:
-                print("[DefenderOS] Monitoring quiet. No escalation.")
-                print("\n[DefenderOS] ====== Blue Team Operation Complete ======")
-                return
+        if not alerts:
+            print("[DefenderOS] Monitoring quiet. No escalation.")
+            print("\n[DefenderOS] ====== Blue Team Operation Complete ======")
+            return
 
-        # 4. Tier 3 Deep Analysis
+        print(f"[DefenderOS] ! TIER 1 ALERT FIRE: {len(alerts)} alerts generated.")
+
+        # 4. Tier 3 Deep Analysis — sanitize log data before passing to LLM
+        from agents.base_agent import BaseAgent
+        safe_log = BaseAgent._sanitize_tool_result(combined_text)
+        alert_summary = "\n".join(
+            f"- [{a.get('severity','?')}] {a.get('type','?')}: {a.get('description','?')}"
+            for a in alerts
+        )
         print("[DefenderOS] Escalating to Tier 3 deep analysis...")
-        analysis_result = await self.ana.run(f"Analyze the following logs/alerts for malicious intent: {combined_text}")
-        
-        # 5. Tier 4 Remediation
-        if "REMEDIATION REQUIRED" in analysis_result.upper() or "CRITICAL" in analysis_result.upper():
-            print("[DefenderOS] !!! Tier 3 indicates critical threat. Escalating to Tier 4 remediation.")
-            await self.res.run(f"Based on this analysis, implement remediation: {analysis_result}")
+        analysis_result = await self.ana.run(
+            f"Tier 1 produced the following alerts:\n{alert_summary}\n\nRaw log data:\n{safe_log}"
+        )
+
+        # 5. Tier 4 Remediation — gate on DB-recorded escalation, not raw string match
+        escalated = self.state.get_escalated_analysis_count() if hasattr(self.state, "get_escalated_analysis_count") else 0
+        if escalated > 0:
+            print("[DefenderOS] !!! Tier 3 confirmed escalation. Escalating to Tier 4 remediation.")
+            await self.res.run(f"Implement remediation based on this confirmed-threat analysis:\n{analysis_result}")
         else:
             print("[DefenderOS] Deep analysis complete. No active remediation triggered.")
 

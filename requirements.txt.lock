@@ -206,7 +206,6 @@ python-dateutil==2.9.0.post0
     # via kubernetes
 python-dotenv==1.2.2
     # via
-    #   -r requirements.txt
     #   pydantic-settings
     #   uvicorn
 python-multipart==0.0.24

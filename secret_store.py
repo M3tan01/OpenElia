@@ -2,6 +2,7 @@
 import keyring
 import logging
 import os
+import sys
 import getpass
 from rich.console import Console
 
@@ -55,23 +56,36 @@ class SecretStore:
         """
         Interactively migrate keys from .env to keyring and prompt for missing ones.
         """
+        # On macOS the Keychain distinguishes read vs write access. We do a
+        # write+read+delete here so macOS prompts ONCE before the key loop.
+        # The user should click "Always Allow" — not just "Allow" — to avoid
+        # a separate dialog for every key.
+        if sys.platform == "darwin":
+            console.print(
+                "\n[bold yellow]macOS Keychain:[/bold yellow] A dialog will ask for permission.\n"
+                "  → Click [bold]'Always Allow'[/bold] (not just 'Allow') to grant access for all keys at once.\n"
+            )
+
         try:
-            # Check if keyring is functional by trying a dummy access
-            keyring.get_password(SERVICE_NAME, "health_check")
+            keyring.set_password(SERVICE_NAME, "_health_check", "ok")
+            result = keyring.get_password(SERVICE_NAME, "_health_check")
+            if result != "ok":
+                raise RuntimeError("Keyring write-read verification failed")
+            keyring.delete_password(SERVICE_NAME, "_health_check")
         except Exception as e:
             console.print(f"[yellow]⚠️ Keyring access is limited or unavailable: {str(e)}[/yellow]")
-            console.print("[yellow]Falling back to environment variables for this session.[/yellow]")
+            console.print("[yellow]Falling back to environment variables. Add your keys to .env instead.[/yellow]")
             return
 
         console.print("\n[bold cyan]🔐 OpenElia Tier 1 Secret Migration[/bold cyan]")
         
         required_keys = [
-            "GEMINI_API_KEY", 
-            "OLLAMA_BASE_URL", 
-            "SHODAN_API_KEY", 
-            "VT_API_KEY", 
-            "GRAYNOISE_API_KEY", 
-            "THEHIVE_API_KEY"
+            "GEMINI_API_KEY",
+            "OLLAMA_BASE_URL",
+            "SHODAN_API_KEY",
+            "VT_API_KEY",
+            "GRAYNOISE_API_KEY",
+            "THEHIVE_API_KEY",
         ]
         
         for key in required_keys:
@@ -82,7 +96,12 @@ class SecretStore:
                 value = getpass.getpass(f"Enter your {key}: ").strip()
                 if value:
                     cls.set_secret(key, value)
-                    console.print(f"[green]✓ {key} stored in hardware-backed keychain.[/green]")
+                    # Verify the write actually persisted
+                    if keyring.get_password(SERVICE_NAME, key):
+                        console.print(f"[green]✓ {key} stored in hardware-backed keychain.[/green]")
+                    else:
+                        console.print(f"[red]✗ {key} could not be saved to keychain.[/red]")
+                        console.print(f"[yellow]  Add it to your .env file: {key}=<value>[/yellow]")
             else:
                 # Key exists in keyring or env
                 # If it's only in env, move it to keyring
