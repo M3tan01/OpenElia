@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 from core.schemas import AgentTask, AgentResult, RoutingDecision, ErrorPayload, AgentTier, Domain
 
 
@@ -63,3 +64,38 @@ def test_agent_tier_ordering():
 def test_agent_task_invalid_domain_raises():
     with pytest.raises(Exception):
         AgentTask(domain="unknown_domain", tier=AgentTier.RECON, agent_name="x", payload={})
+
+
+def test_agent_task_is_frozen():
+    task = AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name="x", payload={})
+    with pytest.raises(ValidationError):
+        task.retry_count = 1  # frozen model must reject mutation
+
+
+def test_agent_task_model_copy_for_retry():
+    task = AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name="x", payload={})
+    retried = task.model_copy(update={"retry_count": 1})
+    assert retried.retry_count == 1
+    assert task.task_id == retried.task_id  # same task, new attempt
+    assert task.retry_count == 0  # original unchanged
+
+
+def test_agent_task_json_round_trip():
+    import json
+    original = AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name="x", payload={"target": "1.2.3.4"})
+    data = json.loads(json.dumps(original.model_dump()))
+    restored = AgentTask.model_validate(data)
+    assert restored.task_id == original.task_id
+    assert restored.tier == AgentTier.RECON
+
+
+def test_agent_tier_enum_has_exactly_three_members():
+    """Ensures _order (or similar) is not accidentally an enum member."""
+    members = list(AgentTier)
+    assert len(members) == 3
+    assert set(m.value for m in members) == {"recon", "analysis", "execution"}
+
+
+def test_agent_result_invalid_status_raises():
+    with pytest.raises(ValidationError):
+        AgentResult(task_id="x", agent_name="y", status="invalid_status", output={})

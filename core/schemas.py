@@ -10,24 +10,25 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from functools import total_ordering
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+_TIER_ORDER = ["recon", "analysis", "execution"]
 
+
+@total_ordering
 class AgentTier(str, Enum):
     """Execution tier. Orderable via < / > for pipeline sequencing."""
     RECON = "recon"         # Data gathering (nmap, OSINT, log pull)
     ANALYSIS = "analysis"   # Reasoning over gathered data
     EXECUTION = "execution" # Active action (exploit, patch, report emit)
 
-    _order = ["recon", "analysis", "execution"]
-
     def __lt__(self, other: "AgentTier") -> bool:  # type: ignore[override]
-        return self._order.value.index(self.value) < self._order.value.index(other.value)
-
-    def __le__(self, other: "AgentTier") -> bool:  # type: ignore[override]
-        return self == other or self < other
+        if not isinstance(other, AgentTier):
+            return NotImplemented
+        return _TIER_ORDER.index(self.value) < _TIER_ORDER.index(other.value)
 
 
 class Domain(str, Enum):
@@ -48,7 +49,7 @@ class AgentTask(BaseModel):
     tier: AgentTier
     agent_name: str
     payload: dict[str, Any]
-    brain_tier: str = "local"
+    brain_tier: Literal["local", "expensive"] = "local"
     stealth: bool = False
     proxy_port: int | None = None
     apt_profile: str | None = None
@@ -62,7 +63,7 @@ class AgentResult(BaseModel):
     """Structured output from a completed or failed agent run."""
     task_id: str
     agent_name: str
-    status: str          # "success" | "error" | "skipped"
+    status: Literal["success", "error", "skipped"]
     output: dict[str, Any]
     completed_at: str = Field(default_factory=_now_iso)
     tokens_used: int = 0
