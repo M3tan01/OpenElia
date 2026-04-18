@@ -48,3 +48,6 @@ openelia = "main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["agents*", "mcp_servers*", "skills*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
