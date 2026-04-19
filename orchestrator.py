@@ -59,7 +59,7 @@ class Orchestrator:
         self.risk_calculator = RiskCalculator()
         # Always use the local model for cheap task classification
         self.client, self._orchestrator_model = LLMClient.create(brain_tier="local")
-        self._pool = AsyncWorkerPool(workers_per_tier=3)
+        self._pool: AsyncWorkerPool | None = None  # Created fresh per route() call
 
     # ---------------------------------------------------------------------------
     # Public entry point
