@@ -76,6 +76,10 @@ class JITLoader:
 
         return mapping
 
+    def get_skills_for_agent(self, agent_name: str) -> list[str]:
+        """Return the list of skill names mapped to this agent, or [] if unknown."""
+        return self.dynamic_skill_map.get(agent_name, [])
+
     def load_for_agent(self, agent_name: str) -> str:
         """
         Return a compact skill block for injection into a system prompt.
