@@ -10,11 +10,15 @@ import mcp.types as types
 
 def _load_siem_allowlist() -> list[str]:
     """
-    Load the approved SIEM webhook hostnames from the environment variable
-    SIEM_WEBHOOK_ALLOWLIST (comma-separated hostnames, e.g. "splunk.corp.com,siem.internal").
-    Returns an empty list if the variable is not set, which causes all URLs to be rejected.
+    Load the approved SIEM webhook hostnames from the keychain / env.
+    SIEM_WEBHOOK_ALLOWLIST is a comma-separated list of hostnames,
+    e.g. "splunk.corp.com,siem.internal".
+    Returns an empty list if not set, which causes all URLs to be rejected.
     """
-    raw = os.environ.get("SIEM_WEBHOOK_ALLOWLIST", "").strip()
+    import sys, os as _os
+    sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
+    from secret_store import SecretStore
+    raw = (SecretStore.get_secret("SIEM_WEBHOOK_ALLOWLIST") or "").strip()
     if not raw:
         return []
     return [h.strip().lower() for h in raw.split(",") if h.strip()]

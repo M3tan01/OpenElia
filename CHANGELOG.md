@@ -2,6 +2,38 @@
 
 All notable changes to the OpenElia project will be documented in this file.
 
+## [1.0.4] - 2026-04-18
+
+### 🔒 Security Hardening
+
+- **OpenClaw module** (`openclaw/`): Zero-trust external data ingestion boundary. All external payloads pass through two independent gates — Pydantic strict-mode schema validation (`extra="forbid"`, cross-field validators) and a 200+ pattern injection regex (`_INJECTION_RE`) — before any agent can read them. Raw response bodies are discarded after hashing; only SHA-256 digests are retained.
+- **SSRF prevention** (`OpenClawConnector._validate_uri`): Blocks cloud metadata endpoints (IMDS, `169.254.169.254`, etc.), all private/loopback/link-local CIDRs, and non-http(s) schemes. HTTP redirects are never followed. Network allowlist (`OPENCLAW_ALLOWED_HOSTS`) is fail-closed — all outbound connections are blocked if the list is empty.
+- **Hermetic subprocess** (`OpenClawConnector.run_isolated`): Child processes receive `env={}`, inheriting zero environment variables, eliminating the credential-leakage-via-env-var vector.
+- **Ephemeral credential lifecycle** (`OpenClawConnector._ephemeral_token`): Credentials are fetched from SecretStore, used in the narrowest possible scope, then `del + gc.collect()` immediately on context exit.
+- **Immutable audit log** (`ClawAuditLog`): HMAC-SHA-256 chained append-only log (`state/openclaw_audit.jsonl`). Every deletion, reordering, or content modification is detectable via `verify_chain()`. Credential-adjacent meta keys (`token`, `password`, `api_key`, etc.) are silently dropped at write time.
+- **Bandit B603/B607 suppressed** in `main.py`: macOS system binary calls (`bioutil`, `defaults`) annotated with `# nosec B603 B607` — no user input is passed to either call.
+
+### ✨ Features
+
+- **`ModelManager` + `LLMClient`** (`model_manager.py`, `llm_client.py`): Centralised model routing with config-file-backed settings (`~/.config/openelia/config.json`). Supports local (Ollama), cloud (OpenAI / Anthropic / Google), and per-agent hybrid overrides. API keys stored exclusively via SecretStore, never in the config file. Resolution order: per-agent hybrid override → `brain_tier="expensive"` → global cloud mode → local Ollama default.
+- **`/model` command** (`main.py`, `src/src/index.ts`, `src/src/cli.ts`): Interactive model configuration via `python main.py model status|set|auth|hybrid`. Full TypeScript CLI parity.
+- **OpenClaw Section 8** added to `COMMANDS.txt`: Documents allowlist setup, `fetch_json`, `run_isolated`, `rotate_token`, `verify_chain`, all schemas, and SSRF protection details.
+
+### 🐛 Bug Fixes
+
+- **`base_agent.py` routing bypass**: `self.local_client` was instantiated directly via `AsyncOpenAI()`, bypassing `LLMClient` and `ModelManager`. Replaced with `LLMClient.create(brain_tier="local")` so all three local call-paths (`_compress_payload`, `_query_threat_intel`, reflective retry) route through the unified factory.
+- **`orchestrator.py` routing bypass**: `Orchestrator.__init__` constructed `AsyncOpenAI()` directly from `ModelManager` config values instead of calling `LLMClient.create()`. Fixed to use `LLMClient.create(brain_tier="local")`.
+- **`datetime.utcnow()` deprecation** (Python 3.12+): Fixed in `artifact_manager.py` (×2), `vector_manager.py`, and `mcp_servers/blue_telemetry/server.py`. All callsites now use `datetime.now(timezone.utc)`.
+- **`middleware.py` inline regex flag**: `(?m)` mid-pattern caused `re.PatternError` on Python 3.14. Removed — `re.MULTILINE` was already passed to `re.compile()`.
+- **`middleware.py` extra-field bypass**: `model_config = {"strict": True}` controls type coercion only. Added `"extra": "forbid"` to all five Pydantic schemas so unknown fields fail validation rather than being silently ignored.
+- **`connector.py` double-`del` in `rotate_token`**: `del token_ref` in the `except` block caused `UnboundLocalError` when the `finally` block attempted a second deletion. Refactored to delete only in `finally`.
+
+### 🧪 Tests
+
+- **`tests/test_model_manager.py`**: 46 tests covering defaults, provider key storage, client config resolution, and `LLMClient` factory.
+- **`tests/test_secret_store.py`**: Tests covering basic ops, in-memory cache, env fallback, keyring failure, and blob integrity.
+- **`tests/test_openclaw.py`**: 50 tests covering all OpenClaw security boundaries — audit chain integrity, meta key blocking, URI scrubbing, schema validation, injection stripping, SSRF/allowlist enforcement, ephemeral token lifecycle, hermetic subprocess isolation, token rotation, and `fetch_json` happy/error paths.
+
 ## [1.0.3] - 2026-04-17
 
 ### 🔒 Security Hardening

@@ -28,6 +28,14 @@ export interface CLIOptions {
   proxyPort?: string;
   force?: boolean;
   actionId?: string;
+  // model sub-command fields
+  modelAction?: 'status' | 'set' | 'auth' | 'hybrid';
+  tier?: string;
+  modelArgs?: string[];
+  provider?: string;
+  apiKey?: string;
+  agent?: string;
+  modelName?: string;
 }
 
 export class OpenEliaCLI {
@@ -394,6 +402,46 @@ export class OpenEliaCLI {
     }
   }
 
+  async handleModel(options: CLIOptions): Promise<void> {
+    const action = options.modelAction;
+    const args = ['model', action!];
+
+    if (action === 'set') {
+      if (!options.tier) {
+        console.error(chalk.red('Usage: model set local <model>  |  model set cloud <provider> <model>'));
+        return;
+      }
+      args.push(options.tier);
+      if (options.modelArgs && options.modelArgs.length > 0) {
+        args.push(...options.modelArgs);
+      }
+    } else if (action === 'auth') {
+      if (!options.provider || !options.apiKey) {
+        console.error(chalk.red('Usage: model auth <provider> <api_key>'));
+        return;
+      }
+      args.push(options.provider, options.apiKey);
+    } else if (action === 'hybrid') {
+      if (!options.agent || !options.provider || !options.modelName) {
+        console.error(chalk.red('Usage: model hybrid --agent <name> --provider <p> --model <m>'));
+        return;
+      }
+      args.push('--agent', options.agent, '--provider', options.provider, '--model', options.modelName);
+    }
+    // 'status' needs no extra args
+
+    try {
+      const result = await this.runPythonCommand(args);
+      if (result.code === 0) {
+        console.log(result.stdout);
+      } else {
+        console.error(chalk.red('Model command failed:'), result.stderr || result.stdout);
+      }
+    } catch (error) {
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
   async handleExecuteRemediation(options: CLIOptions): Promise<void> {
     if (!options.actionId) {
       console.error(chalk.red('Error: --action-id is required'));
@@ -464,7 +512,7 @@ ${W('    /_/                                   ')}
     }
 
     const commands = program ? program.commands.map((cmd: any) => cmd.name()) : [
-      'red', 'blue', 'purple', 'check', 'doctor', 'status', 'dashboard', 'clear', 'sbom', 'archive', 'nmap', 'msf', 'agent', 'lock', 'unlock', 'help', 'exit', 'quit'
+      'red', 'blue', 'purple', 'check', 'doctor', 'status', 'dashboard', 'clear', 'sbom', 'archive', 'nmap', 'msf', 'agent', 'lock', 'unlock', 'model', 'help', 'exit', 'quit'
     ];
     
     // Add aliases if available

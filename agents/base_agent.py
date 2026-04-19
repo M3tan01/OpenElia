@@ -24,10 +24,14 @@ from secret_store import SecretStore
 from cost_tracker import CostTracker
 from adversary_manager import AdversaryManager
 from vector_manager import VectorManager
+from model_manager import ModelManager
+from llm_client import LLMClient
 
 
-_OLLAMA_BASE_URL = SecretStore.get_secret("OLLAMA_BASE_URL") or "http://localhost:11434/v1"
-_DEFAULT_MODEL = SecretStore.get_secret("OLLAMA_MODEL") or "llama3.1:8b"
+# Local model config — used for compression/intel helpers that always stay cheap
+_local_cfg = ModelManager.get_client_config(brain_tier="local")
+_OLLAMA_BASE_URL = _local_cfg["base_url"]
+_DEFAULT_MODEL   = _local_cfg["model"]
 
 
 class BaseAgent(ABC):
@@ -43,25 +47,20 @@ class BaseAgent(ABC):
         self.cost_tracker = CostTracker()
         self.adversary_manager = AdversaryManager()
         self.vector_manager = VectorManager()
-        
-        # Dedicated local client for zero-cost compression
-        self.local_client = AsyncOpenAI(
-            base_url=_OLLAMA_BASE_URL,
-            api_key="ollama",
+
+        # Dedicated local client for zero-cost compression / intel helpers.
+        # Always local regardless of brain_tier — routed through LLMClient so
+        # any future middleware (cost tracking, logging) is applied uniformly.
+        self.local_client, self._local_model = LLMClient.create(
+            brain_tier="local",
+            agent_name=self.AGENT_NAME,
         )
 
-        if brain_tier == "expensive":
-            self.client = AsyncOpenAI(
-                base_url=os.environ.get("EXPENSIVE_BRAIN_URL", _OLLAMA_BASE_URL),
-                api_key=os.environ.get("EXPENSIVE_BRAIN_KEY", "ollama"),
-            )
-            self.MODEL = os.environ.get("EXPENSIVE_MODEL", "gpt-4o")
-        else:
-            self.client = AsyncOpenAI(
-                base_url=_OLLAMA_BASE_URL,
-                api_key="ollama",
-            )
-            self.MODEL = _DEFAULT_MODEL
+        # Primary client resolved via ModelManager (supports hybrid per-agent routing)
+        self.client, self.MODEL = LLMClient.create(
+            brain_tier=brain_tier,
+            agent_name=self.AGENT_NAME,
+        )
 
     def _check_kill_switch(self):
         """Tier 1: Global Kill-Switch enforcement."""
@@ -75,7 +74,7 @@ class BaseAgent(ABC):
         "Every tool call MUST include ALL required fields. "
         "If a tool fails, analyze the error and try to fix your command. "
         "When complete, respond with plain text.\n"
-        f"CYBER_RISK_INSTRUCTION: {os.getenv('CYBER_RISK_INSTRUCTION', 'Strictly adhere to the defined scope. Execute only authorized operations. Never perform non-reversible destructive actions.')}\n\n"
+        f"CYBER_RISK_INSTRUCTION: {SecretStore.get_secret('CYBER_RISK_INSTRUCTION') or 'Strictly adhere to the defined scope. Execute only authorized operations. Never perform non-reversible destructive actions.'}\n\n"
     )
 
     _MAX_SKILL_CHARS = 600
@@ -287,7 +286,7 @@ class BaseAgent(ABC):
         """Use the local Tier 1 model to compress massive tool outputs before they hit the main context window."""
         try:
             response = await self.local_client.chat.completions.create(
-                model=_DEFAULT_MODEL,
+                model=self._local_model,
                 messages=[
                     {"role": "system", "content": "You are a data compressor. Extract only the critical security findings, IoCs, open ports, or explicit errors from the following raw tool output. Discard all noise. Output concise JSON or bullet points."},
                     {"role": "user", "content": payload[:10000]} # Limit max input to compression
@@ -304,7 +303,7 @@ class BaseAgent(ABC):
         try:
             # Use local model to extract potential targets for intel lookup
             extraction = await self.local_client.chat.completions.create(
-                model=_DEFAULT_MODEL,
+                model=self._local_model,
                 messages=[
                     {"role": "system", "content": "Extract ONLY software names with versions or IP addresses from the text. Return a simple comma-separated list. If none, return 'NONE'."},
                     {"role": "user", "content": payload[:2000]}
@@ -525,7 +524,7 @@ class BaseAgent(ABC):
                         
                         # Use local Tier 1 model to suggest a fix for the next reasoning turn
                         analysis = await self.local_client.chat.completions.create(
-                            model=_DEFAULT_MODEL,
+                            model=self._local_model,
                             messages=[
                                 {"role": "system", "content": "Analyze the following tool failure. Suggest a fix for the next tool call. Be extremely concise."},
                                 {"role": "user", "content": f"Tool: {tc.function.name}\nInput: {tc.function.arguments}\nError: {result_str}"}

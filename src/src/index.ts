@@ -163,6 +163,42 @@ program
     await cli.handleExecuteRemediation({ actionId: options.actionId });
   });
 
+// Model Configuration
+const modelCmd = program
+  .command('model')
+  .description('Manage model configuration (local / cloud / hybrid)');
+
+modelCmd
+  .command('status')
+  .description('Show current model configuration')
+  .action(async () => {
+    await cli.handleModel({ modelAction: 'status' });
+  });
+
+modelCmd
+  .command('set <tier> [args...]')
+  .description('Set active model  |  set local <model>  |  set cloud <provider> <model>')
+  .action(async (tier: string, args: string[]) => {
+    await cli.handleModel({ modelAction: 'set', tier, modelArgs: args });
+  });
+
+modelCmd
+  .command('auth <provider> <apiKey>')
+  .description('Store provider API key in OS keychain  (openai / anthropic / google)')
+  .action(async (provider: string, apiKey: string) => {
+    await cli.handleModel({ modelAction: 'auth', provider, apiKey });
+  });
+
+modelCmd
+  .command('hybrid')
+  .description('Pin an agent to a specific provider:model')
+  .requiredOption('--agent <name>', 'Agent name (Pentester / Defender / Reporter)')
+  .requiredOption('--provider <provider>', 'Provider (local / openai / anthropic / google)')
+  .requiredOption('--model <model>', 'Model name (e.g. gpt-4o, llama3.1:8b)')
+  .action(async (options) => {
+    await cli.handleModel({ modelAction: 'hybrid', agent: options.agent, provider: options.provider, modelName: options.model });
+  });
+
 // Agent Commands
 program
   .command('agent')

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from rich.console import Console
+from secret_store import SecretStore
 
 console = Console()
 
@@ -19,9 +20,9 @@ class CostTracker:
     def __init__(self, log_path="state/costs.json"):
         self.log_path = log_path
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
-        self.session_id = datetime.utcnow().strftime("%Y%m%d_%H%M")
+        self.session_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
         # Global budget limit in USD
-        self.max_budget = float(os.getenv("MAX_TOKEN_BUDGET", "5.00"))
+        self.max_budget = float(SecretStore.get_secret("MAX_TOKEN_BUDGET") or "5.00")
 
     def _load_history(self):
         if os.path.exists(self.log_path):

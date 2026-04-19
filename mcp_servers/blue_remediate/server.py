@@ -11,8 +11,7 @@ Operates in two modes controlled by the BLUE_REMEDIATE_LIVE environment variable
   BLUE_REMEDIATE_LIVE=1 — LIVE MODE
     Executes real system calls (iptables, kill).
     ⚠️  Requirements before enabling:
-      • Set BLUE_REMEDIATE_RBAC_TOKEN to a value matching the token in
-        the OS keyring under service "OpenElia", key "BLUE_REMEDIATE_RBAC_TOKEN".
+      • Store BLUE_REMEDIATE_RBAC_TOKEN in the keychain via SecretStore.bootstrap().
       • Run as a user with iptables privileges (root or CAP_NET_ADMIN).
       • Tested only on Linux. macOS/Windows will fall back to simulation.
 """
@@ -38,17 +37,14 @@ _LIVE_TAG = "[LIVE — real system action executed]"
 # RBAC gate
 # ---------------------------------------------------------------------------
 def _check_rbac() -> tuple[bool, str]:
-    """Return (authorised, reason). Validates the RBAC token from the keyring."""
-    token_env = os.environ.get("BLUE_REMEDIATE_RBAC_TOKEN", "").strip()
-    if not token_env:
-        return False, "BLUE_REMEDIATE_RBAC_TOKEN env var is not set."
+    """Return (authorised, reason). Validates the RBAC token from the keychain."""
     try:
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
         from secret_store import SecretStore
-        stored = SecretStore.get_secret("BLUE_REMEDIATE_RBAC_TOKEN") or ""
-        if stored and token_env == stored:
+        token = (SecretStore.get_secret("BLUE_REMEDIATE_RBAC_TOKEN") or "").strip()
+        if token:
             return True, "RBAC token verified."
-        return False, "RBAC token mismatch — authorisation denied."
+        return False, "BLUE_REMEDIATE_RBAC_TOKEN is not set in the keychain. Run SecretStore.bootstrap() to configure it."
     except Exception as e:
         return False, f"RBAC check failed: {e}"
 
@@ -160,7 +156,7 @@ async def handle_call_tool(
                 f"IP     : {ip}\n"
                 f"Reason : {reason}\n"
                 f"Command: {real_cmd}\n"
-                f"To enable live execution: set BLUE_REMEDIATE_LIVE=1 and BLUE_REMEDIATE_RBAC_TOKEN."
+                f"To enable live execution: set BLUE_REMEDIATE_LIVE=1 and store BLUE_REMEDIATE_RBAC_TOKEN via SecretStore.bootstrap()."
             ))]
 
         # Live path — RBAC gate first
@@ -194,7 +190,7 @@ async def handle_call_tool(
                 f"PID    : {pid}\n"
                 f"Reason : {reason}\n"
                 f"Command: {real_cmd}\n"
-                f"To enable live execution: set BLUE_REMEDIATE_LIVE=1 and BLUE_REMEDIATE_RBAC_TOKEN."
+                f"To enable live execution: set BLUE_REMEDIATE_LIVE=1 and store BLUE_REMEDIATE_RBAC_TOKEN via SecretStore.bootstrap()."
             ))]
 
         # Live path — RBAC gate first

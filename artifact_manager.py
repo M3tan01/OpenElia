@@ -61,13 +61,15 @@ class ArtifactManager:
         """
         Encrypt and store a file artifact, update forensic timeline.
         """
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        from datetime import timezone as _tz
+        _now = datetime.now(_tz.utc)
+        timestamp = _now.strftime("%Y%m%d_%H%M%S")
         # Strip any directory components from the caller-supplied filename (H1: path traversal)
         from pathlib import Path as _Path
         clean_name = _Path(filename).name or "artifact"
         safe_filename = f"{timestamp}_{clean_name}.enc"
         file_path = os.path.join(self.base_dir, safe_filename)
-        iso_ts = datetime.utcnow().isoformat() + "Z"
+        iso_ts = _now.isoformat()
 
         # Content preparation (ensure bytes)
         raw_data = content if isinstance(content, bytes) else content.encode('utf-8')

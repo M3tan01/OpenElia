@@ -1,7 +1,7 @@
 ================================================================================
   OPENELIA — COMPLETE COMMAND REFERENCE & MODEL CONFIGURATION GUIDE
 ================================================================================
-  Version: 1.0.2  |  Python 3.11+  |  Last updated: 2026-04-17
+  Version: 1.0.4  |  Python 3.11+  |  Last updated: 2026-04-18
 ================================================================================
 
 
@@ -318,152 +318,101 @@
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  SECTION 6 — MODEL CONFIGURATION: LOCAL vs EXPENSIVE BRAIN
+  SECTION 6 — MODEL CONFIGURATION (/model command)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  All agents use a two-tier brain system controlled by --brain-tier:
+  OpenElia has a built-in Dynamic Model Manager. Model names and routing are
+  stored in ~/.config/openelia/config.json. API keys stay in the OS keychain
+  — they are never written to the config file or to disk.
 
   ┌──────────────┬────────────────────────────────────────────────────────────┐
   │  local       │ Default. Uses Ollama running on your machine. Free,        │
   │              │ private, no data leaves your host. Requires ollama serve.  │
   ├──────────────┼────────────────────────────────────────────────────────────┤
-  │  expensive   │ Uses a paid API (Claude, Gemini, GPT-4, etc). More         │
-  │              │ capable reasoning. Requires API key configuration below.   │
+  │  cloud       │ Routes to a paid API (OpenAI / Anthropic / Google).        │
+  │              │ More capable reasoning. Requires model auth first.         │
+  ├──────────────┼────────────────────────────────────────────────────────────┤
+  │  hybrid      │ Per-agent routing — each agent can use a different         │
+  │              │ provider. Set with `model hybrid`.                         │
   └──────────────┴────────────────────────────────────────────────────────────┘
 
-  ── 6A. SWITCHING LOCAL OLLAMA MODELS ──────────────────────────────────────
 
-  The default local model is llama3.1:8b. To change it:
+  ── 6A. CHECK CURRENT CONFIGURATION ────────────────────────────────────────
 
-  Method 1 — OS Keyring (persistent, secure, recommended):
+    python main.py model status
+    openelia-cli model status
+
+
+  ── 6B. SET LOCAL OLLAMA MODEL ──────────────────────────────────────────────
+
+    python main.py model set local <model_name>
+
+  Examples:
+    python main.py model set local llama3.1:8b       # default
+    python main.py model set local mistral:7b
+    python main.py model set local deepseek-r1:14b
+    python main.py model set local llama3.3:70b      # requires 32GB+ VRAM
+
+  Pull the model first:
+    ollama pull llama3.1:8b
+    ollama pull mistral:7b
+
+  For a remote / GPU-server Ollama, set the URL in the keychain:
     python -c "
     from secret_store import SecretStore
-    SecretStore.set_secret('OLLAMA_MODEL', 'mistral:7b')
-    SecretStore.set_secret('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
+    SecretStore.set_secret('OLLAMA_BASE_URL', 'http://192.168.1.100:11434/v1')
     "
-
-  Method 2 — Environment variable (session only, overrides keyring):
-    export OLLAMA_MODEL="mistral:7b"
-    export OLLAMA_BASE_URL="http://localhost:11434/v1"
-
-  Pull the model with Ollama first:
-    ollama pull mistral:7b
-    ollama pull llama3.3:70b
-    ollama pull deepseek-r1:14b
-    ollama pull qwen2.5:14b
 
   Recommended local models by use case:
     Fast / low-RAM    : llama3.2:3b, qwen2.5:7b
     Balanced          : llama3.1:8b (default), mistral:7b
-    High capability   : llama3.3:70b, deepseek-r1:32b (requires 32GB+ VRAM)
+    High capability   : llama3.3:70b, deepseek-r1:32b
     Code / exploits   : deepseek-coder-v2:16b, qwen2.5-coder:14b
 
-  ── 6B. USING CLAUDE (ANTHROPIC) AS THE EXPENSIVE BRAIN ────────────────────
 
-  Claude uses an OpenAI-compatible endpoint. Add these to your keyring or
-  environment:
+  ── 6C. SET CLOUD PROVIDER + STORE API KEY ──────────────────────────────────
 
-    EXPENSIVE_BRAIN_URL  = https://api.anthropic.com/v1
-    EXPENSIVE_BRAIN_KEY  = <your Anthropic API key>
-    EXPENSIVE_MODEL      = claude-opus-4-6          (most capable)
-                        OR claude-sonnet-4-6        (faster, cheaper)
-                        OR claude-haiku-4-5-20251001 (fastest)
+  Step 1 — choose provider and model:
+    python main.py model set cloud openai    gpt-4o
+    python main.py model set cloud anthropic claude-sonnet-4-6
+    python main.py model set cloud google    gemini-2.0-flash
 
-  Method 1 — OS Keyring (recommended):
-    python -c "
-    from secret_store import SecretStore
-    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://api.anthropic.com/v1')
-    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'sk-ant-YOUR_KEY_HERE')
-    SecretStore.set_secret('EXPENSIVE_MODEL', 'claude-sonnet-4-6')
-    "
+  Step 2 — store the API key in the OS keychain (one-time):
+    python main.py model auth openai    sk-YOUR_OPENAI_KEY
+    python main.py model auth anthropic sk-ant-YOUR_ANTHROPIC_KEY
+    python main.py model auth google    AIza_YOUR_GOOGLE_KEY
 
-  Method 2 — Environment variable:
-    export EXPENSIVE_BRAIN_URL="https://api.anthropic.com/v1"
-    export EXPENSIVE_BRAIN_KEY="sk-ant-YOUR_KEY_HERE"
-    export EXPENSIVE_MODEL="claude-sonnet-4-6"
-
-  Get an API key: https://console.anthropic.com
-
-  Run with Claude brain:
-    python main.py red --target 10.10.10.50 --brain-tier expensive
+  Step 3 — run with cloud brain:
+    python main.py red  --target 10.10.10.50 --brain-tier expensive
     python main.py blue --logs /var/log/auth.log --brain-tier expensive
 
-  ── 6C. USING GEMINI (GOOGLE) AS THE EXPENSIVE BRAIN ──────────────────────
+  Supported providers and their API key storage names:
+    openai     → OPENAI_API_KEY
+    anthropic  → ANTHROPIC_API_KEY
+    google     → GOOGLE_API_KEY
 
-  Google provides an OpenAI-compatible endpoint for Gemini models.
+  Get API keys:
+    OpenAI    : https://platform.openai.com/api-keys
+    Anthropic : https://console.anthropic.com
+    Google    : https://aistudio.google.com/app/apikey
 
-    EXPENSIVE_BRAIN_URL  = https://generativelanguage.googleapis.com/v1beta/openai/
-    EXPENSIVE_BRAIN_KEY  = <your Google AI Studio API key>
-    EXPENSIVE_MODEL      = gemini-2.0-flash          (fast, recommended)
-                        OR gemini-2.5-pro-preview-05-06 (most capable)
-                        OR gemini-1.5-pro            (stable)
 
-  Method 1 — OS Keyring (recommended):
-    python -c "
-    from secret_store import SecretStore
-    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://generativelanguage.googleapis.com/v1beta/openai/')
-    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'AIza_YOUR_KEY_HERE')
-    SecretStore.set_secret('EXPENSIVE_MODEL', 'gemini-2.0-flash')
-    "
+  ── 6D. HYBRID MODE — PER-AGENT ROUTING ────────────────────────────────────
 
-  Method 2 — Environment variable:
-    export EXPENSIVE_BRAIN_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
-    export EXPENSIVE_BRAIN_KEY="AIza_YOUR_KEY_HERE"
-    export EXPENSIVE_MODEL="gemini-2.0-flash"
+  Pin individual agents to different providers while keeping others local:
 
-  The bootstrap prompt will also ask for GEMINI_API_KEY on first run — this
-  stores it in the keyring and is used by the threat intelligence MCP server
-  for its Gemini-powered analysis tools.
+    python main.py model hybrid --agent Reporter  --provider anthropic --model claude-sonnet-4-6
+    python main.py model hybrid --agent Pentester --provider local     --model llama3.1:8b
+    python main.py model hybrid --agent Defender  --provider openai    --model gpt-4o
 
-  Get an API key: https://aistudio.google.com/app/apikey
+  In hybrid mode, each agent resolves its own client from ModelManager.
+  Agents without an override fall back to the global mode (local/cloud).
 
-  ── 6D. USING OPENAI (GPT-4) AS THE EXPENSIVE BRAIN ───────────────────────
+  View active overrides:
+    python main.py model status
 
-    EXPENSIVE_BRAIN_URL  = https://api.openai.com/v1
-    EXPENSIVE_BRAIN_KEY  = <your OpenAI API key>
-    EXPENSIVE_MODEL      = gpt-4o                   (default fallback if not set)
-                        OR gpt-4o-mini              (cheaper)
-                        OR o3                       (deep reasoning)
 
-  Method 1 — OS Keyring:
-    python -c "
-    from secret_store import SecretStore
-    SecretStore.set_secret('EXPENSIVE_BRAIN_URL', 'https://api.openai.com/v1')
-    SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'sk-YOUR_KEY_HERE')
-    SecretStore.set_secret('EXPENSIVE_MODEL', 'gpt-4o')
-    "
-
-  Method 2 — Environment variable:
-    export EXPENSIVE_BRAIN_URL="https://api.openai.com/v1"
-    export EXPENSIVE_BRAIN_KEY="sk-YOUR_KEY_HERE"
-    export EXPENSIVE_MODEL="gpt-4o"
-
-  ── 6E. USING A REMOTE / SELF-HOSTED OLLAMA ────────────────────────────────
-
-  If Ollama runs on a remote machine or a GPU server:
-
-    export OLLAMA_BASE_URL="http://192.168.1.100:11434/v1"
-    export OLLAMA_MODEL="llama3.3:70b"
-
-  Or persistently via keyring:
-    python -c "
-    from secret_store import SecretStore
-    SecretStore.set_secret('OLLAMA_BASE_URL', 'http://192.168.1.100:11434/v1')
-    SecretStore.set_secret('OLLAMA_MODEL', 'llama3.3:70b')
-    "
-
-  ── 6F. VERIFY CURRENT MODEL CONFIGURATION ─────────────────────────────────
-
-    python -c "
-    from secret_store import SecretStore
-    print('Local  model :', SecretStore.get_secret('OLLAMA_MODEL') or 'llama3.1:8b (default)')
-    print('Local  URL   :', SecretStore.get_secret('OLLAMA_BASE_URL') or 'http://localhost:11434/v1 (default)')
-    print('Exp.   model :', SecretStore.get_secret('EXPENSIVE_MODEL') or 'gpt-4o (default fallback)')
-    print('Exp.   URL   :', SecretStore.get_secret('EXPENSIVE_BRAIN_URL') or 'not set')
-    print('Exp.   key   :', 'SET' if SecretStore.get_secret('EXPENSIVE_BRAIN_KEY') else 'NOT SET')
-    "
-
-  ── 6G. QUICK COMPARISON TABLE ─────────────────────────────────────────────
+  ── 6E. QUICK REFERENCE TABLE ──────────────────────────────────────────────
 
   Provider  │ Model                     │ Speed  │ Cost   │ Privacy  │ Best for
   ──────────┼───────────────────────────┼────────┼────────┼──────────┼───────────────────
@@ -478,6 +427,15 @@
   OpenAI    │ gpt-4o-mini               │ Fast   │ $      │ API      │ Cheap paid option
   OpenAI    │ gpt-4o                    │ Medium │ $$$    │ API      │ Reliable fallback
   OpenAI    │ o3                        │ Slow   │ $$$$   │ API      │ Deep chain reasoning
+
+
+  ── 6F. TYPESCRIPT CLI ─────────────────────────────────────────────────────
+
+    openelia-cli model status
+    openelia-cli model set local llama3.2:latest
+    openelia-cli model set cloud anthropic claude-opus-4-6
+    openelia-cli model auth anthropic sk-ant-YOUR_KEY
+    openelia-cli model hybrid --agent Reporter --provider openai --model gpt-4o
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -730,6 +688,11 @@
     openelia-cli sbom
     openelia-cli doctor
     openelia-cli interactive     # Enter interactive REPL mode
+    openelia-cli model status
+    openelia-cli model set local llama3.2:latest
+    openelia-cli model set cloud anthropic claude-sonnet-4-6
+    openelia-cli model auth anthropic sk-ant-YOUR_KEY
+    openelia-cli model hybrid --agent Reporter --provider openai --model gpt-4o
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -769,6 +732,146 @@
     python scrub.py                    # Wipe state/, artifacts/, vault
     python main.py sbom                # Regenerate clean SBOM
     git add . && git commit -m "clean engagement"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 8 — OPENCLAW: ZERO-TRUST EXTERNAL DATA INGESTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  OpenClaw is the hermetic boundary between external threat-intelligence feeds
+  and the Orchestrator / LLM context window.  Every byte of external data must
+  pass two independent security gates before any agent can read it:
+
+    Gate 1 — Structural firewall  : Pydantic strict-mode schema validation
+    Gate 2 — Semantic firewall    : Regex injection stripping (200+ patterns)
+
+  Nothing exits OpenClaw without clearing both gates.
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8A — FIRST-TIME SETUP: Provision the Network Allowlist
+  ─────────────────────────────────────────────────────────────────────────────
+
+  All outbound connections are FAIL-CLOSED.  OpenClaw will block every request
+  until at least one host is explicitly allowlisted.
+
+  python3 - <<'EOF'
+  from secret_store import SecretStore
+  # Comma-separated hostnames — no wildcards, no ports
+  SecretStore.set_secret("OPENCLAW_ALLOWED_HOSTS", "feeds.circl.lu,api.threatintelligenceplatform.com")
+  EOF
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8B — FETCH A THREAT INTELLIGENCE FEED (Python API)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  from openclaw.connector import OpenClawConnector
+  from openclaw.middleware import ClawThreatFeed
+
+  connector = OpenClawConnector()
+
+  # Fetch and validate — returns a validated ClawThreatFeed or None
+  feed = await connector.fetch_json(
+      uri="https://feeds.circl.lu/iocs/latest",
+      expected_schema=ClawThreatFeed,
+      auth_key="CIRCL_API_TOKEN",        # SecretStore key (optional)
+  )
+  if feed is None:
+      # Blocked, schema-invalid, or injection detected — already audited
+      ...
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8C — RUN AN ISOLATED SUBPROCESS (hermetic env={})
+  ─────────────────────────────────────────────────────────────────────────────
+
+  from openclaw.connector import OpenClawConnector
+
+  connector = OpenClawConnector()
+
+  # Child process inherits ZERO environment variables (no key leakage)
+  result = connector.run_isolated(
+      command=["parser-tool", "--json", "--input", "-"],
+      stdin_data=raw_bytes,
+      timeout_s=30.0,
+  )
+  if result.returncode != 0:
+      print(result.stderr.decode())
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8D — TOKEN ROTATION
+  ─────────────────────────────────────────────────────────────────────────────
+
+  from openclaw.connector import OpenClawConnector
+
+  connector = OpenClawConnector()
+  connector.rotate_token("CIRCL_API_TOKEN", new_token_value)
+  # Old token is wiped from memory immediately; rotation is audited
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8E — VERIFY AUDIT LOG INTEGRITY
+  ─────────────────────────────────────────────────────────────────────────────
+
+  The OpenClaw audit log (state/openclaw_audit.jsonl) is HMAC-chained.
+  Any deletion, reordering, or content modification is detectable.
+
+  from openclaw.audit import ClawAuditLog
+
+  audit = ClawAuditLog()
+  if audit.verify_chain():
+      print("Audit log intact")
+  else:
+      print("TAMPERING DETECTED — log chain is broken")
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8F — SUPPORTED SCHEMAS
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Schema            Fields (required)
+  ──────────────    ───────────────────────────────────────────────────────────
+  ClawIOC           ioc_type, value, confidence, source
+                    ioc_type ∈ {ip, domain, hash_md5, hash_sha256, url,
+                                email, cve}
+                    confidence ∈ [0.0, 1.0]
+                    Cross-field: ioc_type="ip" → value must be a valid IP
+
+  ClawPort          port (1–65535), protocol (tcp|udp|sctp), service,
+                    version, state (open|closed|filtered)
+
+  ClawHostRecord    ip (validated), hostnames, ports (list[ClawPort]),
+                    os_guess, tags
+
+  ClawThreatFeed    feed_name, feed_url, record_count, entries (list[ClawIOC])
+                    Cross-field: record_count must equal len(entries)
+                    (padding attack detection)
+
+  ClawRawResponse   status_code, content_type, body_hash (SHA-256 only),
+                    byte_length, retrieval_ms
+                    NOTE: raw body is NEVER stored — only its digest
+
+  All schemas use strict=True (no type coercion) + extra="forbid"
+  (any unknown field fails validation).
+
+  ─────────────────────────────────────────────────────────────────────────────
+  8G — SSRF PROTECTION DETAILS
+  ─────────────────────────────────────────────────────────────────────────────
+
+  OpenClaw blocks the following unconditionally (even if allowlisted):
+
+  • Cloud metadata endpoints:
+      169.254.169.254         AWS / GCP / Azure IMDS
+      metadata.google.internal
+      fd00:ec2::254           AWS IPv6 IMDS
+      100.100.100.200         Alibaba Cloud metadata
+
+  • Private / reserved address ranges:
+      10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16  (RFC 1918)
+      127.0.0.0/8, ::1/128                         (loopback)
+      169.254.0.0/16, fe80::/10                    (link-local)
+      fc00::/7, 224.0.0.0/4, 240.0.0.0/4          (ULA / multicast)
+
+  • Non-http(s) schemes:  file://, gopher://, dict://, ldap://, etc.
+
+  • HTTP redirects are NEVER followed (follow_redirects=False).
+  • TLS certificate verification is always enforced (verify=True).
+  • Response bodies larger than 10 MiB are rejected.
 
 ================================================================================
   END OF COMMAND REFERENCE

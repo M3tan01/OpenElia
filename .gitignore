@@ -229,3 +229,5 @@ audit.log
 *.bak
 *.swp
 *.swo
+# Local MCP configuration (contains absolute paths)
+.mcp.json

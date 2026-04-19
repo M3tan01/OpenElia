@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 class VectorManager:
     def __init__(self, db_path="state/vector_db"):
@@ -24,7 +24,7 @@ class VectorManager:
         return self._collection
 
     def index_event(self, source, event_type, content, metadata=None):
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         event_id = f"{event_type}_{timestamp}_{os.urandom(4).hex()}"
         
         if metadata is None:

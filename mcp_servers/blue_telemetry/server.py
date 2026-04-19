@@ -2,7 +2,7 @@
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from mcp.server.models import InitializationOptions
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -59,7 +59,7 @@ async def handle_call_tool(
             raise ValueError("Missing arguments")
             
         event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": arguments["source"],
             "event_type": arguments["event_type"],
             "severity": arguments["severity"],
