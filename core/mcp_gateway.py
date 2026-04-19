@@ -19,7 +19,8 @@ _SERVER_REGISTRY: dict[str, str] = {
     "siem":            "mcp_servers.siem.server",
     "blue_telemetry":  "mcp_servers.blue_telemetry.server",
     "blue_remediate":  "mcp_servers.blue_remediate.server",
-    "lsp":             "core.lsp_server",
+    # NOTE: "lsp" is intentionally absent — core.lsp_server is a pygls server
+    # (no handle_call_tool). Agents interact with LSP via core.lsp_server directly.
     "atomic":          "mcp_servers.atomic.server",
     "graph":           "mcp_servers.graph.server",
     "memory":          "mcp_servers.memory.server",

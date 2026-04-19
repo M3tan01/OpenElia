@@ -144,3 +144,61 @@ class TestAdversaryManagerSecurity:
         am = AdversaryManager(adversaries_dir=str(tmp_path))
         result = am.load_profile("APT29")
         assert result["name"] == "APT29"
+
+
+# ---------------------------------------------------------------------------
+# AuditLogger — delegates to core.audit_chain
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch
+from security_manager import AuditLogger
+
+
+class TestAuditLogger:
+    def _make_logger(self, tmp_path):
+        return AuditLogger(log_path=str(tmp_path / "audit.log"))
+
+    def test_log_event_creates_file(self, tmp_path):
+        logger = self._make_logger(tmp_path)
+        logger.log_event("agent", "10.0.0.1", "nmap scan", "ALLOWED")
+        assert (tmp_path / "audit.log").exists()
+
+    def test_log_event_record_has_chain_hash(self, tmp_path):
+        import json
+        logger = self._make_logger(tmp_path)
+        logger.log_event("agent", "10.0.0.1", "nmap scan", "ALLOWED", "scope ok")
+        entry = json.loads((tmp_path / "audit.log").read_text().strip())
+        assert "chain_hash" in entry
+        assert len(entry["chain_hash"]) == 64
+
+    def test_log_event_redacts_pii(self, tmp_path):
+        import json
+        logger = self._make_logger(tmp_path)
+        logger.log_event("agent", "10.0.0.1", "user admin@corp.com accessed", "ALLOWED")
+        entry = json.loads((tmp_path / "audit.log").read_text().strip())
+        assert "admin@corp.com" not in entry["payload"]
+        assert "[REDACTED_EMAIL]" in entry["payload"]
+
+    def test_verify_chain_clean(self, tmp_path):
+        logger = self._make_logger(tmp_path)
+        logger.log_event("a", "t", "p", "ALLOWED")
+        logger.log_event("a", "t", "p2", "BLOCKED")
+        assert logger.verify_chain() is True
+
+    def test_verify_chain_detects_tamper(self, tmp_path):
+        import json
+        logger = self._make_logger(tmp_path)
+        logger.log_event("a", "t", "p", "ALLOWED")
+        log = tmp_path / "audit.log"
+        entry = json.loads(log.read_text().strip())
+        entry["status"] = "BLOCKED"
+        log.write_text(json.dumps(entry) + "\n")
+        assert logger.verify_chain() is False
+
+    def test_log_event_raises_on_unwritable_path(self, tmp_path):
+        log = tmp_path / "sub" / "audit.log"
+        # Make parent a file so mkdir fails
+        (tmp_path / "sub").write_text("not a dir")
+        logger = AuditLogger(log_path=str(log))
+        with pytest.raises(RuntimeError, match="AUDIT FAILURE"):
+            logger.log_event("a", "t", "p", "ALLOWED")

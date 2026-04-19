@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-import hashlib
-import hmac
 import json
 import ipaddress
 import re
@@ -121,93 +119,35 @@ class SemanticFirewall:
         return True
 
 class AuditLogger:
-    _LOG_HMAC_KEY_ENV = "AUDIT_LOG_HMAC_KEY"
+    """
+    Thin wrapper around core.audit_chain that adds security-event schema
+    (source, target, payload, status, reason) and PII redaction.
+
+    Delegates all HMAC chaining to core.audit_chain so there is a single
+    canonical chain implementation across the entire codebase.
+    """
 
     def __init__(self, log_path="state/audit.log"):
-        self.log_path = log_path
-        os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
-
-    def _hmac_key(self) -> bytes:
-        key = os.environ.get(self._LOG_HMAC_KEY_ENV)
-        if not key:
-            try:
-                from secret_store import SecretStore
-                key = SecretStore.get_secret(self._LOG_HMAC_KEY_ENV)
-            except Exception:
-                pass
-        if not key:
-            import secrets as _sec
-            key = _sec.token_hex(32)
-            try:
-                from secret_store import SecretStore
-                SecretStore.set_secret(self._LOG_HMAC_KEY_ENV, key)
-            except Exception:
-                os.environ[self._LOG_HMAC_KEY_ENV] = key
-        return key.encode() if isinstance(key, str) else key
-
-    def _last_chain_hash(self) -> str:
-        """Return the _chain value of the last log entry, or 'GENESIS'."""
-        if not os.path.exists(self.log_path):
-            return "GENESIS"
-        last_hash = "GENESIS"
-        try:
-            with open(self.log_path, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            entry = json.loads(line)
-                            last_hash = entry.get("_chain", last_hash)
-                        except json.JSONDecodeError:
-                            pass
-        except OSError:
-            pass
-        return last_hash
+        from pathlib import Path
+        self.log_path = Path(log_path)
 
     def verify_chain(self) -> bool:
-        """
-        Validate the entire HMAC chain of the audit log.
-        Returns False if any entry has been tampered with or if the chain is broken.
-        """
-        if not os.path.exists(self.log_path):
-            return True # Nothing to verify
-
-        expected_prev_hash = "GENESIS"
-        try:
-            with open(self.log_path, "r") as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line: continue
-                    
-                    entry = json.loads(line)
-                    stored_chain = entry.pop("_chain", None)
-                    if not stored_chain:
-                        print(f"[!] Audit Failure: Missing signature at line {line_num}")
-                        return False
-                    
-                    # Recompute HMAC
-                    entry_body = json.dumps(entry, sort_keys=True)
-                    chain_input = f"{expected_prev_hash}:{entry_body}".encode()
-                    computed_hash = hmac.new(self._hmac_key(), chain_input, hashlib.sha256).hexdigest()
-                    
-                    if not hmac.compare_digest(stored_chain, computed_hash):
-                        print(f"[!] Audit Failure: Signature mismatch at line {line_num}")
-                        return False
-                    
-                    expected_prev_hash = stored_chain
-            return True
-        except Exception as e:
-            print(f"[!] Audit Verification Error: {str(e)}")
-            return False
+        """Delegate chain verification to core.audit_chain.verify()."""
+        from core.audit_chain import verify
+        ok, msg = verify(self.log_path)
+        if not ok:
+            print(f"[!] Audit Failure: {msg}")
+        return ok
 
     def log_event(self, source: str, target: str, payload: str, status: str, reason: str = ""):
         """
-        Log a security event with cryptographic chaining and PII redaction.
+        Log a security event with PII redaction and HMAC chaining.
+        Appended via core.audit_chain so the chain is consistent with
+        task-result entries written by core.hooks.
         """
-        # Tier 4: Forensic Privacy - Redact before hashing/chaining
+        from core.audit_chain import append
         redacted_payload = PrivacyGuard.redact(payload)
-        
-        event = {
+        record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": source,
             "target": target,
@@ -215,21 +155,10 @@ class AuditLogger:
             "status": status,
             "reason": reason,
         }
-
-        # HMAC chain: each entry's _chain covers (prev_chain + this_event_json)
-        prev_hash = self._last_chain_hash()
-        event_body = json.dumps(event, sort_keys=True)
-        chain_input = f"{prev_hash}:{event_body}".encode()
-        event["_chain"] = hmac.new(self._hmac_key(), chain_input, hashlib.sha256).hexdigest()
-
         try:
-            with open(self.log_path, "a") as f:
-                f.write(json.dumps(event) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            append(self.log_path, record)
         except Exception as e:
-            # Tier 4: Fail-Closed Architecture
-            raise RuntimeError(f"AUDIT FAILURE: Unable to write to forensic log. Error: {str(e)}")
+            raise RuntimeError(f"AUDIT FAILURE: Unable to write to forensic log. Error: {e}")
 
 class PrivacyGuard:
     # Common PII and sensitive credential patterns
