@@ -78,6 +78,14 @@ class JITLoader:
 
         return mapping
 
+    def load_semantic_skills(self, agent_name: str, task_context: str = "") -> str:
+        """
+        Alias for load_for_agent — accepts an optional task_context string
+        for future semantic filtering. Currently task_context is ignored;
+        all skills mapped to the agent are loaded.
+        """
+        return self.load_for_agent(agent_name)
+
     def get_skills_for_agent(self, agent_name: str) -> list[str]:
         """Return the list of skill names mapped to this agent, or [] if unknown."""
         return self.dynamic_skill_map.get(agent_name, [])

@@ -20,6 +20,13 @@ _SERVER_REGISTRY: dict[str, str] = {
     "blue_telemetry":  "mcp_servers.blue_telemetry.server",
     "blue_remediate":  "mcp_servers.blue_remediate.server",
     "lsp":             "core.lsp_server",
+    "atomic":          "mcp_servers.atomic.server",
+    "graph":           "mcp_servers.graph.server",
+    "memory":          "mcp_servers.memory.server",
+    "pivot":           "mcp_servers.pivot.server",
+    "red_recon":       "mcp_servers.red_recon.server",
+    "threat_intel":    "mcp_servers.threat_intel.server",
+    "vault":           "mcp_servers.vault.server",
 }
 
 _ALLOWED_TIERS = {AgentTier.RECON, AgentTier.ANALYSIS}
@@ -90,15 +97,37 @@ class MCPGateway:
 
     async def _call_mcp_server(self, server_name: str, tool_name: str, arguments: dict) -> str:
         """
-        Invoke the named MCP server tool via its Python interface.
+        Invoke a named MCP server tool in-process.
 
-        Currently a stub — replaced in tests via mock. A future iteration
-        wires the real mcp client transport here without changing the contract.
+        Imports the server module and calls `handle_call_tool` directly.
+        All mcp_servers use `mcp.server.Server` whose `@server.call_tool()`
+        decorator returns the original function unchanged, leaving it accessible
+        at module scope as `handle_call_tool`.
+
+        Raises RuntimeError if the module does not expose `handle_call_tool`
+        (e.g. the LSP server, which uses pygls instead of mcp.server.Server).
         """
-        raise NotImplementedError(
-            f"Direct MCP call to '{server_name}/{tool_name}' not yet wired. "
-            "Use MCPGateway in tests with _call_mcp_server mocked."
-        )
+        import importlib
+
+        module_path = _SERVER_REGISTRY[server_name]
+        module = importlib.import_module(module_path)
+
+        handler = getattr(module, "handle_call_tool", None)
+        if handler is None:
+            raise RuntimeError(
+                f"Module '{module_path}' (server '{server_name}') does not expose "
+                "'handle_call_tool'. Only mcp.server.Server-based modules are "
+                "supported for in-process dispatch. "
+                f"Available names: {[n for n in dir(module) if not n.startswith('_')]}"
+            )
+
+        result = await handler(tool_name, arguments or {})
+
+        # result is list[TextContent | ImageContent | EmbeddedResource]
+        if isinstance(result, list):
+            parts = [item.text for item in result if hasattr(item, "text") and item.text]
+            return "\n".join(parts) if parts else ""
+        return str(result)
 
     async def _summarize(self, text: str) -> str:
         """

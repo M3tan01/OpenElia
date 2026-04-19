@@ -67,12 +67,14 @@ async def test_orchestrator_enqueues_all_red_agents_per_target(tmp_path):
         mock_pool_class.return_value = mock_pool
         await orch.route("enumerate services", targets=["10.0.0.1", "10.0.0.2"])
 
-    # 2 targets × 3 red agents = 6 tasks
-    assert len(enqueued) == 6
+    # 2 targets × 5 red agents = 10 tasks
+    assert len(enqueued) == 10
     agent_names = [t.agent_name for t in enqueued]
     assert agent_names.count("pentester_recon") == 2
     assert agent_names.count("pentester_vuln") == 2
     assert agent_names.count("pentester_exploit") == 2
+    assert agent_names.count("pentester_lat") == 2
+    assert agent_names.count("pentester_ex") == 2
 
 
 async def test_orchestrator_enqueues_blue_tasks(tmp_path):
@@ -97,10 +99,10 @@ async def test_orchestrator_enqueues_blue_tasks(tmp_path):
         mock_pool_class.return_value = mock_pool
         await orch.route("analyze firewall logs")
 
-    assert len(enqueued) == 3
+    assert len(enqueued) == 4
     assert all(t.domain == Domain.BLUE for t in enqueued)
     agent_names = {t.agent_name for t in enqueued}
-    assert agent_names == {"defender_mon", "defender_ana", "defender_res"}
+    assert agent_names == {"defender_mon", "defender_ana", "defender_hunt", "defender_res"}
 
 
 async def test_orchestrator_enqueues_reporter_task(tmp_path):
@@ -157,9 +159,9 @@ async def test_orchestrator_purple_enqueues_both_red_and_blue(tmp_path):
 
     red_tasks = [t for t in enqueued if t.domain == Domain.RED]
     blue_tasks = [t for t in enqueued if t.domain == Domain.BLUE]
-    # 1 target × 3 red agents = 3 red tasks; 3 blue agents
-    assert len(red_tasks) == 3
-    assert len(blue_tasks) == 3
+    # 1 target × 5 red agents = 5 red tasks; 4 blue agents
+    assert len(red_tasks) == 5
+    assert len(blue_tasks) == 4
 
 
 async def test_dispatch_task_success(tmp_path):

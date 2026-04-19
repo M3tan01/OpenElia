@@ -45,10 +45,13 @@ class Orchestrator:
         (AgentTier.RECON,     "pentester_recon"),
         (AgentTier.ANALYSIS,  "pentester_vuln"),
         (AgentTier.EXECUTION, "pentester_exploit"),
+        (AgentTier.EXECUTION, "pentester_lat"),
+        (AgentTier.EXECUTION, "pentester_ex"),
     ]
     _BLUE_AGENTS: list[tuple[AgentTier, str]] = [
         (AgentTier.RECON,     "defender_mon"),
         (AgentTier.ANALYSIS,  "defender_ana"),
+        (AgentTier.ANALYSIS,  "defender_hunt"),
         (AgentTier.EXECUTION, "defender_res"),
     ]
 
@@ -261,6 +264,34 @@ class Orchestrator:
         if name == "defender_res":
             from agents.blue.defender_res import DefenderRes
             agent = DefenderRes(self.state, brain_tier=task.brain_tier)
+            result = await agent.run(raw_task)
+            return {"output": result}
+
+        if name == "pentester_lat":
+            from agents.red.pentester_lat import PentesterLat
+            agent = PentesterLat(self.state, brain_tier=task.brain_tier)
+            result = await agent.run(
+                f"Target: {target}. {raw_task}",
+                stealth=task.stealth,
+                proxy_port=task.proxy_port,
+                apt_profile=task.apt_profile,
+            )
+            return {"output": result}
+
+        if name == "pentester_ex":
+            from agents.red.pentester_ex import PentesterEx
+            agent = PentesterEx(self.state, brain_tier=task.brain_tier)
+            result = await agent.run(
+                f"Target: {target}. {raw_task}",
+                stealth=task.stealth,
+                proxy_port=task.proxy_port,
+                apt_profile=task.apt_profile,
+            )
+            return {"output": result}
+
+        if name == "defender_hunt":
+            from agents.blue.defender_hunt import DefenderHunt
+            agent = DefenderHunt(self.state, brain_tier=task.brain_tier)
             result = await agent.run(raw_task)
             return {"output": result}
 
