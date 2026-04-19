@@ -38,8 +38,10 @@ class MCPGateway:
         summary = await gw.query("siem", "get_alerts", {"hours": 24}, caller_tier=AgentTier.ANALYSIS)
     """
 
-    def __init__(self, max_tokens: int = 500) -> None:
+    def __init__(self, max_tokens: int = 500, llm_client=None, llm_model: str | None = None) -> None:
         self.max_tokens = max_tokens
+        self._llm_client = llm_client
+        self._llm_model = llm_model
 
     async def query(
         self,
@@ -79,7 +81,12 @@ class MCPGateway:
         if len(raw.split()) <= self.max_tokens:
             return raw
 
-        return await self._summarize(raw)
+        summary = await self._summarize(raw)
+        # Enforce hard word cap regardless of what the LLM returned
+        words = summary.split()
+        if len(words) > self.max_tokens:
+            summary = " ".join(words[: self.max_tokens])
+        return summary
 
     async def _call_mcp_server(self, server_name: str, tool_name: str, arguments: dict) -> str:
         """
@@ -99,23 +106,50 @@ class MCPGateway:
 
         Never call this with text already within the limit — check word count first.
         """
-        from llm_client import LLMClient
-        client, model = LLMClient.create(brain_tier="local")
         word_limit = self.max_tokens
 
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        f"Summarize the following security data in ≤{word_limit} words. "
-                        "Preserve all hostnames, IPs, CVE IDs, and severity levels. "
-                        "Output ONLY the summary — no preamble."
-                    ),
-                },
-                {"role": "user", "content": text[: word_limit * 10]},  # hard input cap
-            ],
-            max_tokens=word_limit * 2,
-        )
-        return (response.choices[0].message.content or "").strip()
+        if self._llm_client is not None:
+            client = self._llm_client
+            model = self._llm_model or "local"
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            f"Summarize the following security data in ≤{word_limit} words. "
+                            "Preserve all hostnames, IPs, CVE IDs, and severity levels. "
+                            "Output ONLY the summary — no preamble."
+                        ),
+                    },
+                    {"role": "user", "content": text[: word_limit * 10]},
+                ],
+                max_tokens=word_limit * 2,
+            )
+        else:
+            from llm_client import LLMClient
+            client, model = LLMClient.create(brain_tier="local")
+            async with client:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                f"Summarize the following security data in ≤{word_limit} words. "
+                                "Preserve all hostnames, IPs, CVE IDs, and severity levels. "
+                                "Output ONLY the summary — no preamble."
+                            ),
+                        },
+                        {"role": "user", "content": text[: word_limit * 10]},
+                    ],
+                    max_tokens=word_limit * 2,
+                )
+
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError(
+                f"LLM summarisation returned empty content "
+                f"({len(text.split())} words input, max_tokens={self.max_tokens})"
+            )
+        return content.strip()

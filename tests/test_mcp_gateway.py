@@ -32,3 +32,12 @@ async def test_unknown_server_raises_value_error():
     gw = MCPGateway(max_tokens=500)
     with pytest.raises(ValueError, match="Unknown MCP server"):
         await gw.query("nonexistent_server", "tool", {}, caller_tier=AgentTier.RECON)
+
+
+async def test_summary_result_is_hard_capped_to_max_tokens():
+    gw = MCPGateway(max_tokens=5)
+    over_limit_summary = " ".join([f"w{i}" for i in range(20)])  # 20 words
+    with patch.object(gw, "_call_mcp_server", new=AsyncMock(return_value=LONG_TEXT)), \
+         patch.object(gw, "_summarize", new=AsyncMock(return_value=over_limit_summary)):
+        result = await gw.query("siem", "get_alerts", {}, caller_tier=AgentTier.RECON)
+    assert len(result.split()) <= 5
