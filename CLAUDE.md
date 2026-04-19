@@ -41,3 +41,36 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
   - `mcp-atomic`: Local library of research-backed **Atomic Red Team** tests.
 - **Sterile Execution**: Offensive modules run in rootless, ephemeral Docker containers.
 - **Immutable Auditing**: Fail-closed JSON audit log in `state/audit.log`.
+
+## Architectural Directive: Highly Concurrent, Stateless Micro-Agent Framework
+
+### Core Rules (enforce in every session)
+
+**Token Economy & Context Isolation** — No single LLM prompt may contain global state or the full tool registry. Violating this is a hard error.
+
+**Stateless Orchestrator**
+- `orchestrator.py` is a message broker only — it classifies, enqueues, and returns. It never holds agent state or performs reasoning beyond task classification.
+- After routing, the Orchestrator's LLM context is discarded. State crosses boundaries via typed `AgentTask` / `AgentResult` JSON payloads only.
+- A fresh `AsyncWorkerPool` is created per `route()` call — pools are single-use.
+
+**Just-In-Time (JIT) Resource Injection**
+- Never load all plugins/skills globally. Use `JITLoader` to inject only the 2–3 skills required for the specific agent being spun up.
+- `pre_run_hook` injects JIT context. `post_run_hook` extracts output and calls `context.clear()`. `error_hook` writes to `state/audit.log`.
+
+**Tier-Based Async Worker Pool**
+- Three tiers: `RECON` (data gathering) → `ANALYSIS` (reasoning) → `EXECUTION` (action).
+- Each tier has its own `asyncio.Queue` and N concurrent workers (`core/worker_pool.py`).
+- Agents are lazily imported and instantiated inside `_run_agent()` — never at import time.
+
+**MCP/LSP Gateway Gate**
+- All MCP and LSP queries must go through `MCPGateway`. Never call MCP servers directly from agent code.
+- `EXECUTION` tier agents are blocked from querying servers — they receive pre-summarized context from `ANALYSIS` tier only.
+- Responses exceeding `max_tokens` words are summarized by the local LLM before being returned.
+
+**Key files**
+- `core/schemas.py` — single source of truth for `AgentTask`, `AgentResult`, `AgentTier`, `Domain`
+- `core/worker_pool.py` — `AsyncWorkerPool`, `MAX_RETRIES = 3`
+- `core/hooks.py` — `pre_run_hook`, `post_run_hook`, `error_hook`
+- `core/mcp_gateway.py` — `MCPGateway`, `GatewayAccessError`
+- `core/lsp_server.py` — pygls 2.x LSP server (`pygls.lsp.server.LanguageServer`)
+- `jit_loader.py` — `JITLoader`, `get_skills_for_agent()`
