@@ -2,6 +2,19 @@
 
 All notable changes to the OpenElia project will be documented in this file.
 
+## [1.0.5] - 2026-04-19
+
+### ✨ Features
+- **Iterative Purple Loop**: `cmd_purple` rewritten as a true N-iteration red→blue feedback loop with coverage delta tracking, early exit at 100% coverage, and adaptive red task seeding based on previous blue alert types.
+- **`force_domain` Routing**: Added to `orchestrator.py` to skip LLM classifier and drive alternating red/blue/reporter phases cheaply.
+- **TS CLI Proxy-Port Wiring**: Added `--proxy-port` option to red and purple commands in TypeScript CLI (`src/src/index.ts`, `src/src/cli.ts`).
+- **Vault `retrieve_credential`**: Added to `mcp_servers/vault/server.py` to fetch a secret back out from the vault.
+
+### 🧪 Tests
+- **`test_vector_manager.py`**: Added coverage for metadata, search delegation, threshold/exception, cache_response type.
+- **`test_atomic_manager.py`**: Added coverage for TTP lookup hit/miss, missing file, executor field, etc.
+- **`test_graph_manager.py`**: Added coverage for host/service/vuln/cred, find_paths, neighbors, query_by_type, summary, Mermaid export, MITRE heatmap, persistence.
+
 ## [1.0.4] - 2026-04-18
 
 ### 🔒 Security Hardening

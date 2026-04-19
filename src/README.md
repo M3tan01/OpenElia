@@ -19,11 +19,17 @@ npm link  # Optional: make globally available
 # Red team engagement
 openelia-cli red --target 10.10.10.50 --stealth
 
+# Red team with SOCKS5 proxy
+openelia-cli red --target 10.10.10.50 --proxy-port 1080
+
 # Blue team analysis
 openelia-cli blue --logs /path/to/logs.txt
 
 # Purple team simulation
 openelia-cli purple --target 10.10.10.0/24 --iterations 3
+
+# Purple team simulation with proxy
+openelia-cli purple --target 10.10.10.0/24 --iterations 3 --proxy-port 1080
 
 # Nmap scan
 openelia-cli nmap --target 10.10.10.50

@@ -260,8 +260,9 @@
   ─────────────────────────────────────────────────────────────────────────────
   Description : Run a collaborative purple team simulation — red and blue
                 agents alternate in iterative attack/defend loops ("Continuous
-                Chaos"). Each iteration red attacks, blue responds, findings
-                are cross-referenced.
+                Chaos"). The loop features coverage delta tracking and early exit
+                if 100% mitigation is reached. Red task seeding adapts based on
+                previous blue alert types.
   Flags:
     --target <IP|CIDR>    Target (required for new engagement). CIDR expands
                           to a per-host swarm automatically.
@@ -280,8 +281,8 @@
     # 5-round deep simulation emulating FIN7 with expensive brain
     python main.py purple --target 10.10.10.50 --iterations 5 --apt fin7 --brain-tier expensive
 
-    # Resume with more iterations
-    python main.py purple --resume --iterations 3
+    # Resume with more iterations and route through proxy
+    python main.py purple --resume --iterations 3 --proxy-port 1080
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -590,8 +591,10 @@
   Server  : mcp_servers/vault/server.py
   Tools:
     store_credential          Encrypt and store a credential by alias.
-                              Input: alias (string), value (string)
-    get_credential            Retrieve a stored credential by alias.
+                              Input: alias (string), secret (string)
+    list_aliases              List all available credential aliases.
+                              Input: none
+    retrieve_credential       Retrieve a stored credential secret by alias.
                               Input: alias (string)
 
 
