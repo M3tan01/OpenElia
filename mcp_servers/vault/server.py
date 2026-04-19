@@ -110,7 +110,18 @@ async def handle_list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {},
             },
-        )
+        ),
+        types.Tool(
+            name="retrieve_credential",
+            description="Retrieve a stored credential secret by alias for use in an offensive tool.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "alias": {"type": "string", "description": "The alias of the credential to retrieve"},
+                },
+                "required": ["alias"],
+            },
+        ),
     ]
 
 @server.call_tool()
@@ -135,6 +146,16 @@ async def handle_call_tool(
         if not aliases:
             return [types.TextContent(type="text", text="No credentials stored in the vault.")]
         return [types.TextContent(type="text", text=f"Available credential aliases: {', '.join(aliases)}")]
+
+    elif name == "retrieve_credential":
+        if not arguments:
+            raise ValueError("Missing arguments")
+        alias = arguments["alias"]
+        vault_data = load_vault()
+        secret = vault_data.get(alias)
+        if secret is None:
+            return [types.TextContent(type="text", text=f"No credential found for alias '{alias}'.")]
+        return [types.TextContent(type="text", text=secret)]
 
     return []
 
