@@ -10,6 +10,7 @@ something changes — regardless of how many individual keys exist.
 An in-memory cache means subsequent get_secret() calls within the same
 process never touch the Keychain at all.
 """
+import base64
 import json
 import keyring
 import logging
@@ -23,7 +24,67 @@ _audit_logger = logging.getLogger("OpenElia.SecretStore")
 console = Console()
 
 SERVICE_NAME = "OpenElia"
-_BLOB_KEY = "secrets"   # Single Keychain entry that holds everything
+_BLOB_KEY    = "secrets"        # Single Keychain entry that holds everything
+_FERNET_KEY_ENTRY = "fernet_master_key"  # Keychain entry for the Fernet key
+
+# ---------------------------------------------------------------------------
+# Fernet encryption helpers — AES-128-CBC + HMAC-SHA256 (cryptography package)
+# ---------------------------------------------------------------------------
+
+_fernet_key_cache: bytes | None = None  # Process-level cache — one keyring hit per process
+
+
+def _get_or_create_fernet_key() -> bytes:
+    """
+    Load the Fernet key from the Keychain, generating one on first run.
+    Cached in-process so subsequent calls never touch the Keychain.
+    The key itself lives unencrypted in the OS Keychain, which is the
+    trust boundary. Values in the secrets blob are encrypted with it.
+    """
+    global _fernet_key_cache
+    if _fernet_key_cache is not None:
+        return _fernet_key_cache
+    try:
+        raw = keyring.get_password(SERVICE_NAME, _FERNET_KEY_ENTRY)
+        if raw:
+            _fernet_key_cache = raw.encode()
+            return _fernet_key_cache
+        # First run — generate and persist
+        from cryptography.fernet import Fernet
+        key = Fernet.generate_key()          # URL-safe base64, 32 random bytes
+        keyring.set_password(SERVICE_NAME, _FERNET_KEY_ENTRY, key.decode())
+        _fernet_key_cache = key
+        return _fernet_key_cache
+    except Exception as exc:
+        _audit_logger.warning("Fernet key unavailable (%s) — using passthrough mode", exc)
+        _fernet_key_cache = b""
+        return b""
+
+
+def _encrypt(value: str) -> str:
+    """Return Fernet-encrypted, base64-encoded ciphertext, or plain value on error."""
+    key = _get_or_create_fernet_key()
+    if not key:
+        return value
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(key).encrypt(value.encode()).decode()
+    except Exception as exc:
+        _audit_logger.warning("Fernet encrypt failed (%s) — storing plaintext", exc)
+        return value
+
+
+def _decrypt(value: str) -> str:
+    """Return decrypted plaintext, or the original value if it was never encrypted."""
+    key = _get_or_create_fernet_key()
+    if not key:
+        return value
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(key).decrypt(value.encode()).decode()
+    except Exception:
+        # Not encrypted (legacy plaintext entry) — return as-is
+        return value
 
 
 class SecretStore:
@@ -60,22 +121,26 @@ class SecretStore:
 
     @classmethod
     def set_secret(cls, key_name: str, value: str):
-        """Store a secret. Triggers at most one Keychain write dialog."""
+        """Encrypt and store a secret. Triggers at most one Keychain write dialog."""
         cls._load()
-        cls._cache[key_name] = value
+        cls._cache[key_name] = _encrypt(value)
         cls._flush()
 
     @classmethod
     def get_secret(cls, key_name: str) -> str | None:
-        """Retrieve a secret from cache/Keychain, then fall back to env."""
+        """Retrieve and decrypt a secret from cache/Keychain, then fall back to env."""
         secrets = cls._load()
-        secret = secrets.get(key_name)
-        source = "keyring" if secret else "missing"
+        raw = secrets.get(key_name)
+        source = "keyring" if raw else "missing"
 
-        if not secret:
+        if raw:
+            secret = _decrypt(raw)
+        else:
             secret = os.getenv(key_name)
             if secret:
                 source = "env"
+            else:
+                secret = None
 
         _audit_logger.info("secret_access key=%s source=%s found=%s",
                            key_name, source, secret is not None)

@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from core.schemas import AgentResult, AgentTask, ErrorPayload
+from core.audit_chain import append as _audit_append
 
 def _state_dir() -> Path:
     return Path(os.getenv("STATE_DIR", "state"))
@@ -52,6 +53,7 @@ def post_run_hook(task: AgentTask, result: AgentResult, context: dict) -> None:
     try:
         with results_log.open("a") as fh:
             fh.write(json.dumps(record) + "\n")
+        _audit_append(state_dir / "audit.log", record)
     finally:
         context.clear()
 
@@ -76,5 +78,4 @@ def error_hook(
         will_retry=retry_count < max_retries,
     )
     audit_log = state_dir / "audit.log"
-    with audit_log.open("a") as fh:
-        fh.write(payload.model_dump_json() + "\n")
+    _audit_append(audit_log, payload.model_dump())
