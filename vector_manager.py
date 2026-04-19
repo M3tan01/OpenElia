@@ -60,7 +60,7 @@ class VectorManager:
                 where={"type": "llm_cache"}
             )
             
-            if results["documents"] and results["distances"]:
+            if results["documents"] and results["distances"] and len(results["distances"]) > 0 and len(results["distances"][0]) > 0:
                 distance = results["distances"][0][0]
                 # ChromaDB distance: lower is more similar (0.0 is exact)
                 if distance < threshold:

@@ -30,11 +30,11 @@ _DEFAULTS: dict = {
 
 # OpenAI-compatible base URLs for each provider
 PROVIDER_BASE_URLS: dict[str, str] = {
-    "openai":    "https://api.openai.com/v1",
-    "anthropic": "https://api.anthropic.com/v1",
-    "google":    "https://generativelanguage.googleapis.com/v1beta/openai",
-    "ollama":    "http://localhost:11434/v1",
-    "local":     "http://localhost:11434/v1",
+    "openai":    "https://api.openai.com/v1/",
+    "anthropic": "https://api.anthropic.com/v1/",
+    "google":    "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "ollama":    "http://localhost:11434/v1/",
+    "local":     "http://localhost:11434/v1/",
 }
 
 # SecretStore key names for each provider
