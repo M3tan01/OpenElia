@@ -25,6 +25,7 @@ program
   .option('--stealth', 'Enable OPSEC stealth mode')
   .option('--brain-tier <tier>', 'Intelligence level (local/expensive)', 'local')
   .option('--apt <profile>', 'Adversary persona profile')
+  .option('--proxy-port <port>', 'SOCKS5 proxy port for lateral movement')
   .option('--resume', 'Resume existing engagement')
   .action(async (options) => {
     await cli.handleRedTeam(options);
@@ -52,6 +53,7 @@ program
   .option('--stealth', 'Enable OPSEC stealth mode')
   .option('--brain-tier <tier>', 'Intelligence level (local/expensive)', 'local')
   .option('--apt <profile>', 'Adversary persona profile')
+  .option('--proxy-port <port>', 'SOCKS5 proxy port for lateral movement')
   .option('--resume', 'Resume existing engagement')
   .action(async (options) => {
     await cli.handlePurpleTeam(options);
@@ -228,8 +230,8 @@ program.exitOverride();
 try {
   program.parse();
 } catch (error) {
-  if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'commander.help') {
-    program.outputHelp();
+  if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'commander.helpDisplayed') {
+    process.exit(0);
   } else {
     console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
     process.exit(1);

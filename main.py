@@ -457,10 +457,21 @@ async def cmd_execute_remediation(args) -> None:
 
 
 async def cmd_purple(args) -> None:
+    """
+    True purple team feedback loop: N iterations of red → blue → coverage delta,
+    with each phase seeded by the previous phase's output. Terminates early if blue
+    achieves full detection coverage. Generates a final report after the loop.
+
+    Loop structure per iteration:
+        1. Red phase  — red agents attack, writing findings to state.
+        2. Blue phase — blue agents respond to new findings, writing alerts to state.
+        3. Coverage   — compare finding count vs alert count; print delta.
+        4. Adapt      — next iteration's task descriptions include the delta.
+    """
     from state_manager import StateManager
     from orchestrator import Orchestrator
     state = StateManager()
-    
+
     targets = [args.target] if args.target else []
     if args.target and "/" in args.target:
         try:
@@ -475,12 +486,99 @@ async def cmd_purple(args) -> None:
             print("ERROR: --target is required for a new purple team simulation.")
             sys.exit(1)
         for target in targets:
-            state.initialize_engagement(target, args.scope or "Authorized engagement")
+            state.initialize_engagement(target, args.scope or "Authorized purple team engagement")
             print(f"[main] Purple Team engagement initialized — target: {target}")
 
     _require_api_key(args.brain_tier)
     orch = Orchestrator(state)
-    await orch.route(args.task or "Collaborative Purple Team simulation", targets=targets, stealth=args.stealth, proxy_port=args.proxy_port, brain_tier=args.brain_tier)
+
+    base_task = args.task or "Collaborative Purple Team simulation"
+    iterations = args.iterations
+    prev_blue_alerts: list = []
+    prev_findings: list = []
+
+    print(f"\n[Purple Loop] Starting {iterations}-iteration feedback loop")
+    print("[Purple Loop] Red → Blue → Coverage delta → Adapt → repeat\n")
+
+    for i in range(1, iterations + 1):
+        print(f"[Purple Loop] ══════════ Iteration {i}/{iterations} ══════════")
+
+        # ── Red Phase ──────────────────────────────────────────────────────────
+        red_task = f"[Iteration {i}] {base_task}"
+        if prev_blue_alerts:
+            detected_types = list({a.get("type", "unknown") for a in prev_blue_alerts})[:3]
+            red_task += (
+                f" | Blue detected: {detected_types}. "
+                "Adapt TTPs — try different techniques, ports, or timing to evade detection."
+            )
+        print(f"[Purple Loop] Red phase — {red_task[:120]}")
+        await orch.route(
+            red_task,
+            targets=targets,
+            stealth=args.stealth,
+            proxy_port=args.proxy_port,
+            brain_tier=args.brain_tier,
+            force_domain="red",
+        )
+
+        # Snapshot findings after red phase
+        state_data = state.read()
+        current_findings = state_data.get("findings", [])
+        new_findings = [f for f in current_findings if f not in prev_findings]
+        print(f"[Purple Loop] Red produced {len(new_findings)} new finding(s) "
+              f"({len(current_findings)} total)")
+
+        # ── Blue Phase ─────────────────────────────────────────────────────────
+        finding_titles = [f.get("title", "unknown") for f in new_findings[:5]]
+        blue_task = (
+            f"[Iteration {i}] Threat hunt and respond to active red team. "
+            f"New findings this iteration: {finding_titles}. "
+            "Detect, correlate, and propose mitigations."
+        )
+        print(f"[Purple Loop] Blue phase — {blue_task[:120]}")
+        await orch.route(
+            blue_task,
+            targets=targets,
+            stealth=False,
+            proxy_port=None,
+            brain_tier=args.brain_tier,
+            force_domain="blue",
+        )
+
+        # Snapshot alerts after blue phase
+        state_data = state.read()
+        current_alerts = state_data.get("blue_alerts", [])
+        new_alerts = [a for a in current_alerts if a not in prev_blue_alerts]
+        print(f"[Purple Loop] Blue raised {len(new_alerts)} new alert(s) "
+              f"({len(current_alerts)} total)")
+
+        # ── Coverage Delta ─────────────────────────────────────────────────────
+        if current_findings:
+            # Rough coverage: ratio of alerts to findings this iteration
+            coverage_pct = min(100, int(len(current_alerts) / max(len(current_findings), 1) * 100))
+        else:
+            coverage_pct = 0
+
+        print(f"[Purple Loop] Coverage estimate: {coverage_pct}% "
+              f"({len(current_alerts)} alerts / {len(current_findings)} findings)")
+
+        prev_findings = current_findings
+        prev_blue_alerts = current_alerts
+
+        if coverage_pct >= 100 and current_findings:
+            print(f"[Purple Loop] Full detection coverage achieved at iteration {i} — converging early.")
+            break
+
+    # ── Final Report ───────────────────────────────────────────────────────────
+    print("\n[Purple Loop] ══════════ Final Report ══════════")
+    await orch.route(
+        "Generate comprehensive purple team engagement report with MITRE heatmap, "
+        "red findings, blue coverage gaps, and prioritised remediation roadmap.",
+        targets=targets,
+        brain_tier=args.brain_tier,
+        force_domain="reporter",
+    )
+    print("\n[Purple Loop] Feedback loop complete.")
 
 
 async def cmd_dashboard(args) -> None:

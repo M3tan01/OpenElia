@@ -76,26 +76,37 @@ class Orchestrator:
         proxy_port: int | None = None,
         brain_tier: str = "local",
         apt_profile: str = None,
+        force_domain: str | None = None,
     ) -> dict:
         """
         Classify the task domain, then dispatch via AsyncWorkerPool.
         A fresh pool is created per route() call (pools are single-use).
+
+        Args:
+            force_domain: When set, skip the LLM classifier and use this domain
+                          directly. Used by the purple team feedback loop to drive
+                          alternating red/blue/reporter phases without paying
+                          classification cost on every iteration.
         """
-        routing = await self._classify(task, str(targets))
+        target_list = targets or ["unknown"]
         proxy_info = f" [PROXY:{proxy_port}]" if proxy_port else ""
         tier_info = f" [TIER:{brain_tier}]"
         apt_info = f" [APT:{apt_profile}]" if apt_profile else ""
 
-        target_list = targets or ["unknown"]
+        if force_domain:
+            routing = {"domain": force_domain, "confidence": 1.0, "reason": "forced by caller"}
+        else:
+            routing = await self._classify(task, str(targets))
+
+        domain = routing["domain"]
 
         print(
-            f"[Orchestrator] Domain: {routing['domain']} "
+            f"[Orchestrator] Domain: {domain} "
             f"(confidence={routing['confidence']:.2f}) — {routing['reason']} "
             f"{'[STEALTH]' if stealth else ''}{proxy_info}{tier_info}{apt_info}"
         )
         print(f"[Orchestrator] Swarm Targets: {', '.join(target_list)}")
 
-        domain = routing["domain"]
         if domain not in ("red", "blue", "reporter", "purple"):
             print(f"[Orchestrator] Unknown domain — task not routed.")
             return routing

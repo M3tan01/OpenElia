@@ -109,6 +109,7 @@ export class OpenEliaCLI {
       if (options.stealth) args.push('--stealth');
       if (options.brainTier) args.push('--brain-tier', options.brainTier);
       if (options.apt) args.push('--apt', options.apt);
+      if (options.proxyPort) args.push('--proxy-port', options.proxyPort);
       if (options.resume) args.push('--resume');
 
       const result = await this.runPythonCommand(args);
@@ -168,6 +169,7 @@ export class OpenEliaCLI {
       if (options.stealth) args.push('--stealth');
       if (options.brainTier) args.push('--brain-tier', options.brainTier);
       if (options.apt) args.push('--apt', options.apt);
+      if (options.proxyPort) args.push('--proxy-port', options.proxyPort);
       if (options.resume) args.push('--resume');
 
       const result = await this.runPythonCommand(args);
