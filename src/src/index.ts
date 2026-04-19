@@ -227,13 +227,16 @@ program.action(async () => {
 // Error handling
 program.exitOverride();
 
-try {
-  program.parse();
-} catch (error) {
-  if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'commander.helpDisplayed') {
-    process.exit(0);
-  } else {
-    console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
-    process.exit(1);
+// Main entry point
+(async () => {
+  try {
+    await program.parseAsync();
+  } catch (error) {
+    if (error instanceof Error && (error as any).code === 'commander.helpDisplayed') {
+      process.exit(0);
+    } else {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   }
-}
+})();

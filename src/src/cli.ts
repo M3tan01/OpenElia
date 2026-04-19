@@ -50,7 +50,13 @@ export class OpenEliaCLI {
   }
 
   private findPythonExecutable(): string {
-    // Try to find Python executable
+    // Try to find Python executable in virtual environment first
+    const venvPath = path.resolve(this.projectRoot, '.venv', 'bin', 'python3');
+    if (fs.existsSync(venvPath)) {
+      return venvPath;
+    }
+    
+    // Fallback candidates
     const candidates = ['python3', 'python', 'py'];
 
     for (const candidate of candidates) {
@@ -68,23 +74,27 @@ export class OpenEliaCLI {
     return 'python3';
   }
 
-  private async runPythonCommand(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+  private async runPythonCommand(args: string[], options: { interactive?: boolean } = {}): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve, reject) => {
+      const stdio: any = options.interactive ? ['inherit', 'inherit', 'inherit'] : ['pipe', 'pipe', 'pipe'];
+      
       const pythonProcess = spawn(this.pythonPath, ['main.py', ...args], {
         cwd: this.projectRoot,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: stdio
       });
 
       let stdout = '';
       let stderr = '';
 
-      pythonProcess.stdout?.on('data', (data) => {
-        stdout += data.toString();
-      });
+      if (!options.interactive) {
+        pythonProcess.stdout?.on('data', (data) => {
+          stdout += data.toString();
+        });
 
-      pythonProcess.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
+        pythonProcess.stderr?.on('data', (data) => {
+          stderr += data.toString();
+        });
+      }
 
       pythonProcess.on('close', (code) => {
         resolve({ stdout, stderr, code: code || 0 });
@@ -121,7 +131,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Red team engagement failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -148,7 +158,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Blue team analysis failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -181,7 +191,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Purple team simulation failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -202,7 +212,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ System not ready'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -213,7 +223,11 @@ export class OpenEliaCLI {
   async handleStatus(): Promise<void> {
     try {
       const result = await this.runPythonCommand(['status']);
-      console.log(result.stdout);
+      if (result.code === 0) {
+        console.log(result.stdout);
+      } else {
+        console.error(chalk.red('Error:'), result.stderr || result.stdout);
+      }
     } catch (error) {
       console.error(chalk.red('Error:'), errMsg(error));
     }
@@ -222,7 +236,11 @@ export class OpenEliaCLI {
   async handleLock(): Promise<void> {
     try {
       const result = await this.runPythonCommand(['lock']);
-      console.log(result.stdout);
+      if (result.code === 0) {
+        console.log(result.stdout);
+      } else {
+        console.error(chalk.red('Error:'), result.stderr || result.stdout);
+      }
     } catch (error) {
       console.error(chalk.red('Error:'), errMsg(error));
     }
@@ -231,7 +249,11 @@ export class OpenEliaCLI {
   async handleUnlock(): Promise<void> {
     try {
       const result = await this.runPythonCommand(['unlock']);
-      console.log(result.stdout);
+      if (result.code === 0) {
+        console.log(result.stdout);
+      } else {
+        console.error(chalk.red('Error:'), result.stderr || result.stdout);
+      }
     } catch (error) {
       console.error(chalk.red('Error:'), errMsg(error));
     }
@@ -241,8 +263,8 @@ export class OpenEliaCLI {
     console.log(chalk.blue('🚀 Launching OpenElia War Room Dashboard...'));
 
     try {
-      const result = await this.runPythonCommand(['dashboard']);
-      console.log(result.stdout);
+      // Dashboard is a TUI, it MUST be interactive to work
+      await this.runPythonCommand(['dashboard'], { interactive: true });
     } catch (error) {
       console.error(chalk.red('Error:'), errMsg(error));
     }
@@ -253,8 +275,16 @@ export class OpenEliaCLI {
       const args = ['clear'];
       if (options.force) args.push('--force');
 
-      const result = await this.runPythonCommand(args);
-      console.log(result.stdout);
+      // Clear might be interactive if not forced
+      const result = await this.runPythonCommand(args, { interactive: !options.force });
+      if (!options.force && result.code === 0) {
+        // Output already went to terminal
+      } else {
+        console.log(result.stdout);
+        if (result.code !== 0) {
+          console.error(chalk.red('Error:'), result.stderr);
+        }
+      }
     } catch (error) {
       console.error(chalk.red('Error:'), errMsg(error));
     }
@@ -273,7 +303,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Environment repair failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -294,7 +324,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ SBOM generation failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -320,7 +350,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Report generation failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -341,7 +371,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Archiving failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -368,7 +398,7 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Nmap scan failed'));
-        console.log(result.stderr);
+        console.log(result.stderr || result.stdout);
       }
     } catch (error) {
       spinner.stop();
@@ -387,16 +417,14 @@ export class OpenEliaCLI {
       if (options.stealth) args.push('--stealth');
       if (options.proxyPort) args.push('--proxy-port', options.proxyPort);
 
-      const result = await this.runPythonCommand(args);
-
+      // Metasploit can be interactive if it spawns a console
+      const result = await this.runPythonCommand(args, { interactive: true });
       spinner.stop();
 
       if (result.code === 0) {
         console.log(chalk.green('✅ Metasploit session completed successfully'));
-        console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Metasploit session failed'));
-        console.log(result.stderr);
       }
     } catch (error) {
       spinner.stop();
