@@ -163,7 +163,7 @@ class Orchestrator:
                     domain=Domain.BLUE,
                     tier=tier,
                     agent_name=agent_name,
-                    payload={"task": task},
+                    payload={"task": task, "target": targets[0] if targets else "unknown"},
                     brain_tier=brain_tier,
                     stealth=stealth,
                     proxy_port=proxy_port,

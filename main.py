@@ -74,10 +74,15 @@ def _check_ollama() -> bool:
 
 def _require_api_key(brain_tier: str = "local") -> None:
     if brain_tier == "expensive":
-        key = SecretStore.get_secret("EXPENSIVE_BRAIN_KEY")
-        if not key:
-            print("ERROR: --brain-tier expensive requires EXPENSIVE_BRAIN_KEY to be set.")
-            print("Run: python -c \"from secret_store import SecretStore; SecretStore.set_secret('EXPENSIVE_BRAIN_KEY', 'your-key')\"")
+        from model_manager import ModelManager, PROVIDER_KEY_NAMES
+        cfg = ModelManager.get_client_config(brain_tier="expensive")
+        # api_key falls back to "ollama" when nothing is found — that means unset
+        if cfg["api_key"] in ("", "ollama"):
+            provider = ModelManager.get_config().get("cloud_provider", "openai")
+            key_name = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
+            print(f"ERROR: --brain-tier expensive requires a cloud API key.")
+            print(f"Run:  python main.py model auth {provider} <your-api-key>")
+            print(f"      or store it directly: SecretStore.set_secret('{key_name}', '...')")
             sys.exit(1)
         return
     if not _check_ollama():
@@ -116,10 +121,11 @@ async def cmd_check(args) -> None:
     # 2. Ollama Check
     print("[ ] Checking Ollama...", end="\r")
     if _check_ollama():
-        model = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+        from model_manager import ModelManager
+        model = ModelManager.get_config().get("local_model", "llama3.1:8b")
         print(f"[✓] Ollama: Reachable (Target Model: {model})")
     else:
-        print(f"[✗] Ollama: Not reachable at {os.environ.get('OLLAMA_BASE_URL', 'localhost')}")
+        print(f"[✗] Ollama: Not reachable at {SecretStore.get_secret('OLLAMA_BASE_URL') or 'localhost'}")
         overall_pass = False
 
     # 3. Connectivity Check
@@ -168,13 +174,13 @@ async def cmd_check(args) -> None:
         autofill_enabled = False
         try:
             # Check if Touch ID is supported/enrolled
-            bioutil_proc = subprocess.run(["bioutil", "-read", "-type", "fingerprint"], capture_output=True, text=True)
+            bioutil_proc = subprocess.run(["bioutil", "-read", "-type", "fingerprint"], capture_output=True, text=True)  # nosec B603 B607 -- macOS system binary, no user input
             if "total: 0" not in bioutil_proc.stdout and bioutil_proc.returncode == 0:
                 touch_id_enabled = True
-            
+
             # Check if Password Autofill is enabled for Touch ID
             # This requires reading system defaults
-            autofill_proc = subprocess.run(["defaults", "read", "com.apple.TouchID", "AllowPasswordAutofill"], capture_output=True, text=True)
+            autofill_proc = subprocess.run(["defaults", "read", "com.apple.TouchID", "AllowPasswordAutofill"], capture_output=True, text=True)  # nosec B603 B607 -- macOS system binary, no user input
             if autofill_proc.stdout.strip() == "1":
                 autofill_enabled = True
             
@@ -310,6 +316,70 @@ async def cmd_clear(args) -> None:
         print("[main] No state to clear.")
 
 
+async def cmd_model(args) -> None:
+    from rich.table import Table
+    from rich.console import Console
+    from model_manager import ModelManager, SUPPORTED_PROVIDERS
+    c = Console()
+
+    action = args.model_action
+
+    if action == "status":
+        cfg = ModelManager.get_config()
+        t = Table(title="[bold cyan]OpenElia Model Configuration[/bold cyan]", show_header=True)
+        t.add_column("Setting", style="cyan", min_width=22)
+        t.add_column("Value",   style="green")
+        t.add_row("Mode",           cfg["mode"])
+        t.add_row("Local Model",    cfg["local_model"])
+        t.add_row("Cloud Provider", cfg["cloud_provider"])
+        t.add_row("Cloud Model",    cfg["cloud_model"])
+        overrides = cfg.get("agent_overrides", {})
+        if overrides:
+            for agent, override in overrides.items():
+                t.add_row(f"Override › {agent}", override)
+        else:
+            t.add_row("Agent Overrides", "[dim]none[/dim]")
+        c.print(t)
+
+    elif action == "set":
+        tier = args.tier
+        model_args = args.model_args
+        if tier == "local":
+            if not model_args:
+                c.print("[red]Usage: model set local <model_name>[/red]")
+                return
+            model_name = model_args[0]
+            ModelManager.set_local_model(model_name)
+            c.print(f"[green]✓ Local model set to[/green] [bold]{model_name}[/bold]")
+            c.print("[dim]Start Ollama with: ollama run " + model_name + "[/dim]")
+        else:  # cloud
+            if len(model_args) < 2:
+                c.print("[red]Usage: model set cloud <provider> <model_name>[/red]")
+                c.print(f"[dim]Supported providers: {', '.join(SUPPORTED_PROVIDERS)}[/dim]")
+                return
+            provider, model_name = model_args[0].lower(), model_args[1]
+            ModelManager.set_cloud_model(provider, model_name)
+            c.print(f"[green]✓ Cloud model set to[/green] [bold]{provider}/{model_name}[/bold]")
+            c.print(f"[dim]Store credentials with: model auth {provider} <api_key>[/dim]")
+
+    elif action == "auth":
+        provider = args.provider
+        api_key  = args.api_key
+        try:
+            ModelManager.store_provider_key(provider, api_key)
+            c.print(f"[green]✓ API key for[/green] [bold]{provider}[/bold] [green]stored in OS keychain.[/green]")
+        except ValueError as e:
+            c.print(f"[red]Error: {e}[/red]")
+
+    elif action == "hybrid":
+        agent      = args.agent
+        provider   = args.provider
+        model_name = args.model_name
+        ModelManager.set_agent_override(agent, provider, model_name)
+        c.print(f"[green]✓ Hybrid override set:[/green] [bold]{agent}[/bold] → [bold]{provider}:{model_name}[/bold]")
+        c.print("[dim]Mode switched to 'hybrid'. Other agents keep their current config.[/dim]")
+
+
 async def cmd_nmap(args) -> None:
     from state_manager import StateManager
     from agents.red.pentester_recon import PentesterRecon
@@ -410,7 +480,7 @@ async def cmd_purple(args) -> None:
 
     _require_api_key(args.brain_tier)
     orch = Orchestrator(state)
-    await orch.run_purple_loop(args.task or "Collaborative Purple Team simulation", targets=targets, stealth=args.stealth, proxy_port=args.proxy_port, brain_tier=args.brain_tier, iterations=args.iterations, apt_profile=args.apt)
+    await orch.route(args.task or "Collaborative Purple Team simulation", targets=targets, stealth=args.stealth, proxy_port=args.proxy_port, brain_tier=args.brain_tier)
 
 
 async def cmd_dashboard(args) -> None:
@@ -639,6 +709,30 @@ def build_parser() -> argparse.ArgumentParser:
     
     clear_p = sub.add_parser("clear", help="Clear state")
     clear_p.add_argument("--force", "-f", action="store_true")
+
+    model_p = sub.add_parser("model", help="Manage model configuration")
+    model_sub = model_p.add_subparsers(dest="model_action", required=True)
+
+    model_sub.add_parser("status", help="Show current model configuration")
+
+    set_p = model_sub.add_parser("set", help="Set active model")
+    set_p.add_argument("tier", choices=["local", "cloud"], help="Brain tier to configure")
+    set_p.add_argument("model_args", nargs="+",
+                       help="local: <model_name>   cloud: <provider> <model_name>")
+
+    auth_p = model_sub.add_parser("auth", help="Store provider API key in keychain")
+    auth_p.add_argument("provider", choices=["openai", "anthropic", "google"],
+                        help="Cloud provider")
+    auth_p.add_argument("api_key", help="API key (stored securely in OS keychain)")
+
+    hybrid_p = model_sub.add_parser("hybrid", help="Set per-agent model override")
+    hybrid_p.add_argument("--agent", required=True,
+                          help="Agent name (Pentester / Defender / Reporter)")
+    hybrid_p.add_argument("--provider", required=True,
+                          help="Provider (local / openai / anthropic / google)")
+    hybrid_p.add_argument("--model", required=True, dest="model_name",
+                          help="Model name (e.g. gpt-4o, llama3.1:8b)")
+
     return parser
 
 
@@ -647,7 +741,7 @@ def main() -> None:
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation}
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model}
     handler = handlers.get(args.command)
     if handler:
         asyncio.run(handler(args))
