@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List
 
 
+_PROJECT_ROOT = Path(__file__).parent
 _SKILLS_PATH = os.getenv("SKILLS_PATH", "./skills")
 
 # Section header to extract from each SKILL.md.
@@ -46,7 +47,7 @@ class JITLoader:
         available_skills = [d.name for d in self.skills_path.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
 
         # 2. Get all available agents (red and blue)
-        agents_dir = Path("agents")
+        agents_dir = _PROJECT_ROOT / "agents"
         agent_names = []
         if agents_dir.exists():
             for team in ["red", "blue"]:
@@ -72,7 +73,8 @@ class JITLoader:
             # Custom logic: if it's a 'common' skill, give it to everyone
             for skill in available_skills:
                 if "common" in skill or "base" in skill:
-                    mapping[agent].append(skill)
+                    if skill not in mapping[agent]:
+                        mapping[agent].append(skill)
 
         return mapping
 

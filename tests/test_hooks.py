@@ -1,8 +1,6 @@
 import json
-import os
 import pytest
-from pathlib import Path
-from core.schemas import AgentTask, AgentResult, AgentTier, Domain, ErrorPayload
+from core.schemas import AgentTask, AgentResult, AgentTier, Domain
 from core.hooks import pre_run_hook, post_run_hook, error_hook
 
 
@@ -15,6 +13,8 @@ def test_pre_run_hook_returns_context_with_skills():
     task = _make_task(agent_name="pentester_recon")
     ctx = pre_run_hook(task)
     assert "skills" in ctx
+    assert "task_id" in ctx
+    assert "agent_name" in ctx
     assert isinstance(ctx["skills"], list)
     assert ctx["task_id"] == task.task_id
     assert ctx["agent_name"] == task.agent_name
@@ -22,10 +22,6 @@ def test_pre_run_hook_returns_context_with_skills():
 
 def test_post_run_hook_clears_context(tmp_path, monkeypatch):
     monkeypatch.setenv("STATE_DIR", str(tmp_path))
-    # Reload _STATE_DIR by re-importing hooks with patched env
-    import importlib, core.hooks
-    monkeypatch.setattr(core.hooks, "_STATE_DIR", tmp_path)
-
     task = _make_task()
     result = AgentResult(task_id=task.task_id, agent_name="test_agent", status="success", output={"finding": "x"})
     ctx = {"skills": ["nmap"], "state": "running"}
@@ -34,9 +30,7 @@ def test_post_run_hook_clears_context(tmp_path, monkeypatch):
 
 
 def test_post_run_hook_writes_jsonl(tmp_path, monkeypatch):
-    import core.hooks
-    monkeypatch.setattr(core.hooks, "_STATE_DIR", tmp_path)
-
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
     task = _make_task()
     result = AgentResult(task_id=task.task_id, agent_name="test_agent", status="success", output={"port": 22})
     ctx = {}
@@ -44,16 +38,16 @@ def test_post_run_hook_writes_jsonl(tmp_path, monkeypatch):
 
     log_path = tmp_path / "task_results.jsonl"
     assert log_path.exists()
-    record = json.loads(log_path.read_text().strip())
+    lines = log_path.read_text().strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
     assert record["task_id"] == task.task_id
     assert record["status"] == "success"
     assert "port" in record["output_keys"]
 
 
 def test_error_hook_writes_audit_log(tmp_path, monkeypatch):
-    import core.hooks
-    monkeypatch.setattr(core.hooks, "_STATE_DIR", tmp_path)
-
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
     task = _make_task()
     error_hook(task, RuntimeError("test error"), retry_count=1, max_retries=3)
 
@@ -66,9 +60,7 @@ def test_error_hook_writes_audit_log(tmp_path, monkeypatch):
 
 
 def test_error_hook_sets_will_retry_false_at_max(tmp_path, monkeypatch):
-    import core.hooks
-    monkeypatch.setattr(core.hooks, "_STATE_DIR", tmp_path)
-
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
     task = _make_task()
     error_hook(task, RuntimeError("final"), retry_count=3, max_retries=3)
 

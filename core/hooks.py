@@ -13,7 +13,8 @@ from pathlib import Path
 
 from core.schemas import AgentResult, AgentTask, ErrorPayload
 
-_STATE_DIR = Path(os.getenv("STATE_DIR", "state"))
+def _state_dir() -> Path:
+    return Path(os.getenv("STATE_DIR", "state"))
 
 
 def pre_run_hook(task: AgentTask) -> dict:
@@ -37,7 +38,8 @@ def post_run_hook(task: AgentTask, result: AgentResult, context: dict) -> None:
     """
     Persist the result to state/task_results.jsonl and free the agent context.
     """
-    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+    state_dir = _state_dir()
+    state_dir.mkdir(parents=True, exist_ok=True)
     record = {
         "task_id": result.task_id,
         "agent_name": result.agent_name,
@@ -46,11 +48,12 @@ def post_run_hook(task: AgentTask, result: AgentResult, context: dict) -> None:
         "completed_at": result.completed_at,
         "tokens_used": result.tokens_used,
     }
-    results_log = _STATE_DIR / "task_results.jsonl"
-    with results_log.open("a") as fh:
-        fh.write(json.dumps(record) + "\n")
-
-    context.clear()
+    results_log = state_dir / "task_results.jsonl"
+    try:
+        with results_log.open("a") as fh:
+            fh.write(json.dumps(record) + "\n")
+    finally:
+        context.clear()
 
 
 def error_hook(
@@ -63,7 +66,8 @@ def error_hook(
     Log a structured ErrorPayload to state/audit.log.
     Does NOT raise — pool decides retry logic based on retry_count.
     """
-    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+    state_dir = _state_dir()
+    state_dir.mkdir(parents=True, exist_ok=True)
     payload = ErrorPayload(
         task_id=task.task_id,
         agent_name=task.agent_name,
@@ -71,6 +75,6 @@ def error_hook(
         retry_count=retry_count,
         will_retry=retry_count < max_retries,
     )
-    audit_log = _STATE_DIR / "audit.log"
+    audit_log = state_dir / "audit.log"
     with audit_log.open("a") as fh:
         fh.write(payload.model_dump_json() + "\n")
