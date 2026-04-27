@@ -61,7 +61,10 @@ class Orchestrator:
         self.cost_tracker = CostTracker()
         self.risk_calculator = RiskCalculator()
         # Always use the local model for cheap task classification
-        self.client, self._orchestrator_model = LLMClient.create(brain_tier="local")
+        self.client, self._orchestrator_model, self._is_local = LLMClient.create(
+            brain_tier="local",
+            agent_name="orchestrator",
+        )
         self._pool: AsyncWorkerPool | None = None  # Created fresh per route() call
 
     # ---------------------------------------------------------------------------
@@ -338,6 +341,7 @@ class Orchestrator:
                 model=self._orchestrator_model,
                 input_tokens=response.usage.prompt_tokens,
                 output_tokens=response.usage.completion_tokens,
+                is_local=self._is_local,
             )
 
         text = (response.choices[0].message.content or "").strip()

@@ -7,7 +7,7 @@ client and the model name resolved by ModelManager.  They never need to know
 whether they're hitting Ollama, OpenAI, Anthropic, or Google.
 
 Usage:
-    client, model = LLMClient.create(brain_tier="expensive", agent_name="Reporter")
+    client, model, is_local = LLMClient.create(brain_tier="expensive", agent_name="Reporter")
     response = await client.chat.completions.create(model=model, ...)
 """
 
@@ -20,9 +20,9 @@ class LLMClient:
     def create(
         brain_tier: str = "local",
         agent_name: str | None = None,
-    ) -> tuple[AsyncOpenAI, str]:
+    ) -> tuple[AsyncOpenAI, str, bool]:
         """
-        Return (AsyncOpenAI client, model_name) resolved from ModelManager.
+        Return (AsyncOpenAI client, model_name, is_local) resolved from ModelManager.
 
         Args:
             brain_tier:  "local" | "expensive" — backward-compat with existing agents.
@@ -36,4 +36,4 @@ class LLMClient:
             base_url=cfg["base_url"],
             api_key=cfg["api_key"],
         )
-        return client, cfg["model"]
+        return client, cfg["model"], cfg.get("is_local", False)
