@@ -9,7 +9,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from openai import AsyncOpenAI
 
-pytestmark = pytest.mark.asyncio
 
 
 def _make_mock_client():
@@ -50,6 +49,7 @@ class TestOrchestratorLLMClientAlignment:
         assert orch._is_local is False
         assert orch._orchestrator_model == "gpt-4o"
 
+    @pytest.mark.asyncio
     async def test_classify_passes_is_local_to_cost_tracker(self, state_manager):
         """_classify() must pass is_local=self._is_local to cost_tracker.track_usage()."""
         from orchestrator import Orchestrator

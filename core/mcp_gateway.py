@@ -158,7 +158,7 @@ class MCPGateway:
             )
         else:
             from llm_client import LLMClient
-            client, model = LLMClient.create(brain_tier="local")
+            client, model, _ = LLMClient.create(brain_tier="local")
             async with client:
                 response = await client.chat.completions.create(
                     model=model,

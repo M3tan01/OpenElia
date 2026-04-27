@@ -213,9 +213,10 @@ class TestLLMClient:
     def test_create_returns_client_and_model(self):
         from llm_client import LLMClient
         with patch("secret_store.SecretStore.get_secret", return_value=None):
-            client, model = LLMClient.create(brain_tier="local")
+            client, model, is_local = LLMClient.create(brain_tier="local")
         assert model == "llama3.1:8b"
         assert hasattr(client, "chat")
+        assert is_local is True
 
     def test_create_expensive_returns_cloud_model(self, isolated_config):
         from llm_client import LLMClient
@@ -223,8 +224,9 @@ class TestLLMClient:
         ModelManager.set_cloud_model("openai", "gpt-4o")
         secrets = {"OPENAI_API_KEY": "sk-test"}
         with patch("secret_store.SecretStore.get_secret", side_effect=lambda k: secrets.get(k)):
-            client, model = LLMClient.create(brain_tier="expensive")
+            client, model, is_local = LLMClient.create(brain_tier="expensive")
         assert model == "gpt-4o"
+        assert is_local is False
 
     def test_create_hybrid_respects_agent_name(self, isolated_config):
         from llm_client import LLMClient
@@ -232,5 +234,6 @@ class TestLLMClient:
         ModelManager.set_agent_override("Reporter", "openai", "gpt-4o-mini")
         secrets = {"OPENAI_API_KEY": "sk-test"}
         with patch("secret_store.SecretStore.get_secret", side_effect=lambda k: secrets.get(k)):
-            _, model = LLMClient.create(brain_tier="local", agent_name="Reporter")
+            _, model, is_local = LLMClient.create(brain_tier="local", agent_name="Reporter")
         assert model == "gpt-4o-mini"
+        assert is_local is False
