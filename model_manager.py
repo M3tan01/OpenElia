@@ -15,6 +15,7 @@ Supported sub-commands (invoked through main.py):
 """
 
 import json
+import os
 import pathlib
 
 _CONFIG_DIR  = pathlib.Path.home() / ".config" / "openelia"
@@ -26,6 +27,12 @@ _DEFAULTS: dict = {
     "cloud_provider":  "openai",   # "openai" | "anthropic" | "google"
     "cloud_model":     "gpt-4o",
     "agent_overrides": {},          # {"Pentester": "local:llama3.1:8b", ...}
+    "loop_detection": {             # tool-loop guardrail thresholds (core/loop_guard.py)
+        "enabled":                True,
+        "max_total_turns":        25,
+        "max_same_call":          3,
+        "max_idempotent_repeats": 2,
+    },
 }
 
 # OpenAI-compatible base URLs for each provider
@@ -83,6 +90,22 @@ class ModelManager:
         return cls._load()
 
     @classmethod
+    def get_loop_config(cls):
+        """
+        Return a LoopGuardConfig for the agent tool-loop guardrail.
+
+        Sourced from the persisted ``loop_detection`` block, with an env override:
+        ``OPENELIA_LOOP_DETECTION_ENABLED=0`` (or false/no/off) force-disables it.
+        """
+        from core.loop_guard import LoopGuardConfig
+
+        cfg = cls._load().get("loop_detection") or {}
+        env = os.environ.get("OPENELIA_LOOP_DETECTION_ENABLED")
+        if env is not None:
+            cfg = {**cfg, "enabled": env.strip().lower() not in ("0", "false", "no", "off")}
+        return LoopGuardConfig.from_mapping(cfg)
+
+    @classmethod
     def set_local_model(cls, model_name: str) -> None:
         cfg = cls._load()
         cfg["local_model"] = model_name
@@ -125,13 +148,33 @@ class ModelManager:
     # ------------------------------------------------------------------ #
 
     @classmethod
+    def _sanitize_url(cls, url: str) -> str:
+        """AUTONOMIC RESILIENCE: Ensure URL has /v1 and trailing slash."""
+        if not url: return ""
+        u = url.strip()
+        
+        # If it's a standard provider but missing /v1, add it
+        if "api.openai.com" in u and "/v1" not in u:
+            u = u.rstrip("/") + "/v1"
+        if "api.anthropic.com" in u and "/v1" not in u:
+            u = u.rstrip("/") + "/v1"
+            
+        # Generic check for Ollama / local proxies
+        if u.endswith(":11434") or u.endswith(":11434/"):
+            u = u.rstrip("/") + "/v1"
+
+        if not u.endswith("/"):
+            u += "/"
+        return u
+
+    @classmethod
     def get_client_config(
         cls,
         brain_tier: str = "local",
         agent_name: str | None = None,
     ) -> dict:
         """
-        Return {"base_url": ..., "api_key": ..., "model": ...} for the
+        Return {"base_url": ..., "api_key": ..., "model": ..., "is_local": ...} for the
         given brain_tier / agent_name combination.
 
         Resolution order:
@@ -148,7 +191,9 @@ class ModelManager:
             override = cfg["agent_overrides"].get(agent_name)
             if override and ":" in override:
                 prov, mdl = override.split(":", 1)
-                return cls._resolve(prov, mdl)
+                res = cls._resolve(prov, mdl)
+                res["is_local"] = (prov in ("local", "ollama"))
+                return res
 
         # 2 & 3. Expensive tier or global cloud mode
         if brain_tier == "expensive" or cfg["mode"] == "cloud":
@@ -162,12 +207,19 @@ class ModelManager:
             )
             base_url  = (
                 SecretStore.get_secret("EXPENSIVE_BRAIN_URL")
-                or PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1")
+                or PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1/")
             )
-            return {"base_url": base_url, "api_key": api_key, "model": model}
+            return {
+                "base_url": cls._sanitize_url(base_url),
+                "api_key": api_key,
+                "model": model,
+                "is_local": False
+            }
 
         # 4. Local / Ollama
-        return cls._resolve("local", cfg.get("local_model", "llama3.1:8b"))
+        res = cls._resolve("local", cfg.get("local_model", "llama3.1:8b"))
+        res["is_local"] = True
+        return res
 
     @classmethod
     def _resolve(cls, provider: str, model: str) -> dict:
@@ -175,14 +227,22 @@ class ModelManager:
         if provider in ("local", "ollama"):
             base_url = (
                 SecretStore.get_secret("OLLAMA_BASE_URL")
-                or "http://localhost:11434/v1"
+                or "http://localhost:11434/v1/"
             )
-            return {"base_url": base_url, "api_key": "ollama", "model": model}
+            return {
+                "base_url": cls._sanitize_url(base_url),
+                "api_key": "ollama",
+                "model": model
+            }
         key_name = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
         api_key  = (
             SecretStore.get_secret(key_name)
             or SecretStore.get_secret("EXPENSIVE_BRAIN_KEY")
             or "ollama"
         )
-        base_url = PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1")
-        return {"base_url": base_url, "api_key": api_key, "model": model}
+        base_url = PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1/")
+        return {
+            "base_url": cls._sanitize_url(base_url),
+            "api_key": api_key,
+            "model": model
+        }

@@ -1,0 +1,7 @@
+[
+  {"rule": "Multiple failed logons", "severity": "medium", "host": "WS01", "user": "jsmith", "raw": "EventCode=4625 count=14 in 60s", "ts": "2026-05-31T02:14:00Z"},
+  {"rule": "Suspicious PowerShell (encoded)", "severity": "high", "host": "WS01", "user": "jsmith", "raw": "EventCode=4104 ScriptBlock=FromBase64String", "ts": "2026-05-31T02:19:00Z"},
+  {"rule": "Outbound to known-bad IP", "severity": "high", "host": "WS01", "user": "SYSTEM", "raw": "dest=185.220.101.42 port=443", "ts": "2026-05-31T02:21:00Z"},
+  {"rule": "New service install", "severity": "medium", "host": "SRV02", "user": "SYSTEM", "raw": "EventCode=7045 svc=svchost32", "ts": "2026-05-31T03:02:00Z"},
+  {"rule": "Kerberoast SPN query", "severity": "high", "host": "DC01", "user": "svc-sql", "raw": "EventCode=4769 enc=0x17", "ts": "2026-05-31T03:40:00Z"}
+]

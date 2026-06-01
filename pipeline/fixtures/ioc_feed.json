@@ -1,0 +1,7 @@
+[
+  {"ioc": "185.220.101.42", "source": "mock-feed:tor-exit"},
+  {"ioc": "evil-domain.com", "source": "mock-feed:phishing"},
+  {"ioc": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "source": "mock-feed:malware-hash"},
+  {"ioc": "http://malicious-site.com/payload.exe", "source": "mock-feed:dropper-url"},
+  {"ioc": "192.168.1.100", "source": "mock-feed:internal-noise"}
+]

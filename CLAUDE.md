@@ -1,5 +1,16 @@
 # OpenElia Instructions
 
+## Quick Reference
+- **Setup:** `bash setup.sh` or `pip install -e .`
+- **Run:** `python main.py`
+- **Test:** `pytest tests/ -v`
+- **Test (single):** `pytest tests/test_<name>.py -v`
+- **Lint:** `bandit -r . -f json -o bandit_report.json`
+- **Docker:** `docker build -f Dockerfile.offensive -t openelia-offensive .`
+- **Python:** 3.11+ required — activate venv with `source venv/bin/activate`
+
+---
+
 This project is a multi-agent cybersecurity operations library. It integrates a Python-based agent engine with a Claude Code-style TypeScript CLI.
 
 ## Core Agents
@@ -74,3 +85,35 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
 - `core/mcp_gateway.py` — `MCPGateway`, `GatewayAccessError`
 - `core/lsp_server.py` — pygls 2.x LSP server (`pygls.lsp.server.LanguageServer`)
 - `jit_loader.py` — `JITLoader`, `get_skills_for_agent()`
+
+---
+
+## Claude Code Skills — Task Routing
+
+| Task | Skill / Agent |
+|---|---|
+| Offensive ops, recon, exploitation | `pentester-recon` → `pentester-infra` → `pentester-c2` |
+| AD / domain attacks | `pentester-ad` |
+| Web app testing | `pentester-web` |
+| Defensive analysis, log triage, SIEM | `defender-siem` |
+| IOC enrichment (IP/hash/domain) | `defender-tic` |
+| PCAP / IDS rule writing | `defender-nsm` |
+| IR lifecycle, malware analysis | `defender-dfir` |
+| Security incident routing (unsure which) | `defender` → auto-routes |
+| Kill chain phase ID | `kill-chain-index` |
+| Multi-file feature (new agent, new module) | `feature-dev:feature-dev` |
+| Debug failing test / unexpected behavior | `superpowers:systematic-debugging` |
+| Code review (diff / PR) | `caveman:cavecrew-reviewer` |
+| Surgical 1-2 file edit | `caveman:cavecrew-builder` |
+| Find where X is defined | `caveman:cavecrew-investigator` |
+
+## Prompt shape for this project
+
+```
+Target:     [exact file:line or agent/behavior]
+Constraint: [what must not change — e.g. "don't touch orchestrator routing logic"]
+Output:     [what done looks like]
+```
+
+Example:
+> Bug in `core/worker_pool.py:47` — task requeue on retry increments counter before checking `MAX_RETRIES`. Fix that line only.

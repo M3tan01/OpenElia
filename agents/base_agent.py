@@ -49,15 +49,13 @@ class BaseAgent(ABC):
         self.vector_manager = VectorManager()
 
         # Dedicated local client for zero-cost compression / intel helpers.
-        # Always local regardless of brain_tier — routed through LLMClient so
-        # any future middleware (cost tracking, logging) is applied uniformly.
-        self.local_client, self._local_model = LLMClient.create(
+        self.local_client, self._local_model, self._is_local_only = LLMClient.create(
             brain_tier="local",
             agent_name=self.AGENT_NAME,
         )
 
         # Primary client resolved via ModelManager (supports hybrid per-agent routing)
-        self.client, self.MODEL = LLMClient.create(
+        self.client, self.MODEL, self.IS_LOCAL = LLMClient.create(
             brain_tier=brain_tier,
             agent_name=self.AGENT_NAME,
         )
@@ -294,6 +292,8 @@ class BaseAgent(ABC):
                 max_tokens=512,
                 temperature=0
             )
+            if response.usage:
+                self.cost_tracker.track_usage(self._local_model, response.usage.prompt_tokens, response.usage.completion_tokens, is_local=self._is_local_only)
             return f"[COMPRESSED OUTPUT]\n{response.choices[0].message.content}"
         except Exception as e:
             return f"[COMPRESSION ERROR - RAW OUTPUT TRUNCATED]\n{payload[:1000]}...\n(Error: {str(e)})"
@@ -407,6 +407,9 @@ class BaseAgent(ABC):
                 chat_messages.append({"role": m["role"], "content": PrivacyGuard.redact(m["content"])})
 
         retries = 0
+        # Tool-loop guardrail: caps unbounded loops of identical/idempotent tool calls.
+        from core.loop_guard import LoopGuard
+        loop_guard = LoopGuard(ModelManager.get_loop_config())
         while True:
             # Tier 1: Check kill-switch BEFORE every reasoning turn
             self._check_kill_switch()
@@ -456,7 +459,7 @@ class BaseAgent(ABC):
                 pass  # Audit failure must never crash the agent
 
             if response.usage:
-                self.cost_tracker.track_usage(self.MODEL, response.usage.prompt_tokens, response.usage.completion_tokens)
+                self.cost_tracker.track_usage(self.MODEL, response.usage.prompt_tokens, response.usage.completion_tokens, is_local=self.IS_LOCAL)
 
             choice = response.choices[0]
             message = choice.message
@@ -501,6 +504,25 @@ class BaseAgent(ABC):
                 
                 # Redact the tool output before it hits context or logs
                 result_str = PrivacyGuard.redact(result_str)
+
+                # --- Tool-loop guardrail (observe stable, pre-enrichment result) ---
+                loop_decision = loop_guard.observe(tc.function.name, tool_input, result_str)
+                if loop_decision.is_block:
+                    try:
+                        from security_manager import AuditLogger
+                        AuditLogger().log_event(
+                            source=self.AGENT_NAME,
+                            target=tc.function.name,
+                            payload=f"loop_detected: {loop_decision.rationale}",
+                            status="LOOP_DETECTED",
+                            reason="Tool-loop guardrail halt",
+                        )
+                    except Exception:
+                        pass  # Audit failure must never crash the agent
+                    print(f"[{self.AGENT_NAME}] 🛑 Loop guard: {loop_decision.rationale}. Halting tool loop.")
+                    return f"[LOOP GUARD] Tool loop halted: {loop_decision.rationale}. Returning partial progress."
+                if loop_decision.is_warn:
+                    result_str += f"\n[LOOP GUARD WARNING]: {loop_decision.rationale}"
 
                 # --- ARCHITECTURAL UPGRADE: Autonomous Intel Enrichment ---
                 # If the output contains a version string or IP, proactively query Threat Intel

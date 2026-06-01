@@ -219,7 +219,12 @@ artifacts/
 *.db
 *.sqlite
 *.log
+*.jsonl
 audit.log
+
+# Rules of Engagement — may contain real authorized-target scope.
+# Tracked template is roe.example.json; the live file stays local.
+roe.json
 
 # MCP server data
 .mcp/
@@ -231,3 +236,6 @@ audit.log
 *.swo
 # Local MCP configuration (contains absolute paths)
 .mcp.json
+
+# pipeline staging scratch (Claude<->Python handoff)
+pipeline/staging/
