@@ -119,3 +119,40 @@ class DashboardData:
 def get_data() -> DashboardData:
     """FastAPI dependency. State dir from OPENELIA_STATE_DIR (default 'state')."""
     return DashboardData(os.getenv("OPENELIA_STATE_DIR", "state"))
+
+
+# --- RoE (Rules of Engagement) read adapter --------------------------------- #
+
+_ROE_WHITELIST: frozenset[str] = frozenset(
+    {"authorized_subnets", "blacklisted_ips", "prohibited_tools", "quiet_hours"}
+)
+
+_ROE_SENTINEL: dict = {
+    "authorized_subnets": [],
+    "blacklisted_ips": [],
+    "prohibited_tools": [],
+    "quiet_hours": None,
+}
+
+
+def roe() -> dict:
+    """
+    Read the RoE JSON and return ONLY whitelisted keys.
+
+    Path resolution: OPENELIA_ROE_PATH env (absolute or relative). Relative
+    paths are resolved from the working directory (same convention the engine
+    uses — roe.json sits in the project root). Missing / unreadable file →
+    sentinel dict, never raises.
+    """
+    raw_path = os.getenv("OPENELIA_ROE_PATH", "roe.json")
+    roe_path = Path(raw_path)
+
+    if not roe_path.is_absolute():
+        roe_path = Path(os.getcwd()) / roe_path
+
+    try:
+        raw: dict = json.loads(roe_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return dict(_ROE_SENTINEL)
+
+    return {k: raw[k] for k in _ROE_WHITELIST if k in raw}

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from webdash.data import DashboardData, get_data
+from webdash.data import DashboardData, get_data, roe as _roe_data
 from webdash.security import require_token
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
@@ -63,3 +63,9 @@ def verify_chain(data: DashboardData = Depends(get_data)) -> dict:
         "chain_status": result["chain_status"],
         "chain_msg": result["chain_msg"],
     }
+
+
+@router.get("/roe")
+def get_roe() -> dict:
+    """Read-only RoE scope config (field-whitelisted; never leaks secrets)."""
+    return _roe_data()
