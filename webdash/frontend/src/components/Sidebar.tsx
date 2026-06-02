@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiGet, SystemResp } from "../api";
 
 type NavView = { id: string; label: string };
 type NavGroup = { group: string; views: NavView[] };
@@ -36,6 +37,16 @@ export function Sidebar({ activeView, onSelect }: {
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (g: string) => setCollapsed((c) => ({ ...c, [g]: !c[g] }));
+
+  const [system, setSystem] = useState<SystemResp | null>(null);
+  useEffect(() => {
+    apiGet<SystemResp>("/api/system").then(setSystem).catch(() => setSystem(null));
+    const id = setInterval(
+      () => apiGet<SystemResp>("/api/system").then(setSystem).catch(() => setSystem(null)),
+      10_000,
+    );
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <aside className="bg-surface/80 border-r border-line h-full w-52 flex flex-col backdrop-blur-[1px]">
@@ -88,6 +99,26 @@ export function Sidebar({ activeView, onSelect }: {
           );
         })}
       </nav>
+
+      <div className="px-3 py-2 border-t border-line">
+        <h3 className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-dim mb-1.5">
+          SYSTEM
+        </h3>
+        <div className="font-mono text-[11px] space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-dim">GATEWAY:</span>
+            <span className={system?.gateway === "running" ? "text-phos glow" : "text-dim"}>
+              {system ? system.gateway.toUpperCase() : "—"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-dim">ACTIVE:</span>
+            <span className="text-amber">
+              {system ? system.active_engagements : "—"}
+            </span>
+          </div>
+        </div>
+      </div>
     </aside>
   );
 }

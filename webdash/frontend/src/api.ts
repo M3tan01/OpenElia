@@ -66,6 +66,8 @@ export type AdversaryResp = {
 
 export type RunResp = { run_id: string; status: string };
 
+export type SystemResp = { gateway: string; active_engagements: number };
+
 // --- live stream -------------------------------------------------------------- //
 export interface StreamState {
   connected: boolean;
