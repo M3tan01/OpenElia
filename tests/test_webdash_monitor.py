@@ -177,3 +177,133 @@ def test_roe_partial_file_backfills_all_keys(client, state_dir, auth, tmp_path, 
     assert body["blacklisted_ips"] == []
     assert body["prohibited_tools"] == []
     assert body["quiet_hours"] is None
+
+
+# --- /api/engagements tests ------------------------------------------------- #
+
+def test_engagements_requires_token(client, state_dir):
+    """No token → 401."""
+    resp = client.get("/api/engagements")
+    assert resp.status_code == 401
+
+
+def test_engagements_returns_list_with_active_engagement(client, state_dir, auth):
+    """Valid token + seeded state_dir → 200, list with the seeded engagement."""
+    resp = client.get("/api/engagements", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    assert len(body) >= 1
+    first = body[0]
+    assert first["target"] == "10.0.0.5"
+    assert first["is_active"] is True
+    # Shape: required keys present
+    for key in ("id", "target", "started", "current_phase", "is_active", "is_locked"):
+        assert key in first, f"Missing key: {key}"
+
+
+def test_engagements_missing_db_returns_empty(client, auth, tmp_path, monkeypatch):
+    """State dir with no DB → empty list, not an error."""
+    monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr("webdash.security.current_token", lambda: "test-token-abc123")
+    resp = client.get("/api/engagements", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+# --- /api/adversaries tests ------------------------------------------------- #
+
+_ADVERSARY_WHITELIST = frozenset(
+    {"name", "alias", "description", "preferred_ttps", "tools", "stealth_required", "rationale"}
+)
+
+_ADVERSARY_EXTRA_KEYS = ("internal_id", "secret_opsec_note", "handler_email")
+
+
+def _seed_adversary_dir(tmp_path) -> str:
+    """Write one minimal adversary profile and return the dir path as str."""
+    profile = {
+        "name": "APT-TEST",
+        "alias": "Ghost Bear",
+        "description": "A fictional test APT group.",
+        "preferred_ttps": ["T1059", "T1078"],
+        "tools": ["mimikatz", "cobalt_strike"],
+        "stealth_required": True,
+        "rationale": "Target financial sector.",
+        # Extra non-whitelisted keys — must NOT appear in responses.
+        "internal_id": "secret-123",
+        "secret_opsec_note": "handler channel on Signal",
+        "handler_email": "ops@apt-test.evil",
+    }
+    adv_dir = tmp_path / "adversaries"
+    adv_dir.mkdir()
+    (adv_dir / "apt-test.json").write_text(json.dumps(profile))
+    return str(adv_dir)
+
+
+def test_adversaries_requires_token(client, state_dir):
+    """No token → 401."""
+    resp = client.get("/api/adversaries")
+    assert resp.status_code == 401
+
+
+def test_adversaries_returns_whitelisted_profile(client, auth, tmp_path, monkeypatch):
+    """Valid token + seeded adversaries dir → 200, profile fields whitelisted."""
+    adv_dir = _seed_adversary_dir(tmp_path)
+    monkeypatch.setenv("OPENELIA_ADVERSARIES_DIR", adv_dir)
+
+    resp = client.get("/api/adversaries", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    assert len(body) == 1
+    profile = body[0]
+
+    # All returned keys must be in the whitelist
+    assert set(profile.keys()) <= _ADVERSARY_WHITELIST, (
+        f"Non-whitelisted keys leaked: {set(profile.keys()) - _ADVERSARY_WHITELIST}"
+    )
+    # Core whitelisted fields are present
+    assert profile["name"] == "APT-TEST"
+    assert "T1059" in profile["preferred_ttps"]
+    assert profile["stealth_required"] is True
+
+    # Extra keys must NOT appear
+    for extra_key in _ADVERSARY_EXTRA_KEYS:
+        assert extra_key not in profile, f"Sensitive key '{extra_key}' leaked in response"
+
+
+def test_adversaries_missing_dir_returns_empty(client, auth, tmp_path, monkeypatch):
+    """Non-existent adversaries dir → empty list, not an error."""
+    monkeypatch.setenv("OPENELIA_ADVERSARIES_DIR", str(tmp_path / "nonexistent_adversaries"))
+    resp = client.get("/api/adversaries", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+# --- /api/system tests ------------------------------------------------------ #
+
+def test_system_requires_token(client, state_dir):
+    """No token → 401."""
+    resp = client.get("/api/system")
+    assert resp.status_code == 401
+
+
+def test_system_returns_status_with_active_engagement(client, state_dir, auth):
+    """Valid token + seeded state_dir → 200, gateway running, active_engagements >= 1."""
+    resp = client.get("/api/system", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["gateway"] == "running"
+    assert body["active_engagements"] >= 1
+
+
+def test_system_no_db_active_zero(client, auth, tmp_path, monkeypatch):
+    """State dir with no DB → active_engagements == 0."""
+    monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr("webdash.security.current_token", lambda: "test-token-abc123")
+    resp = client.get("/api/system", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["gateway"] == "running"
+    assert body["active_engagements"] == 0

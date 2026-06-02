@@ -153,6 +153,103 @@ def get_data() -> DashboardData:
     return DashboardData(os.getenv("OPENELIA_STATE_DIR", "state"))
 
 
+# --- Engagements read adapter ----------------------------------------------- #
+
+def engagements(db_path: str | os.PathLike | None = None) -> list[dict]:
+    """Return all engagements from the SQLite DB as a list of dicts.
+
+    Columns: id, target, started, current_phase, is_active, is_locked.
+    is_active and is_locked are cast to bool.
+    Missing db / missing table → [] (never raises).
+    """
+    import sqlite3
+
+    if db_path is None:
+        state_dir = os.getenv("OPENELIA_STATE_DIR", "state")
+        db_path = Path(state_dir) / "engagement.db"
+    else:
+        db_path = Path(db_path)
+
+    if not db_path.exists():
+        return []
+
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT id, target, started, current_phase, is_active, is_locked "
+                "FROM engagement ORDER BY started DESC"
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        return []
+
+    return [
+        {
+            "id": r["id"],
+            "target": r["target"],
+            "started": r["started"],
+            "current_phase": r["current_phase"],
+            "is_active": bool(r["is_active"]),
+            "is_locked": bool(r["is_locked"]),
+        }
+        for r in rows
+    ]
+
+
+# --- Adversaries read adapter ----------------------------------------------- #
+
+_ADVERSARY_WHITELIST: frozenset[str] = frozenset(
+    {"name", "alias", "description", "preferred_ttps", "tools", "stealth_required", "rationale"}
+)
+
+
+def adversaries() -> list[dict]:
+    """Return all APT profiles from the adversaries directory as a list of dicts.
+
+    Path resolution: OPENELIA_ADVERSARIES_DIR env (default 'adversaries').
+    Relative paths resolved from CWD (mirrors roe() convention).
+    Each profile is field-whitelisted to _ADVERSARY_WHITELIST.
+    Files that fail to load are skipped silently. Missing dir → [].
+    """
+    from adversary_manager import AdversaryManager
+
+    raw_dir = os.getenv("OPENELIA_ADVERSARIES_DIR", "adversaries")
+    adv_dir = Path(raw_dir)
+    if not adv_dir.is_absolute():
+        adv_dir = Path(os.getcwd()) / adv_dir
+
+    if not adv_dir.is_dir():
+        return []
+
+    manager = AdversaryManager(adversaries_dir=str(adv_dir))
+    result: list[dict] = []
+    for json_file in sorted(adv_dir.glob("*.json")):
+        stem = json_file.stem
+        try:
+            profile = manager.load_profile(stem)
+        except Exception:
+            continue
+        if not profile:
+            continue
+        result.append({k: profile[k] for k in _ADVERSARY_WHITELIST if k in profile})
+    return result
+
+
+# --- System status adapter -------------------------------------------------- #
+
+def system() -> dict:
+    """Return a lightweight system status dict.
+
+    {"gateway": "running", "active_engagements": <count of is_active=1 rows>}.
+    active_engagements is derived from the same DB as engagements().
+    """
+    active_count = sum(1 for e in engagements() if e["is_active"])
+    return {"gateway": "running", "active_engagements": active_count}
+
+
 # --- RoE (Rules of Engagement) read adapter --------------------------------- #
 
 _ROE_WHITELIST: frozenset[str] = frozenset(
