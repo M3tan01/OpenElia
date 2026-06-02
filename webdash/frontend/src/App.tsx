@@ -45,7 +45,7 @@ export default function App() {
       <header className="flex items-center justify-between px-4 py-2 border-b border-line bg-surface/90 animate-flicker">
         <div className="flex items-baseline gap-3">
           <HamburgerToggle open={sidebarOpen} onClick={() => setSidebarOpen((o) => !o)} />
-          <span className="font-display font-700 text-amber glow tracking-[0.3em] text-lg">
+          <span className="font-display font-bold text-amber glow tracking-[0.3em] text-lg">
             OPENELIA
           </span>
           <span className="font-display text-dim tracking-[0.4em] text-[10px]">// C2 CONSOLE</span>
