@@ -155,4 +155,7 @@ def roe() -> dict:
     except (OSError, json.JSONDecodeError):
         return dict(_ROE_SENTINEL)
 
-    return {k: raw[k] for k in _ROE_WHITELIST if k in raw}
+    # Backfill the sentinel so all whitelisted keys are always present — a
+    # partial roe.json must not yield missing keys (the frontend treats them
+    # as required arrays). Whitelist still drops any non-whitelisted key.
+    return {**_ROE_SENTINEL, **{k: raw[k] for k in _ROE_WHITELIST if k in raw}}

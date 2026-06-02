@@ -125,3 +125,21 @@ def test_roe_missing_file_returns_sentinel(client, state_dir, auth, tmp_path, mo
     assert resp.status_code == 200
     body = resp.json()
     assert set(body.keys()) <= _ROE_WHITELIST
+
+
+def test_roe_partial_file_backfills_all_keys(client, state_dir, auth, tmp_path, monkeypatch):
+    """A roe.json that omits some whitelisted keys → response still has ALL four
+    keys (backfilled), so the frontend never sees an undefined array."""
+    roe_file = tmp_path / "roe_partial.json"
+    # Only authorized_subnets present; the other three keys are omitted.
+    roe_file.write_text('{"authorized_subnets": ["10.0.0.0/24"]}')
+    monkeypatch.setenv("OPENELIA_ROE_PATH", str(roe_file))
+
+    resp = client.get("/api/roe", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body.keys()) == _ROE_WHITELIST
+    assert body["authorized_subnets"] == ["10.0.0.0/24"]
+    assert body["blacklisted_ips"] == []
+    assert body["prohibited_tools"] == []
+    assert body["quiet_hours"] is None
