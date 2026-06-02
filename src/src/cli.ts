@@ -36,6 +36,9 @@ export interface CLIOptions {
   apiKey?: string;
   agent?: string;
   modelName?: string;
+  // forge sub-command fields
+  actor?: string;
+  autoCommit?: boolean;
 }
 
 export class OpenEliaCLI {
@@ -191,6 +194,30 @@ export class OpenEliaCLI {
         console.log(result.stdout);
       } else {
         console.log(chalk.red('❌ Purple team simulation failed'));
+        console.log(result.stderr || result.stdout);
+      }
+    } catch (error) {
+      spinner.stop();
+      console.error(chalk.red('Error:'), errMsg(error));
+    }
+  }
+
+  async handleForge(options: CLIOptions): Promise<void> {
+    const spinner = ora(`Forging adversary profile for ${options.actor}...`).start();
+
+    try {
+      const args = ['forge', '--actor', options.actor!, '--brain-tier', options.brainTier || 'local'];
+      if (options.autoCommit) args.push('--auto-commit');
+
+      const result = await this.runPythonCommand(args);
+
+      spinner.stop();
+
+      if (result.code === 0) {
+        console.log(chalk.green('✅ Adversary Forge completed successfully'));
+        console.log(result.stdout);
+      } else {
+        console.log(chalk.red('❌ Adversary Forge failed'));
         console.log(result.stderr || result.stdout);
       }
     } catch (error) {

@@ -59,6 +59,17 @@ program
     await cli.handlePurpleTeam(options);
   });
 
+// Adversary Forge
+program
+  .command('forge')
+  .description('Generate an adversary profile from MITRE ATT&CK actor data')
+  .requiredOption('-a, --actor <name>', 'MITRE threat-actor name or alias')
+  .option('-t, --brain-tier <tier>', 'Intelligence level (local/expensive)', 'local')
+  .option('--auto-commit', 'Auto-commit generated profile to state store')
+  .action(async (options) => {
+    await cli.handleForge({ actor: options.actor, brainTier: options.brainTier, autoCommit: options.autoCommit });
+  });
+
 // Utility Commands
 program
   .command('check')
