@@ -29,7 +29,13 @@ function ApplyPanel({
   const [pending, setPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // red/purple launch offensive ops — a blank target would skip the server
+  // scope check, so require one here. blue may run target-less ("unknown").
+  const targetRequired = domain !== "blue";
+  const canApply = !pending && (!targetRequired || target.trim() !== "");
+
   async function apply() {
+    if (!canApply) return;
     setPending(true);
     setMsg(null);
     try {
@@ -79,7 +85,8 @@ function ApplyPanel({
         <button
           type="button"
           onClick={apply}
-          disabled={pending}
+          disabled={!canApply}
+          title={targetRequired && target.trim() === "" ? "target required for red/purple" : undefined}
           className="font-display uppercase tracking-widest bg-amber/15 border border-amber text-amber glow text-xs px-4 py-1 disabled:opacity-40 hover:bg-amber/25"
         >
           {pending ? "···" : "▶ Confirm Apply"}
