@@ -45,6 +45,15 @@ export type RoEResp = {
   quiet_hours: string | { start?: string; end?: string } | null;
 };
 
+export type EngagementResp = {
+  id: string;
+  target: string;
+  started: string | null;
+  current_phase: string | null;
+  is_active: boolean;
+  is_locked: boolean;
+};
+
 // --- live stream -------------------------------------------------------------- //
 export interface StreamState {
   connected: boolean;

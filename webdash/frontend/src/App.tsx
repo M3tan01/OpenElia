@@ -5,6 +5,7 @@ import { AttackGraph } from "./components/AttackGraph";
 import { AuditTimeline } from "./components/AuditTimeline";
 import { C2ConsoleView } from "./components/C2ConsoleView";
 import { CostMitre } from "./components/CostMitre";
+import { EngagementsView } from "./components/EngagementsView";
 import { HamburgerToggle } from "./components/HamburgerToggle";
 import { ModelSelector } from "./components/ModelSelector";
 import { RoEView } from "./components/RoEView";
@@ -99,8 +100,9 @@ export default function App() {
               case "audit":  return <Solo><AuditTimeline liveAudit={stream.audit} /></Solo>;
               case "cost":   return <Solo><CostMitre /></Solo>;
               case "models": return <Solo><ModelSelector /></Solo>;
-              case "roe":    return <Solo><RoEView /></Solo>;
-              default:       return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
+              case "roe":          return <Solo><RoEView /></Solo>;
+              case "engagements": return <Solo><EngagementsView /></Solo>;
+              default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
             }
           })()}
         </div>
