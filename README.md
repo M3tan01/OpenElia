@@ -1,3 +1,5 @@
+<img width="1439" height="809" alt="image" src="https://github.com/user-attachments/assets/e2c44fde-e645-4183-b91d-2ef10494050f" />
+
 # 🛡️ OpenElia Core
 
 **Autonomous AI-Powered Purple Team Orchestration Platform**
