@@ -585,8 +585,10 @@ async def cmd_dashboard(args) -> None:
     # --web launches the FastAPI + React web dashboard (localhost only);
     # default remains the Rich TUI.
     if getattr(args, "web", False):
-        from webdash.server import run as run_web
-        run_web(host="127.0.0.1", port=getattr(args, "port", 8765))
+        # cmd_dashboard runs inside main()'s asyncio.run loop → await the async
+        # server (uvicorn.run() would try to start a second loop and crash).
+        from webdash.server import serve as serve_web
+        await serve_web(host="127.0.0.1", port=getattr(args, "port", 8765))
         return
     from dashboard import Dashboard
     Dashboard().run()

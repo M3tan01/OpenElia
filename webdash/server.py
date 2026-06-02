@@ -47,17 +47,28 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def run(host: str = "127.0.0.1", port: int = 8765) -> None:
-    """Launch the dashboard. Prints the token-bearing URL once, then serves."""
-    import uvicorn
-
+def _banner(host: str, port: int) -> None:
     from webdash.security import get_or_create_token
 
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("refusing non-localhost bind for the control dashboard")
-
     token = get_or_create_token()
     print("\n  OpenElia dashboard →  "
           f"http://{host}:{port}/#token={token}\n"
           "  (token also required as 'Authorization: Bearer <token>' for /api)\n")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+async def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+    """Async launcher — runs inside an existing event loop (e.g. main.py's asyncio.run)."""
+    import uvicorn
+
+    _banner(host, port)
+    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    await uvicorn.Server(config).serve()
+
+
+def run(host: str = "127.0.0.1", port: int = 8765) -> None:
+    """Sync launcher for standalone use (no running event loop)."""
+    import asyncio
+
+    asyncio.run(serve(host, port))
