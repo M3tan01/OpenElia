@@ -4,6 +4,7 @@ export function HamburgerToggle({ open, onClick }: {
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label="Toggle navigation"
       aria-expanded={open}
@@ -11,9 +12,9 @@ export function HamburgerToggle({ open, onClick }: {
         open ? "text-amber glow" : "text-dim hover:text-amber/80"
       }`}
     >
-      <span className="w-5 h-0.5 bg-current rounded-sm origin-center transition-transform" />
-      <span className="w-5 h-0.5 bg-current rounded-sm origin-center transition-transform" />
-      <span className="w-5 h-0.5 bg-current rounded-sm origin-center transition-transform" />
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="w-5 h-0.5 bg-current rounded-sm" />
+      ))}
     </button>
   );
 }
