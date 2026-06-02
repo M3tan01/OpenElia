@@ -2,6 +2,14 @@
 
 All notable changes to the OpenElia project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- **OpenClaw module** (`openclaw/`) and `tests/test_openclaw.py`: the zero-trust external-data
+  ingestion layer was never wired into the engine (no production importers). Removed as dead
+  code along with its `COMMANDS.txt` Section 8. External-fetch sanitization can be reintroduced
+  at the agent fetch boundary if/when needed.
+
 ## [1.0.5] - 2026-04-19
 
 ### ✨ Features
