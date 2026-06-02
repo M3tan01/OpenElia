@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-type NavView = { id: string; label: string; disabled?: boolean };
+type NavView = { id: string; label: string };
 type NavGroup = { group: string; views: NavView[] };
 
 const NAV: NavGroup[] = [
@@ -62,27 +62,21 @@ export function Sidebar({ activeView, onSelect }: {
 
               {open && (
                 <div id={`navgroup-${group}`} className="space-y-0.5 mt-0.5">
-                  {views.map(({ id, label, disabled }) => {
+                  {views.map(({ id, label }) => {
                     const active = id === activeView;
                     return (
                       <button
                         key={id}
                         type="button"
-                        disabled={disabled}
-                        onClick={() => !disabled && onSelect(id)}
+                        onClick={() => onSelect(id)}
                         aria-current={active ? "page" : undefined}
                         className={`w-full text-left pl-4 pr-2 py-1.5 text-sm font-mono border-l-2 transition-colors ${
                           active
                             ? "border-amber text-amber"
-                            : disabled
-                            ? "border-transparent text-dim/40 cursor-not-allowed"
                             : "border-transparent text-dim hover:text-amber/80"
                         }`}
                       >
                         {label}
-                        {disabled && (
-                          <span aria-hidden="true" className="ml-2 text-[9px] uppercase tracking-wider text-dim/40">soon</span>
-                        )}
                       </button>
                     );
                   })}
