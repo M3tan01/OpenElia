@@ -3,6 +3,7 @@
 ## Quick Reference
 - **Setup:** `bash setup.sh` or `pip install -e .`
 - **Run:** `python main.py`
+- **Web UI:** `python main.py dashboard --web` (FastAPI+React C2 console, 127.0.0.1 only; open the printed `#token=…` URL). Build once: `cd webdash/frontend && npm run build`. See `webdash/README.md`.
 - **Test:** `pytest tests/ -v`
 - **Test (single):** `pytest tests/test_<name>.py -v`
 - **Lint:** `bandit -r . -f json -o bandit_report.json`

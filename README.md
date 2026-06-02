@@ -20,7 +20,7 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 *   🔴 **Red Team (Pentester)**: Autonomous reconnaissance, vulnerability assessment, and exploitation using the **Atomic Red Team** library.
 *   🔵 **Blue Team (Defender)**: Real-time log analysis, SIEM-style telemetry, and active remediation (block IP via iptables, kill process via SIGKILL). Operates in simulation mode by default; live execution enabled via `BLUE_REMEDIATE_LIVE=1` with RBAC token verification.
 *   🟣 **Purple Team (Simulation)**: Collaborative, true N-iteration attack/defend loops (**Continuous Chaos**) with coverage delta tracking, early exit, and adaptive red task seeding based on previous blue alert types.
-*   📺 **War Room Dashboard**: Live, real-time TUI with MITRE heatmap, findings, red/blue logs, and active pivot session panel.
+*   📺 **War Room Dashboard**: Live, real-time TUI with MITRE heatmap, findings, red/blue logs, and active pivot session panel — or a browser **C2 console** (`dashboard --web`) with the same telemetry plus interactive control (run red/blue/purple, kill-switch, brain-model selection). See `webdash/README.md`.
 *   🧠 **Autonomic Self-Healing**: Agents automatically detect tool errors, reflect on the cause, and issue corrected commands.
 *   🕵️ **Stealth Mode (OPSEC)**: Randomized jitter and LotL techniques to evade detection.
 *   🐝 **Subnet Swarming**: Launch parallel agent threads to scan and assess entire CIDR ranges simultaneously.
@@ -185,6 +185,11 @@ python3 main.py check
 
 # Launch the interactive War Room TUI
 python3 main.py dashboard
+
+# Launch the browser C2 console (FastAPI + React, 127.0.0.1 only)
+# Prints http://127.0.0.1:8765/#token=<token> — open the FULL url incl. the #token fragment.
+# First time only: cd webdash/frontend && npm install && npm run build
+python3 main.py dashboard --web            # --port 8888 to change port
 
 # Run a red team engagement (Single Target)
 python3 main.py red --target 10.10.10.50 --stealth
