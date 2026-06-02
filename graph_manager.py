@@ -63,6 +63,20 @@ class GraphManager:
     def query_by_type(self, node_type):
         return [n for n, d in self.graph.nodes(data=True) if d.get("type") == node_type]
 
+    def detected_os(self) -> set:
+        """Lowercased OS strings across host nodes. Hosts with no os are skipped.
+
+        Empty set means "OS unknown" — callers MUST treat that as
+        'cannot prove a platform mismatch' (fail-open on the OS rule only).
+        """
+        result = set()
+        for _, attrs in self.graph.nodes(data=True):
+            if attrs.get("type") == "host":
+                os_val = attrs.get("os")
+                if os_val:
+                    result.add(str(os_val).lower())
+        return result
+
     def export_to_mermaid(self):
         """Export the graph structure to Mermaid.js flowchart format."""
         lines = ["graph TD"]
