@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, StateResp, TOKEN, useStream } from "./api";
 import { C2ConsoleView } from "./components/C2ConsoleView";
+import { HamburgerToggle } from "./components/HamburgerToggle";
+import { Sidebar } from "./components/Sidebar";
 
 export default function App() {
   const stream = useStream();
   const [state, setState] = useState<StateResp | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeView, setActiveView] = useState("c2");
 
   const refresh = useCallback(() => {
     apiGet<StateResp>("/api/state").then(setState).catch(() => {});
@@ -40,6 +44,7 @@ export default function App() {
     <div className="h-screen flex flex-col text-[13px]">
       <header className="flex items-center justify-between px-4 py-2 border-b border-line bg-surface/90 animate-flicker">
         <div className="flex items-baseline gap-3">
+          <HamburgerToggle open={sidebarOpen} onClick={() => setSidebarOpen((o) => !o)} />
           <span className="font-display font-700 text-amber glow tracking-[0.3em] text-lg">
             OPENELIA
           </span>
@@ -68,7 +73,16 @@ export default function App() {
         </div>
       </header>
 
-      <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />
+      <div className="flex-1 min-h-0 flex">
+        <div className={`shrink-0 overflow-hidden transition-[width] duration-200 ${sidebarOpen ? "w-52" : "w-0"}`}>
+          <Sidebar activeView={activeView} onSelect={setActiveView} />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col">
+          {activeView === "c2" && (
+            <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
