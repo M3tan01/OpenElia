@@ -126,3 +126,74 @@ def test_filter_keeps_platformless_technique():
     techs = [{"t_code": "T1583", "name": "Acquire Infra", "platforms": []}]
     kept, _ = f.filter_techniques(techs, detected_os={"windows"}, blacklisted=[])
     assert len(kept) == 1  # no platform metadata -> cannot prove mismatch
+
+
+import asyncio
+from types import SimpleNamespace
+
+
+class _FakeMsg:
+    def __init__(self, content): self.message = SimpleNamespace(content=content)
+
+
+class _FakeCompletions:
+    def __init__(self, content): self._c = content
+    async def create(self, **kwargs):
+        return SimpleNamespace(choices=[_FakeMsg(self._c)])
+
+
+class _FakeClient:
+    def __init__(self, content):
+        self.chat = SimpleNamespace(completions=_FakeCompletions(content))
+
+
+def _patch_llm(monkeypatch, content):
+    from adversary_forge import LLMClient  # re-exported for patching
+    monkeypatch.setattr(
+        LLMClient, "create",
+        staticmethod(lambda **kw: (_FakeClient(content), "fake-model", True)),
+    )
+
+
+def test_sequence_orders_and_guards_hallucinations(tmp_path, monkeypatch):
+    # LLM returns a real code, a reordered one, and an invented one.
+    _patch_llm(monkeypatch, '["T1110", "T1059.001", "T9999"]')
+    f = AdversaryForge()
+    kept = [
+        {"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]},
+        {"t_code": "T1110", "name": "Brute Force", "platforms": ["windows"]},
+    ]
+    ordered = asyncio.run(f.sequence(kept, brain_tier="local", topology={}))
+    assert ordered == ["T1110", "T1059.001"]  # invented T9999 dropped
+
+
+def test_sequence_falls_back_on_bad_json(tmp_path, monkeypatch):
+    _patch_llm(monkeypatch, "not json at all")
+    f = AdversaryForge()
+    kept = [{"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]}]
+    ordered = asyncio.run(f.sequence(kept, brain_tier="local", topology={}))
+    assert ordered == ["T1059.001"]  # fall back to filtered order
+
+
+def test_forge_end_to_end(tmp_path, monkeypatch):
+    _patch_llm(monkeypatch, '["T1059.001", "T1110"]')
+    actor_map = tmp_path / "actor_ttps.json"
+    actor_map.write_text(json.dumps({"APT29": {"aliases": [], "techniques": [
+        {"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]},
+        {"t_code": "T1110", "name": "Brute Force", "platforms": ["windows"]},
+        {"t_code": "T1059.004", "name": "Unix Shell", "platforms": ["linux"]},
+    ]}}))
+    roe = tmp_path / "roe.json"
+    roe.write_text(json.dumps({"blacklisted_techniques": ["T1110"]}))
+    graph = tmp_path / "g.json"
+    gm = GraphManager(db_path=str(graph)); gm.add_host("10.0.0.5", os="Windows")
+    f = AdversaryForge(actor_map_path=str(actor_map), graph_path=str(graph), roe_path=str(roe))
+    result = asyncio.run(f.forge("APT29", brain_tier="local"))
+    prof = result["profile"]
+    assert prof["name"] == "APT29"
+    assert prof["preferred_ttps"] == ["T1059.001"]  # T1110 RoE-dropped, T1059.004 platform-dropped
+    reasons = {d["t_code"]: d["reason"] for d in result["omitted"]}
+    assert "RoE" in reasons["T1110"]
+    assert "platform" in reasons["T1059.004"].lower()
+    assert result["metadata"]["actor"] == "APT29"
+    assert result["metadata"]["tier"] == "local"
