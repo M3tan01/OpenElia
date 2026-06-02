@@ -8,21 +8,21 @@ const NAV: NavGroup[] = [
     group: "Operations",
     views: [
       { id: "c2", label: "C2 Console" },
-      { id: "agents", label: "Agent Activity", disabled: true },
-      { id: "graph", label: "Attack Graph", disabled: true },
+      { id: "agents", label: "Agent Activity" },
+      { id: "graph", label: "Attack Graph" },
     ],
   },
   {
     group: "Intelligence",
     views: [
-      { id: "audit", label: "Audit Timeline", disabled: true },
-      { id: "cost", label: "Cost & MITRE", disabled: true },
+      { id: "audit", label: "Audit Timeline" },
+      { id: "cost", label: "Cost & MITRE" },
     ],
   },
   {
     group: "Config",
     views: [
-      { id: "models", label: "Brain Models", disabled: true },
+      { id: "models", label: "Brain Models" },
       { id: "roe", label: "RoE / Scope", disabled: true },
     ],
   },

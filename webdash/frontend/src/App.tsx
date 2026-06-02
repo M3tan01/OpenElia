@@ -1,8 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiGet, StateResp, TOKEN, useStream } from "./api";
+import { AgentActivity } from "./components/AgentActivity";
+import { AttackGraph } from "./components/AttackGraph";
+import { AuditTimeline } from "./components/AuditTimeline";
 import { C2ConsoleView } from "./components/C2ConsoleView";
+import { CostMitre } from "./components/CostMitre";
 import { HamburgerToggle } from "./components/HamburgerToggle";
+import { ModelSelector } from "./components/ModelSelector";
 import { Sidebar } from "./components/Sidebar";
+
+function Solo({ children }: { children: ReactNode }) {
+  return (
+    <main className="flex-1 min-h-0 overflow-hidden p-3 animate-boot">
+      {children}
+    </main>
+  );
+}
 
 export default function App() {
   const stream = useStream();
@@ -78,9 +91,16 @@ export default function App() {
           <Sidebar activeView={activeView} onSelect={setActiveView} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
-          {activeView === "c2" && (
-            <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />
-          )}
+          {(() => {
+            switch (activeView) {
+              case "agents": return <Solo><AgentActivity liveTasks={stream.tasks} /></Solo>;
+              case "graph":  return <Solo><AttackGraph /></Solo>;
+              case "audit":  return <Solo><AuditTimeline liveAudit={stream.audit} /></Solo>;
+              case "cost":   return <Solo><CostMitre /></Solo>;
+              case "models": return <Solo><ModelSelector /></Solo>;
+              default:       return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
+            }
+          })()}
         </div>
       </div>
     </div>
