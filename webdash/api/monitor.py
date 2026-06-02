@@ -6,14 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from webdash.data import (
-    DashboardData,
-    get_data,
-    roe as _roe_data,
-    engagements as _engagements_data,
-    adversaries as _adversaries_data,
-    system as _system_data,
-)
+from webdash.data import DashboardData, get_data, roe as _roe_data
 from webdash.security import require_token
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
@@ -79,18 +72,18 @@ def get_roe() -> dict:
 
 
 @router.get("/engagements")
-def get_engagements() -> list[dict]:
+def get_engagements(data: DashboardData = Depends(get_data)) -> list[dict]:
     """All engagements (id, target, started, current_phase, is_active, is_locked). Read-only."""
-    return _engagements_data()
+    return data.engagements()
 
 
 @router.get("/adversaries")
-def get_adversaries() -> list[dict]:
+def get_adversaries(data: DashboardData = Depends(get_data)) -> list[dict]:
     """All APT profiles (field-whitelisted). Read-only."""
-    return _adversaries_data()
+    return data.adversaries()
 
 
 @router.get("/system")
-def get_system() -> dict:
+def get_system(data: DashboardData = Depends(get_data)) -> dict:
     """Lightweight system status: gateway health + active engagement count. Read-only."""
-    return _system_data()
+    return data.system()

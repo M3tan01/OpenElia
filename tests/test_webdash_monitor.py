@@ -281,6 +281,42 @@ def test_adversaries_missing_dir_returns_empty(client, auth, tmp_path, monkeypat
     assert resp.json() == []
 
 
+def test_adversaries_partial_profile_backfills_missing_keys(client, auth, tmp_path, monkeypatch):
+    """A profile missing 'tools' and 'preferred_ttps' → those keys are still
+    present in the response as [] (backfilled sentinel), and any non-whitelisted
+    key is still dropped."""
+    adv_dir = tmp_path / "adversaries"
+    adv_dir.mkdir()
+    partial_profile = {
+        "name": "APT-PARTIAL",
+        "alias": "Shadow Fox",
+        "description": "Partial profile — missing tools and preferred_ttps.",
+        "stealth_required": True,
+        "rationale": "Test backfill.",
+        # intentionally omit preferred_ttps and tools
+        # extra non-whitelisted key — must be dropped
+        "secret_handler": "ops@evil.example",
+    }
+    (adv_dir / "apt-partial.json").write_text(json.dumps(partial_profile))
+    monkeypatch.setenv("OPENELIA_ADVERSARIES_DIR", str(adv_dir))
+
+    resp = client.get("/api/adversaries", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list) and len(body) == 1
+    profile = body[0]
+
+    # Missing array keys must be backfilled as empty lists
+    assert profile["tools"] == [], f"Expected tools=[], got {profile['tools']!r}"
+    assert profile["preferred_ttps"] == [], f"Expected preferred_ttps=[], got {profile['preferred_ttps']!r}"
+    # All seven whitelisted keys must be present
+    assert set(profile.keys()) == _ADVERSARY_WHITELIST, (
+        f"Key mismatch: {set(profile.keys())} != {_ADVERSARY_WHITELIST}"
+    )
+    # Non-whitelisted key must not appear
+    assert "secret_handler" not in profile
+
+
 # --- /api/system tests ------------------------------------------------------ #
 
 def test_system_requires_token(client, state_dir):
