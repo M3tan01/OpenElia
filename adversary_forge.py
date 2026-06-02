@@ -54,7 +54,9 @@ class AdversaryForge:
         kept: list[dict] = []
         dropped: list[dict] = []
         for tech in techniques:
-            code = tech["t_code"]
+            code = tech.get("t_code")
+            if not code:
+                continue  # malformed map entry — skip rather than KeyError
             if code in blocked:
                 dropped.append({"t_code": code, "reason": "RoE blacklist"})
                 continue
