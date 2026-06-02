@@ -254,7 +254,8 @@ _ADVERSARY_SENTINEL: dict = {
 # --- RoE (Rules of Engagement) read adapter --------------------------------- #
 
 _ROE_WHITELIST: frozenset[str] = frozenset(
-    {"authorized_subnets", "blacklisted_ips", "prohibited_tools", "quiet_hours"}
+    {"authorized_subnets", "blacklisted_ips", "prohibited_tools",
+     "quiet_hours", "blacklisted_techniques"}
 )
 
 _ROE_SENTINEL: dict = {
@@ -262,6 +263,7 @@ _ROE_SENTINEL: dict = {
     "blacklisted_ips": [],
     "prohibited_tools": [],
     "quiet_hours": None,
+    "blacklisted_techniques": [],
 }
 
 

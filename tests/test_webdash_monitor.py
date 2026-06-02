@@ -106,7 +106,7 @@ def test_websocket_snapshot_with_valid_token(client, state_dir, token):
 
 # --- /api/roe tests --------------------------------------------------------- #
 
-_ROE_WHITELIST = {"authorized_subnets", "blacklisted_ips", "prohibited_tools", "quiet_hours"}
+_ROE_WHITELIST = {"authorized_subnets", "blacklisted_ips", "prohibited_tools", "quiet_hours", "blacklisted_techniques"}
 
 
 def test_roe_requires_token(client, state_dir):
@@ -343,3 +343,26 @@ def test_system_no_db_active_zero(client, auth, tmp_path, monkeypatch):
     body = resp.json()
     assert body["gateway"] == "running"
     assert body["active_engagements"] == 0
+
+
+# --- /api/roe blacklisted_techniques tests ---------------------------------- #
+
+def test_roe_exposes_blacklisted_techniques(tmp_path, monkeypatch, client, auth):
+    import json
+    roe = tmp_path / "roe.json"
+    roe.write_text(json.dumps({"blacklisted_techniques": ["T1110"], "secret": "x"}))
+    monkeypatch.setenv("OPENELIA_ROE_PATH", str(roe))
+    r = client.get("/api/roe", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["blacklisted_techniques"] == ["T1110"]
+    assert "secret" not in body  # whitelist still drops unknown keys
+
+
+def test_roe_backfills_blacklisted_techniques_when_absent(tmp_path, monkeypatch, client, auth):
+    import json
+    roe = tmp_path / "roe.json"
+    roe.write_text(json.dumps({"authorized_subnets": ["10.0.0.0/24"]}))
+    monkeypatch.setenv("OPENELIA_ROE_PATH", str(roe))
+    r = client.get("/api/roe", headers=auth)
+    assert r.json()["blacklisted_techniques"] == []

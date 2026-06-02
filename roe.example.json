@@ -3,6 +3,7 @@
   "authorized_subnets": ["10.0.0.0/24", "127.0.0.0/8"],
   "blacklisted_ips": ["10.0.0.1", "10.0.0.254"],
   "prohibited_tools": ["brute_force"],
+  "blacklisted_techniques": ["T1485", "T1486"],
   "quiet_hours": {
     "enabled": true,
     "start": "09:00",
