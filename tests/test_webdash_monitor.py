@@ -4,6 +4,8 @@ Uses a seeded tmp state directory (see conftest_webdash.state_dir).
 """
 from __future__ import annotations
 
+import json
+
 from tests.conftest_webdash import auth, client, state_dir, token  # noqa: F401
 
 
@@ -24,6 +26,38 @@ def test_tasks_returns_results(client, state_dir, auth):
     body = client.get("/api/tasks", headers=auth).json()
     assert isinstance(body, list)
     assert body[0]["agent_name"] == "pentester_recon"
+
+
+def test_tasks_scoped_to_active_engagement(tmp_path):
+    """Only task results within the active engagement window are returned —
+    older lifetime history (before `started`) is excluded."""
+    from state_manager import StateManager
+    from webdash.data import DashboardData
+
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    sm.initialize_engagement("10.0.0.9", "scope")
+    started = sm.read()["engagement"]["started"]
+
+    (tmp_path / "task_results.jsonl").write_text(
+        json.dumps({"task_id": "old", "agent_name": "pentester_recon",
+                    "status": "success", "completed_at": "2020-01-01T00:00:00+00:00"}) + "\n"
+        + json.dumps({"task_id": "new", "agent_name": "pentester_recon",
+                      "status": "error", "completed_at": started}) + "\n"
+    )
+
+    rows = DashboardData(state_dir=tmp_path).tasks()
+    assert {r["task_id"] for r in rows} == {"new"}
+
+
+def test_tasks_empty_without_active_engagement(tmp_path):
+    """No active engagement → idle (empty), even if the log has rows."""
+    from webdash.data import DashboardData
+
+    (tmp_path / "task_results.jsonl").write_text(
+        json.dumps({"task_id": "x", "agent_name": "pentester_recon",
+                    "status": "success", "completed_at": "2026-06-01T00:00:00+00:00"}) + "\n"
+    )
+    assert DashboardData(state_dir=tmp_path).tasks() == []
 
 
 def test_graph_returns_nodes_and_links(client, state_dir, auth):

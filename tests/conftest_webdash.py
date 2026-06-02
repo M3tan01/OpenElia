@@ -35,6 +35,8 @@ def state_dir(tmp_path, monkeypatch):
     sm = StateManager(db_path=str(tmp_path / "engagement.db"))
     sm.initialize_engagement("10.0.0.5", "test scope")
     sm.add_finding("high", "Test finding", "desc", "evidence", "T1059")
+    # The active-engagement start bounds which task results the dashboard shows.
+    started = sm.read()["engagement"]["started"]
 
     from security_manager import AuditLogger
 
@@ -48,7 +50,7 @@ def state_dir(tmp_path, monkeypatch):
                 "task_id": "t1",
                 "agent_name": "pentester_recon",
                 "status": "success",
-                "completed_at": "2026-06-01T00:00:00Z",
+                "completed_at": started,  # within the active engagement window
                 "tokens_used": 10,
             }
         )

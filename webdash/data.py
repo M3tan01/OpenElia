@@ -10,9 +10,26 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import networkx as nx
+
+
+def _parse_ts(s: object) -> datetime | None:
+    """Parse an ISO-8601 timestamp to a UTC-aware datetime, else None.
+
+    Tolerates a trailing 'Z', missing offset (assumed UTC), and varying
+    sub-second precision so callers can compare timestamps from different
+    writers safely.
+    """
+    if not isinstance(s, str) or not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 # Mirrors orchestrator._RED_AGENTS / _BLUE_AGENTS (+ reporter). Used by the
 # ModelSelector to offer per-agent overrides. Keep in sync with orchestrator.py.
@@ -73,7 +90,22 @@ class DashboardData:
 
     # --- task results ------------------------------------------------------ #
     def tasks(self, limit: int = 200) -> list[dict]:
-        return _tail_jsonl(self.tasks_log, limit)
+        """Task results for the ACTIVE engagement only.
+
+        task_results.jsonl is append-only and engagement-agnostic, so the panel
+        would otherwise show lifetime totals. Scope by the active engagement's
+        `started` timestamp — written in the same ISO-8601 UTC format as each
+        row's `completed_at`, so a lexical compare is chronological. No active
+        engagement → no current activity (idle).
+        """
+        start_dt = _parse_ts(self.state().get("engagement", {}).get("started"))
+        if start_dt is None:
+            return []
+        rows = _tail_jsonl(self.tasks_log, limit)
+        return [
+            r for r in rows
+            if (ts := _parse_ts(r.get("completed_at"))) is not None and ts >= start_dt
+        ]
 
     # --- attack-surface graph --------------------------------------------- #
     def graph(self) -> dict:
