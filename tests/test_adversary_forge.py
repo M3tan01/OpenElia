@@ -55,3 +55,37 @@ def test_save_profile_blocks_path_traversal(tmp_path):
     )
     with pytest.raises(ValueError):
         save_profile(p, "../evil", adversaries_dir=str(tmp_path))
+
+
+from adversary_forge import AdversaryForge
+
+
+def _write_map(tmp_path):
+    m = {
+        "APT29": {"aliases": ["Cozy Bear"], "techniques": [
+            {"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]},
+            {"t_code": "T1110", "name": "Brute Force", "platforms": ["windows", "linux"]},
+        ]},
+    }
+    p = tmp_path / "actor_ttps.json"
+    p.write_text(json.dumps(m))
+    return str(p)
+
+
+def test_load_actor_by_name(tmp_path):
+    f = AdversaryForge(actor_map_path=_write_map(tmp_path))
+    rec = f.load_actor("APT29")
+    assert rec["name"] == "APT29"
+    assert len(rec["techniques"]) == 2
+
+
+def test_load_actor_by_alias_case_insensitive(tmp_path):
+    f = AdversaryForge(actor_map_path=_write_map(tmp_path))
+    rec = f.load_actor("cozy bear")
+    assert rec["name"] == "APT29"
+
+
+def test_load_actor_unknown_raises(tmp_path):
+    f = AdversaryForge(actor_map_path=_write_map(tmp_path))
+    with pytest.raises(ValueError):
+        f.load_actor("NoSuchActor")
