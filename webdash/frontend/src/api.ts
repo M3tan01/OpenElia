@@ -54,6 +54,18 @@ export type EngagementResp = {
   is_locked: boolean;
 };
 
+export type AdversaryResp = {
+  name: string;
+  alias: string;
+  description: string;
+  preferred_ttps: string[];
+  tools: string[];
+  stealth_required: boolean;
+  rationale: string;
+};
+
+export type RunResp = { run_id: string; status: string };
+
 // --- live stream -------------------------------------------------------------- //
 export interface StreamState {
   connected: boolean;

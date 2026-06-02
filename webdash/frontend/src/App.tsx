@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiGet, StateResp, TOKEN, useStream } from "./api";
 import { AgentActivity } from "./components/AgentActivity";
+import { APTProfilesView } from "./components/APTProfilesView";
 import { AttackGraph } from "./components/AttackGraph";
 import { AuditTimeline } from "./components/AuditTimeline";
 import { C2ConsoleView } from "./components/C2ConsoleView";
@@ -102,6 +103,7 @@ export default function App() {
               case "models": return <Solo><ModelSelector /></Solo>;
               case "roe":          return <Solo><RoEView /></Solo>;
               case "engagements": return <Solo><EngagementsView /></Solo>;
+              case "apt":          return <Solo><APTProfilesView /></Solo>;
               default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
             }
           })()}

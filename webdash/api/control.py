@@ -34,6 +34,7 @@ class BlueRun(BaseModel):
     task: str
     target: str | None = None
     brain_tier: Literal["local", "expensive"] = "local"
+    apt_profile: str | None = None
     confirm: bool = False
 
 
@@ -43,6 +44,7 @@ class PurpleRun(BaseModel):
     stealth: bool = False
     brain_tier: Literal["local", "expensive"] = "local"
     proxy_port: int | None = None
+    apt_profile: str | None = None
     confirm: bool = False
 
 
@@ -75,7 +77,7 @@ async def run_blue(req: BlueRun, data: DashboardData = Depends(get_data), rm: Ru
     require_unlocked(str(data.db_path))  # defensive ops still respect the kill-switch
     return await _launch(
         rm, domain="blue", task=req.task, targets=[req.target or "unknown"],
-        brain_tier=req.brain_tier, state_dir=str(data.dir),
+        brain_tier=req.brain_tier, apt_profile=req.apt_profile, state_dir=str(data.dir),
     )
 
 
@@ -86,7 +88,7 @@ async def run_purple(req: PurpleRun, data: DashboardData = Depends(get_data), rm
     scope_gate(req.target, req.task)
     return await _launch(
         rm, domain="purple", task=req.task, targets=[req.target], stealth=req.stealth,
-        proxy_port=req.proxy_port, brain_tier=req.brain_tier, state_dir=str(data.dir),
+        proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile, state_dir=str(data.dir),
     )
 
 
