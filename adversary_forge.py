@@ -37,3 +37,32 @@ class AdversaryForge:
             if needle in names:
                 return {"name": name, "techniques": rec.get("techniques", [])}
         raise ValueError(f"Actor '{actor_name}' not found in {self.actor_map_path}")
+
+    def filter_techniques(
+        self, techniques: list[dict], detected_os: set, blacklisted: list[str]
+    ) -> tuple[list[dict], list[dict]]:
+        """Deterministic pre-curation. Returns (kept, dropped).
+
+        Rule 1 (RoE, fail-closed): drop any T-code in the RoE blacklist.
+        Rule 2 (platform): drop only when topology OS is KNOWN and the
+        technique's platforms are KNOWN and the two sets do not intersect.
+        Unknown OS or platform-less technique -> kept (cannot prove a mismatch).
+        """
+        blocked = set(blacklisted)
+        kept: list[dict] = []
+        dropped: list[dict] = []
+        for tech in techniques:
+            code = tech["t_code"]
+            if code in blocked:
+                dropped.append({"t_code": code, "reason": "RoE blacklist"})
+                continue
+            platforms = {p.lower() for p in tech.get("platforms", [])}
+            if detected_os and platforms and not (platforms & detected_os):
+                dropped.append({
+                    "t_code": code,
+                    "reason": f"platform mismatch: {sorted(platforms)} not in "
+                              f"topology {sorted(detected_os)}",
+                })
+                continue
+            kept.append(tech)
+        return kept, dropped

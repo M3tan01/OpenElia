@@ -89,3 +89,40 @@ def test_load_actor_unknown_raises(tmp_path):
     f = AdversaryForge(actor_map_path=_write_map(tmp_path))
     with pytest.raises(ValueError):
         f.load_actor("NoSuchActor")
+
+
+TECHS = [
+    {"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]},
+    {"t_code": "T1110", "name": "Brute Force", "platforms": ["windows", "linux"]},
+    {"t_code": "T1059.004", "name": "Unix Shell", "platforms": ["linux", "macos"]},
+]
+
+
+def test_filter_drops_roe_blacklisted():
+    f = AdversaryForge()
+    kept, dropped = f.filter_techniques(TECHS, detected_os=set(), blacklisted=["T1110"])
+    assert "T1110" not in {t["t_code"] for t in kept}
+    assert any(d["t_code"] == "T1110" and "RoE" in d["reason"] for d in dropped)
+
+
+def test_filter_drops_platform_mismatch():
+    f = AdversaryForge()
+    kept, dropped = f.filter_techniques(TECHS, detected_os={"windows"}, blacklisted=[])
+    codes = {t["t_code"] for t in kept}
+    assert "T1059.001" in codes and "T1110" in codes  # windows-capable kept
+    assert "T1059.004" not in codes                    # linux/macos only -> dropped
+    assert any(d["t_code"] == "T1059.004" and "platform" in d["reason"].lower()
+               for d in dropped)
+
+
+def test_filter_keeps_all_when_os_unknown():
+    f = AdversaryForge()
+    kept, _ = f.filter_techniques(TECHS, detected_os=set(), blacklisted=[])
+    assert len(kept) == 3  # empty topology cannot prove mismatch -> keep
+
+
+def test_filter_keeps_platformless_technique():
+    f = AdversaryForge()
+    techs = [{"t_code": "T1583", "name": "Acquire Infra", "platforms": []}]
+    kept, _ = f.filter_techniques(techs, detected_os={"windows"}, blacklisted=[])
+    assert len(kept) == 1  # no platform metadata -> cannot prove mismatch
