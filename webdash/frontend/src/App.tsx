@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, StateResp, TOKEN, useStream } from "./api";
-import { AgentActivity } from "./components/AgentActivity";
-import { AttackGraph } from "./components/AttackGraph";
-import { AuditTimeline } from "./components/AuditTimeline";
-import { ControlBar } from "./components/ControlBar";
-import { CostMitre } from "./components/CostMitre";
-import { ModelSelector } from "./components/ModelSelector";
+import { C2ConsoleView } from "./components/C2ConsoleView";
 
 export default function App() {
   const stream = useStream();
@@ -41,9 +36,6 @@ export default function App() {
     );
   }
 
-  // staggered boot reveal
-  const cell = (i: number) => ({ animationDelay: `${0.06 * i}s` });
-
   return (
     <div className="h-screen flex flex-col text-[13px]">
       <header className="flex items-center justify-between px-4 py-2 border-b border-line bg-surface/90 animate-flicker">
@@ -76,28 +68,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-hidden p-3 grid gap-3 grid-cols-1 lg:grid-cols-4 lg:grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="lg:col-span-4 min-h-0 overflow-hidden animate-boot" style={cell(0)}>
-          <ControlBar snapshot={snapshot} onChange={refresh} />
-        </div>
-
-        <div className="lg:col-span-1 min-h-0 overflow-hidden animate-boot" style={cell(1)}>
-          <AgentActivity liveTasks={stream.tasks} />
-        </div>
-        <div className="lg:col-span-2 min-h-0 overflow-hidden animate-boot" style={cell(2)}>
-          <AttackGraph />
-        </div>
-        <div className="lg:col-span-1 min-h-0 overflow-hidden animate-boot" style={cell(3)}>
-          <AuditTimeline liveAudit={stream.audit} />
-        </div>
-
-        <div className="lg:col-span-2 min-h-0 overflow-hidden animate-boot" style={cell(4)}>
-          <ModelSelector />
-        </div>
-        <div className="lg:col-span-2 min-h-0 overflow-hidden animate-boot" style={cell(5)}>
-          <CostMitre />
-        </div>
-      </main>
+      <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />
     </div>
   );
 }
