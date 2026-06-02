@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  background: #07090a;
+}
+
+body {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: #c7d1cc;
+  /* layered atmosphere: faint amber bloom top-left, cool depth bottom-right */
+  background:
+    radial-gradient(1200px 700px at 12% -8%, rgba(255, 176, 0, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 110% 120%, rgba(62, 198, 255, 0.05), transparent 55%),
+    #07090a;
+}
+
+/* --- CRT overlays ---------------------------------------------------------- */
+.crt-scanlines,
+.crt-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+.crt-scanlines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.22) 3px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+.crt-vignette {
+  background: radial-gradient(120% 120% at 50% 50%, transparent 62%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* --- HUD corner brackets --------------------------------------------------- */
+.hud {
+  position: relative;
+}
+.hud::before,
+.hud::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: rgba(255, 176, 0, 0.55);
+  pointer-events: none;
+}
+.hud::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.hud::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+
+/* glow text for accents */
+.glow {
+  text-shadow: 0 0 8px currentColor;
+}
+
+/* thin scrollbars for log panels */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #243430;
+  border-radius: 0;
+}
+
+/* selection in phosphor amber */
+::selection {
+  background: rgba(255, 176, 0, 0.3);
+}

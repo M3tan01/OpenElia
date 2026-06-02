@@ -119,3 +119,64 @@ def verify(log_path: Path) -> tuple[bool, str]:
             prev = stored_hash
 
     return True, "OK"
+
+
+def verify_detailed(log_path: Path) -> tuple[str, str]:
+    """
+    Like verify(), but distinguishes a legacy pre-chain prefix from tampering.
+
+    A log written before the HMAC-chain feature existed has leading entries with
+    no `chain_hash`. Those are unverifiable but NOT evidence of tampering — the
+    chained entries that follow still form a valid chain from genesis. This avoids
+    a false "tampered" alarm on such logs while keeping tamper detection strict
+    for the chained region.
+
+    Returns (status, message), status in:
+      - "empty"    : no log / no entries
+      - "ok"       : fully chained and valid
+      - "legacy"   : a contiguous leading un-chained prefix, then a valid chain
+                     (or an entirely un-chained log) — unverifiable, not tampered
+      - "tampered" : a chained entry is missing/mismatched, or a non-chained line
+                     appears AFTER the chain has started, or invalid JSON
+    """
+    if not log_path.exists():
+        return "empty", "OK (no log)"
+
+    lines = [ln.strip() for ln in log_path.read_text().splitlines() if ln.strip()]
+    if not lines:
+        return "empty", "OK (empty log)"
+
+    # Split off the contiguous leading prefix of un-chained (legacy) entries.
+    legacy = 0
+    for ln in lines:
+        try:
+            entry = json.loads(ln)
+        except json.JSONDecodeError:
+            return "tampered", f"Line {legacy + 1}: invalid JSON"
+        if "chain_hash" in entry:
+            break
+        legacy += 1
+
+    chained = lines[legacy:]
+    if not chained:
+        return "legacy", f"{legacy} un-chained entries; no HMAC chain present"
+
+    key = _hmac_key()
+    prev = _GENESIS_HASH
+    for offset, ln in enumerate(chained):
+        lineno = legacy + offset + 1
+        try:
+            entry = json.loads(ln)
+        except json.JSONDecodeError:
+            return "tampered", f"Line {lineno}: invalid JSON"
+        stored = entry.pop("chain_hash", None)
+        if stored is None:
+            return "tampered", f"Line {lineno}: missing chain_hash after chain start"
+        expected = hmac.new(key, prev.encode() + _canonical(entry), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(stored, expected):
+            return "tampered", f"Line {lineno}: chain_hash mismatch — tampered"
+        prev = stored
+
+    if legacy:
+        return "legacy", f"chain valid; {legacy} legacy un-chained entries before chain start"
+    return "ok", "OK"

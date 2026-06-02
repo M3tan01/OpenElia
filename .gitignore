@@ -239,3 +239,9 @@ roe.json
 
 # pipeline staging scratch (Claude<->Python handoff)
 pipeline/staging/
+
+# webdash build artifacts (regenerate with: cd webdash/frontend && npm run build)
+webdash/static/
+webdash/frontend/node_modules/
+webdash/frontend/dist/
+webdash/frontend/*.tsbuildinfo

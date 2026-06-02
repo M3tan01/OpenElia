@@ -20,7 +20,7 @@ def fixed_key(monkeypatch):
     monkeypatch.setattr("core.audit_chain._hmac_key", lambda: _TEST_KEY)
 
 
-from core.audit_chain import append, verify
+from core.audit_chain import append, verify, verify_detailed
 
 
 # ---------------------------------------------------------------------------
@@ -149,3 +149,59 @@ class TestVerifyTampered:
 
         ok, msg = verify(log)
         assert not ok
+
+
+# ---------------------------------------------------------------------------
+# verify_detailed() — distinguishes legacy (pre-chain) from tampered
+# ---------------------------------------------------------------------------
+
+class TestVerifyDetailed:
+    def test_clean_chain_is_ok(self, tmp_path):
+        log = tmp_path / "audit.log"
+        for i in range(3):
+            append(log, {"seq": i})
+        status, msg = verify_detailed(log)
+        assert status == "ok", msg
+
+    def test_empty_log(self, tmp_path):
+        assert verify_detailed(tmp_path / "audit.log")[0] == "empty"
+
+    def test_legacy_prefix_then_valid_chain(self, tmp_path):
+        """Pre-chain raw lines followed by a valid chain → legacy, NOT tampered."""
+        log = tmp_path / "audit.log"
+        # 2 legacy raw entries (no chain_hash), as an old code path would write
+        raw = [json.dumps({"task_id": "old1", "error": "x"}),
+               json.dumps({"task_id": "old2", "error": "y"})]
+        log.write_text("\n".join(raw) + "\n")
+        # append() now chains from GENESIS (last line has no chain_hash)
+        append(log, {"seq": 0})
+        append(log, {"seq": 1})
+        status, msg = verify_detailed(log)
+        assert status == "legacy", msg
+        assert "2" in msg  # reports legacy count
+
+    def test_all_unchained_is_legacy(self, tmp_path):
+        log = tmp_path / "audit.log"
+        log.write_text(json.dumps({"a": 1}) + "\n")
+        assert verify_detailed(log)[0] == "legacy"
+
+    def test_mid_chain_tamper_is_tampered(self, tmp_path):
+        log = tmp_path / "audit.log"
+        for i in range(3):
+            append(log, {"seq": i})
+        lines = log.read_text().splitlines()
+        e = json.loads(lines[1]); e["seq"] = 99; lines[1] = json.dumps(e)
+        log.write_text("\n".join(lines) + "\n")
+        assert verify_detailed(log)[0] == "tampered"
+
+    def test_stripped_hash_after_chain_start_is_tampered(self, tmp_path):
+        """Removing chain_hash from a chained entry is tampering, not legacy."""
+        log = tmp_path / "audit.log"
+        append(log, {"seq": 0})
+        append(log, {"seq": 1})
+        lines = log.read_text().splitlines()
+        e = json.loads(lines[1]); del e["chain_hash"]; lines[1] = json.dumps(e)
+        log.write_text("\n".join(lines) + "\n")
+        status, msg = verify_detailed(log)
+        assert status == "tampered"
+        assert "after chain start" in msg.lower()

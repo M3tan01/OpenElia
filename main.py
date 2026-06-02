@@ -582,6 +582,12 @@ async def cmd_purple(args) -> None:
 
 
 async def cmd_dashboard(args) -> None:
+    # --web launches the FastAPI + React web dashboard (localhost only);
+    # default remains the Rich TUI.
+    if getattr(args, "web", False):
+        from webdash.server import run as run_web
+        run_web(host="127.0.0.1", port=getattr(args, "port", 8765))
+        return
     from dashboard import Dashboard
     Dashboard().run()
 
@@ -784,7 +790,9 @@ def build_parser() -> argparse.ArgumentParser:
     msf_p.add_argument("--proxy-port", type=int)
     
     sub.add_parser("status", help="Show status")
-    sub.add_parser("dashboard", help="Launch live TUI")
+    p_dash = sub.add_parser("dashboard", help="Launch live TUI (or --web for the browser dashboard)")
+    p_dash.add_argument("--web", action="store_true", help="Launch the FastAPI + React web dashboard (127.0.0.1)")
+    p_dash.add_argument("--port", type=int, default=8765, help="Web dashboard port (default 8765)")
     sub.add_parser("sbom", help="Generate SBOM")
     sub.add_parser("archive", parents=[common], help="Package engagement archive")
     sub.add_parser("lock", help="Engage Global Kill-Switch")

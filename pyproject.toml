@@ -31,7 +31,9 @@ dependencies = [
     "chromadb>=0.4.0",
     "rich>=13.0.0",
     "httpx>=0.24.0",
-    "cryptography>=42.0"
+    "cryptography>=42.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29"
 ]
 
 [project.optional-dependencies]

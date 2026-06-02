@@ -1,0 +1,121 @@
+"""
+webdash/data.py — read adapters over OpenElia's existing state.
+
+Reuses StateManager / GraphManager / CostTracker / ModelManager / core.audit_chain
+rather than reimplementing any logic. Every reader points at an explicit state
+directory so tests can target a tmp_path.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import networkx as nx
+
+# Mirrors orchestrator._RED_AGENTS / _BLUE_AGENTS (+ reporter). Used by the
+# ModelSelector to offer per-agent overrides. Keep in sync with orchestrator.py.
+AGENT_REGISTRY: dict[str, list[str]] = {
+    "red": ["pentester_recon", "pentester_vuln", "pentester_exploit", "pentester_lat", "pentester_ex"],
+    "blue": ["defender_mon", "defender_ana", "defender_hunt", "defender_res"],
+    "reporter": ["reporter_agent"],
+}
+
+
+def _tail_jsonl(path: Path, limit: int) -> list[dict]:
+    """Last `limit` parsed JSON objects from a JSONL file. Skips bad lines."""
+    if not path.exists():
+        return []
+    out: list[dict] = []
+    for line in path.read_text(errors="replace").splitlines()[-limit:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+class DashboardData:
+    """Read-only views of engagement state, all rooted at one state directory."""
+
+    def __init__(self, state_dir: str | os.PathLike = "state") -> None:
+        self.dir = Path(state_dir)
+        self.audit_log = self.dir / "audit.log"
+        self.tasks_log = self.dir / "task_results.jsonl"
+        self.graph_path = self.dir / "attack_surface.json"
+        self.costs_path = self.dir / "costs.json"
+        self.db_path = self.dir / "engagement.db"
+
+    # --- engagement state -------------------------------------------------- #
+    def state(self) -> dict:
+        from state_manager import StateManager
+
+        return StateManager(db_path=str(self.db_path)).read()
+
+    # --- audit log (HMAC-chained) ----------------------------------------- #
+    def audit(self, limit: int = 200) -> dict:
+        from core.audit_chain import verify_detailed
+
+        events = _tail_jsonl(self.audit_log, limit)
+        status, msg = verify_detailed(self.audit_log)
+        # "legacy" = pre-chain prefix, unverifiable but not tampered → not an alarm.
+        return {
+            "events": events,
+            "count": len(events),
+            "chain_ok": status in ("ok", "legacy", "empty"),
+            "chain_status": status,
+            "chain_msg": msg,
+        }
+
+    # --- task results ------------------------------------------------------ #
+    def tasks(self, limit: int = 200) -> list[dict]:
+        return _tail_jsonl(self.tasks_log, limit)
+
+    # --- attack-surface graph --------------------------------------------- #
+    def graph(self) -> dict:
+        from graph_manager import GraphManager
+
+        gm = GraphManager(db_path=str(self.graph_path))
+        link_data = nx.node_link_data(gm.graph)
+        return {
+            "summary": gm.get_summary(),
+            "nodes": link_data.get("nodes", []),
+            "links": link_data.get("links", link_data.get("edges", [])),
+        }
+
+    # --- MITRE ATT&CK heatmap --------------------------------------------- #
+    def heatmap(self) -> dict:
+        from graph_manager import GraphManager
+
+        findings = self.state().get("findings", [])
+        return GraphManager(db_path=str(self.graph_path)).get_mitre_heatmap(findings)
+
+    # --- cost / budget ----------------------------------------------------- #
+    def cost(self) -> dict:
+        from cost_tracker import CostTracker
+
+        summary = CostTracker(log_path=str(self.costs_path)).get_summary()
+        series: list[dict] = []
+        if self.costs_path.exists():
+            try:
+                history = json.loads(self.costs_path.read_text())
+                series = [{"session": k, **v} for k, v in sorted(history.items())]
+            except (json.JSONDecodeError, OSError):
+                series = []
+        return {"summary": summary, "series": series}
+
+    # --- model / brain configuration (no secrets) ------------------------- #
+    def models(self) -> dict:
+        from model_manager import ModelManager
+
+        # get_config() holds only mode + model names + overrides — never api keys.
+        return {"config": ModelManager.get_config(), "agents": AGENT_REGISTRY}
+
+
+def get_data() -> DashboardData:
+    """FastAPI dependency. State dir from OPENELIA_STATE_DIR (default 'state')."""
+    return DashboardData(os.getenv("OPENELIA_STATE_DIR", "state"))
