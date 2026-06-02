@@ -23,7 +23,7 @@ const NAV: NavGroup[] = [
     group: "Config",
     views: [
       { id: "models", label: "Brain Models" },
-      { id: "roe", label: "RoE / Scope", disabled: true },
+      { id: "roe", label: "RoE / Scope" },
     ],
   },
 ];

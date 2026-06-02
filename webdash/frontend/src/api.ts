@@ -38,6 +38,12 @@ export interface GraphLink { source: string; target: string; relation?: string; 
 export interface GraphResp { summary: Record<string, number>; nodes: GraphNode[]; links: GraphLink[]; }
 export interface CostResp { summary: { session_cost: number; total_historical_cost: number; budget_remaining: number }; series: { session: string; total_cost: number; calls: number }[]; }
 export interface ModelsResp { config: Record<string, unknown>; agents: Record<string, string[]>; }
+export type RoEResp = {
+  authorized_subnets: string[];
+  blacklisted_ips: string[];
+  prohibited_tools: string[];
+  quiet_hours: string | { start?: string; end?: string } | null;
+};
 
 // --- live stream -------------------------------------------------------------- //
 export interface StreamState {
