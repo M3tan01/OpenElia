@@ -581,6 +581,29 @@ async def cmd_purple(args) -> None:
     print("\n[Purple Loop] Feedback loop complete.")
 
 
+async def cmd_forge(args) -> None:
+    """Forge a topology/RoE-constrained adversary profile from a MITRE actor."""
+    from adversary_forge import AdversaryForge
+    from adversary_schema import AdversaryProfile, save_profile
+
+    _require_api_key(args.brain_tier)
+    forge = AdversaryForge()
+    print(f"[*] Forging adversary profile for {args.actor} (tier={args.brain_tier})...")
+    result = await forge.forge(args.actor, brain_tier=args.brain_tier)
+    profile = AdversaryProfile(**result["profile"])  # unified schema gate
+    meta = result["metadata"]
+    print(f"[+] Techniques applicable: {meta['kept']} | filtered: {meta['dropped']}")
+    for d in result["omitted"]:
+        print(f"    - dropped {d['t_code']}: {d['reason']}")
+    if getattr(args, "auto_commit", False):
+        adir = getattr(args, "adversaries_dir", "adversaries")
+        path = save_profile(profile, f"tailored_{args.actor.lower()}", adversaries_dir=adir)
+        print(f"[+] Saved to {path}")
+    else:
+        print("[i] Dry run (use --auto-commit to write). Profile preview:")
+        print(profile.model_dump_json(indent=2))
+
+
 async def cmd_dashboard(args) -> None:
     # --web launches the FastAPI + React web dashboard (localhost only);
     # default remains the Rich TUI.
@@ -815,6 +838,13 @@ def build_parser() -> argparse.ArgumentParser:
     purple_p.add_argument("--resume", action="store_true")
     purple_p.add_argument("--iterations", type=int, default=2)
     
+    forge_p = sub.add_parser("forge", parents=[common],
+                             help="Forge an RoE/topology-constrained adversary profile")
+    forge_p.add_argument("--actor", required=True, help="MITRE threat-actor name or alias")
+    forge_p.add_argument("--scope", help="Network block (informational; run uses RoE)")
+    forge_p.add_argument("--auto-commit", action="store_true",
+                         help="Write the profile to adversaries/ (default: dry run)")
+
     clear_p = sub.add_parser("clear", help="Clear state")
     clear_p.add_argument("--force", "-f", action="store_true")
 
@@ -849,7 +879,7 @@ def main() -> None:
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model}
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model, "forge": cmd_forge}
     handler = handlers.get(args.command)
     if handler:
         asyncio.run(handler(args))
