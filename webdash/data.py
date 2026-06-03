@@ -219,6 +219,16 @@ class DashboardData:
             result.append({**_ADVERSARY_SENTINEL, **{k: profile[k] for k in _ADVERSARY_WHITELIST if k in profile}})
         return result
 
+    # --- actor map ---------------------------------------------------------- #
+    def actors(self) -> list[str]:
+        """Sorted actor names from the slim actor map (OPENELIA_ACTOR_MAP env,
+        default 'actor_ttps.json'). Missing/unreadable -> []."""
+        path = Path(os.getenv("OPENELIA_ACTOR_MAP", "actor_ttps.json"))
+        try:
+            return sorted(json.loads(path.read_text()).keys())
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return []
+
     # --- system ------------------------------------------------------------- #
     def system(self) -> dict:
         """Return a lightweight system status dict.

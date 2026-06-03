@@ -83,6 +83,11 @@ def get_adversaries(data: DashboardData = Depends(get_data)) -> list[dict]:
     return data.adversaries()
 
 
+@router.get("/actors")
+def get_actors(data: DashboardData = Depends(get_data)) -> list[str]:
+    return data.actors()
+
+
 @router.get("/system")
 def get_system(data: DashboardData = Depends(get_data)) -> dict:
     """Lightweight system status: gateway health + active engagement count. Read-only."""
