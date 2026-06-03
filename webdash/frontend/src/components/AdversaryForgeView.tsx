@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, ActorResp, ForgeResp } from "../api";
 import { Badge, Panel } from "./Panel";
+import { CustomAdversaryForm } from "./CustomAdversaryForm";
 
 type Tier = "local" | "expensive";
+type Mode = "forge" | "custom";
 
 export function AdversaryForgeView() {
+  const [mode, setMode] = useState<Mode>("forge");
   const [actors, setActors] = useState<ActorResp[] | null>(null);
   const [actor, setActor] = useState("");
   const [tier, setTier] = useState<Tier>("local");
@@ -32,8 +35,43 @@ export function AdversaryForgeView() {
     } finally { setPending(false); }
   }
 
+  const toggle = (
+    <div className="flex gap-2">
+      {(["forge", "custom"] as Mode[]).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => setMode(m)}
+          className={`font-display uppercase tracking-widest text-[10px] px-2 py-0.5 border ${
+            mode === m ? "border-amber text-amber glow" : "border-line text-dim"
+          }`}
+        >
+          {m === "forge" ? "Forge (actor)" : "Custom"}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === "custom") {
+    return (
+      <Panel title="Adversary Forge" right={toggle} className="h-full">
+        <div className="overflow-auto scroll-thin h-full">
+          <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70 mb-2">
+            Custom Adversary
+          </div>
+          <CustomAdversaryForm />
+          <div className="mt-3 border-t border-line pt-2">
+            <span className="text-[11px] font-mono text-dim">
+              Saved to adversaries/ and selectable as an APT profile. Running it still goes through the gated /run path.
+            </span>
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
   return (
-    <Panel title="Adversary Forge" className="h-full">
+    <Panel title="Adversary Forge" right={toggle} className="h-full">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
         {/* left: config workspace */}
         <div className="space-y-3">

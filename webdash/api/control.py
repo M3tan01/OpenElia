@@ -7,6 +7,7 @@ Orchestrator.route() is launched as a background run.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Literal
 
@@ -247,6 +248,58 @@ async def run_playbook(req: PlaybookRun, data: DashboardData = Depends(get_data)
         stealth=req.stealth or pb.stealth, brain_tier=req.brain_tier,
         apt_profile=pb.apt_profile, state_dir=str(data.dir),
     )
+
+
+class AdversaryCreate(BaseModel):
+    name: str
+    alias: str = ""
+    description: str = ""
+    preferred_ttps: list[str] = []
+    tools: list[str] = []
+    stealth_required: bool = False
+    rationale: str = ""
+    overwrite: bool = False
+    confirm: bool = False
+
+
+@router.post("/adversaries")
+def create_adversary(req: AdversaryCreate) -> dict:
+    """Author a custom adversary profile from the dashboard. Token + confirm gated;
+    validated via AdversaryProfile and written through save_profile's traversal
+    guards. No-overwrite by default."""
+    require_confirm(req.confirm)
+    if not req.name.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="name is required")
+
+    from pathlib import Path
+
+    from adversary_schema import AdversaryProfile, make_stem, save_profile
+
+    try:
+        profile = AdversaryProfile(
+            name=req.name,
+            alias=req.alias,
+            description=req.description,
+            preferred_ttps=req.preferred_ttps,
+            tools=req.tools,
+            stealth_required=req.stealth_required,
+            rationale=req.rationale,
+        )
+    except Exception as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"invalid adversary: {exc}")
+
+    adv_dir = os.getenv("OPENELIA_ADVERSARIES_DIR", "adversaries")
+    stem = make_stem(req.name)
+    if (Path(adv_dir) / f"{stem}.json").exists() and not req.overwrite:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"adversary '{stem}' already exists (set overwrite to replace)",
+        )
+    try:
+        save_profile(profile, stem, adversaries_dir=adv_dir)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {"name": profile.name, "stem": stem, "saved": f"{adv_dir}/{stem}.json"}
 
 
 @router.get("/run/{run_id}/status")
