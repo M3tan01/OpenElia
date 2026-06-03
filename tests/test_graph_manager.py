@@ -43,6 +43,39 @@ class TestAddAndQuery:
     def test_get_neighbors_unknown_node_returns_empty(self, gm):
         assert gm.get_neighbors("9.9.9.9") == []
 
+
+class TestTargetSignal:
+    def test_absent_target_is_neutral(self, gm):
+        assert gm.target_signal("9.9.9.9") == 0.0
+
+    def test_bare_host_no_services_is_zero(self, gm):
+        gm.add_host("10.0.0.1")
+        assert gm.target_signal("10.0.0.1") == 0.0
+
+    def test_host_with_services_scores_positive(self, gm):
+        gm.add_host("10.0.0.1")
+        gm.add_service("10.0.0.1", 22, "tcp", "ssh")
+        assert gm.target_signal("10.0.0.1") > 0.0
+
+    def test_vuln_rich_host_outranks_service_only_host(self, gm):
+        gm.add_host("10.0.0.1")
+        gm.add_service("10.0.0.1", 80, "tcp", "http")
+        bare = gm.target_signal("10.0.0.1")
+
+        gm.add_host("10.0.0.2")
+        gm.add_service("10.0.0.2", 80, "tcp", "http")
+        gm.add_vulnerability("10.0.0.2:80/tcp", "CVE-2021-44228", "critical")
+        rich = gm.target_signal("10.0.0.2")
+
+        assert rich > bare
+
+    def test_signal_capped_at_one(self, gm):
+        gm.add_host("10.0.0.1")
+        for p in range(20):
+            gm.add_service("10.0.0.1", p, "tcp", "svc")
+            gm.add_vulnerability(f"10.0.0.1:{p}/tcp", f"CVE-x-{p}", "high")
+        assert gm.target_signal("10.0.0.1") <= 1.0
+
     def test_query_by_type_filters_correctly(self, gm):
         gm.add_host("10.0.0.1")
         gm.add_host("10.0.0.2")
