@@ -243,7 +243,14 @@ class TestCVSSInFindings:
         m1.initialize_engagement("10.0.0.5", "scope")
         # Second instantiation re-runs _init_db; must not raise
         m2 = StateManager(db_path=db_path)
+        # Explicit third init pass — a non-idempotent guard would raise here
+        # ("duplicate column name") on the ALTER.
+        m2._init_db()
         with m2._get_conn() as conn:
-            cols = {r[1] for r in conn.execute("PRAGMA table_info(findings)").fetchall()}
+            all_cols = [r[1] for r in conn.execute("PRAGMA table_info(findings)").fetchall()]
+        cols = set(all_cols)
         assert "cvss_score" in cols
         assert "cvss_vector" in cols
+        # No duplicate columns added across the repeated migration passes.
+        assert all_cols.count("cvss_score") == 1
+        assert all_cols.count("cvss_vector") == 1
