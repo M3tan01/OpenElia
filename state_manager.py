@@ -83,6 +83,8 @@ class StateManager:
                     evidence TEXT,
                     mitre_ttp TEXT,
                     timestamp TEXT,
+                    cvss_score REAL,
+                    cvss_vector TEXT,
                     FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
                 );
 
@@ -156,6 +158,18 @@ class StateManager:
                     FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
                 );
             """)
+            conn.commit()
+
+            # Idempotent migration: add cvss columns to findings if absent
+            # (handles existing DBs created before this column was added)
+            existing_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(findings)").fetchall()
+            }
+            if "cvss_score" not in existing_cols:
+                conn.execute("ALTER TABLE findings ADD COLUMN cvss_score REAL")
+            if "cvss_vector" not in existing_cols:
+                conn.execute("ALTER TABLE findings ADD COLUMN cvss_vector TEXT")
             conn.commit()
 
     def _get_last_active_id(self) -> Optional[str]:
@@ -378,14 +392,24 @@ class StateManager:
             conn.execute("UPDATE phases SET data = ? WHERE engagement_id = ? AND name = ?", (json.dumps(current_data), eid, phase))
             conn.commit()
 
-    def add_finding(self, severity: str, title: str, description: str, evidence: str, mitre_ttp: str, engagement_id: str = None) -> None:
+    def add_finding(
+        self,
+        severity: str,
+        title: str,
+        description: str,
+        evidence: str,
+        mitre_ttp: str,
+        engagement_id: str = None,
+        cvss_score: float | None = None,
+        cvss_vector: str | None = None,
+    ) -> None:
         eid = engagement_id or self.active_engagement_id
         with self._get_conn() as conn:
             f_id = f"FIND-{int(time.time())}-{uuid.uuid4().hex[:4].upper()}"
             conn.execute("""
-                INSERT INTO findings (id, engagement_id, severity, title, description, evidence, mitre_ttp, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (f_id, eid, severity, title, description, evidence, mitre_ttp, datetime.now(timezone.utc).isoformat()))
+                INSERT INTO findings (id, engagement_id, severity, title, description, evidence, mitre_ttp, timestamp, cvss_score, cvss_vector)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f_id, eid, severity, title, description, evidence, mitre_ttp, datetime.now(timezone.utc).isoformat(), cvss_score, cvss_vector))
             conn.commit()
 
     def add_blue_alert(self, alert_type: str, description: str, severity: str, source: str, engagement_id: str = None) -> None:

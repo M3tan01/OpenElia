@@ -127,3 +127,123 @@ class TestEscalatedAnalysisCount:
             sm.add_blue_analysis({"verdict": "TP", "severity": "CRITICAL",
                                    "reasoning": f"threat {i}", "escalate": True})
         assert sm.get_escalated_analysis_count() == 3
+
+
+# ---------------------------------------------------------------------------
+# CVSS score + vector in findings (Task A)
+# ---------------------------------------------------------------------------
+
+class TestCVSSInFindings:
+    def test_add_finding_with_cvss_round_trips(self, sm):
+        """CVSS score and vector are stored and retrievable."""
+        sm.add_finding(
+            severity="critical",
+            title="RCE via deserialization",
+            description="Unsafe object deserialization allows RCE.",
+            evidence="PoC payload executed /tmp/pwn",
+            mitre_ttp="T1059",
+            cvss_score=9.8,
+            cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        )
+        with sm._get_conn() as conn:
+            row = conn.execute(
+                "SELECT cvss_score, cvss_vector FROM findings WHERE title = ?",
+                ("RCE via deserialization",),
+            ).fetchone()
+        assert row is not None
+        assert row["cvss_score"] == 9.8
+        assert row["cvss_vector"] == "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+
+    def test_add_finding_without_cvss_stores_null(self, sm):
+        """Back-compat: omitting cvss args stores NULL, no crash."""
+        sm.add_finding(
+            severity="low",
+            title="Missing header",
+            description="X-Frame-Options absent.",
+            evidence="curl output",
+            mitre_ttp="T1190",
+        )
+        with sm._get_conn() as conn:
+            row = conn.execute(
+                "SELECT cvss_score, cvss_vector FROM findings WHERE title = ?",
+                ("Missing header",),
+            ).fetchone()
+        assert row is not None
+        assert row["cvss_score"] is None
+        assert row["cvss_vector"] is None
+
+    def test_migration_adds_columns_to_legacy_db(self, tmp_path):
+        """Guarded ALTER migration adds cvss columns to a legacy DB that
+        lacks them, and leaves existing rows intact."""
+        db_path = str(tmp_path / "legacy.db")
+
+        # --- Build a legacy DB without the cvss columns ---
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS engagement (
+                id TEXT PRIMARY KEY,
+                target TEXT,
+                scope TEXT,
+                started TEXT,
+                authorized INTEGER,
+                current_phase TEXT,
+                is_active INTEGER DEFAULT 1,
+                is_locked INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS findings (
+                id TEXT PRIMARY KEY,
+                engagement_id TEXT,
+                severity TEXT,
+                title TEXT,
+                description TEXT,
+                evidence TEXT,
+                mitre_ttp TEXT,
+                timestamp TEXT,
+                FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
+            );
+        """)
+        # Insert a legacy row (no cvss columns)
+        conn.execute(
+            "INSERT INTO engagement (id, target, scope, started, authorized, current_phase)"
+            " VALUES ('ENG-LEGACY', '10.0.0.1', 'test', '2024-01-01', 1, 'recon')"
+        )
+        conn.execute(
+            "INSERT INTO findings (id, engagement_id, severity, title, description, evidence, mitre_ttp, timestamp)"
+            " VALUES ('FIND-OLD', 'ENG-LEGACY', 'high', 'Old Finding', 'desc', 'ev', 'T1000', '2024-01-01')"
+        )
+        conn.commit()
+        conn.close()
+
+        # --- Run StateManager (triggers _init_db + migration) ---
+        manager = StateManager(db_path=db_path)
+
+        # Columns must now exist
+        with manager._get_conn() as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(findings)").fetchall()}
+        assert "cvss_score" in cols
+        assert "cvss_vector" in cols
+
+        # Pre-existing row is intact and new columns are NULL
+        with manager._get_conn() as c:
+            row = c.execute(
+                "SELECT * FROM findings WHERE id = 'FIND-OLD'"
+            ).fetchone()
+        assert row is not None
+        assert row["severity"] == "high"
+        assert row["cvss_score"] is None
+        assert row["cvss_vector"] is None
+
+    def test_migration_idempotent_on_fresh_db(self, tmp_path):
+        """Running StateManager twice on the same DB does not error
+        (columns already present, guarded ALTER is a no-op)."""
+        db_path = str(tmp_path / "fresh.db")
+        m1 = StateManager(db_path=db_path)
+        m1.initialize_engagement("10.0.0.5", "scope")
+        # Second instantiation re-runs _init_db; must not raise
+        m2 = StateManager(db_path=db_path)
+        with m2._get_conn() as conn:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(findings)").fetchall()}
+        assert "cvss_score" in cols
+        assert "cvss_vector" in cols

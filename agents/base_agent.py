@@ -151,7 +151,9 @@ class BaseAgent(ABC):
                         "title": {"type": "string"},
                         "description": {"type": "string"},
                         "evidence": {"type": "string"},
-                        "mitre_ttp": {"type": "string"}
+                        "mitre_ttp": {"type": "string"},
+                        "cvss_score": {"type": "number", "description": "CVSS v3.1 base score (0.0–10.0)"},
+                        "cvss_vector": {"type": "string", "description": "CVSS v3.1 vector string, e.g. CVSS:3.1/AV:N/..."}
                     },
                     "required": ["severity", "title", "description", "evidence", "mitre_ttp"]
                 },
@@ -233,7 +235,9 @@ class BaseAgent(ABC):
                     title=tool_input["title"],
                     description=tool_input["description"],
                     evidence=tool_input["evidence"],
-                    mitre_ttp=tool_input["mitre_ttp"]
+                    mitre_ttp=tool_input["mitre_ttp"],
+                    cvss_score=tool_input.get("cvss_score"),
+                    cvss_vector=tool_input.get("cvss_vector"),
                 )
                 return f"Finding logged: [{tool_input['severity'].upper()}] {tool_input['title']}"
 
