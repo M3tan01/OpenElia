@@ -41,6 +41,23 @@ same-origin. Without a build the API works but `/` has no UI.
 - `/api/models` never returns API keys; `/api/models/auth` is write-only.
 - Every control action is written to the HMAC-chained audit log.
 
+### Limitations & hardening notes
+
+This console is built for a **single operator on localhost**. The following are
+accepted trade-offs at that scope — revisit every one before binding anywhere else:
+
+- **No transport encryption.** Traffic is plain `http`/`ws`. The bearer token rides
+  the WebSocket subprotocol (kept off URLs/logs) but is still sent in clear. This is
+  safe *only* because the server binds `127.0.0.1`. **Never bind to `0.0.0.0` or a
+  routable interface without terminating TLS in front of it** (e.g. a localhost-only
+  reverse proxy). `run()` refuses non-localhost hosts to enforce this.
+- **Token has no TTL or rotation.** The bearer token is generated once and persists in
+  the OS keychain until manually replaced (`WEBDASH_TOKEN`). There is no expiry, refresh,
+  or revocation flow. Fine for a solo session; add rotation before any multi-user or
+  long-lived deployment.
+- **No per-endpoint rate limiting.** The auth + confirm + scope gates are the only
+  throttle. Add rate limiting if the surface is ever exposed beyond localhost.
+
 ## Layout
 
 | Component | Endpoints |

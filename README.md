@@ -190,7 +190,8 @@ python3 main.py dashboard
 
 # Launch the browser C2 console (FastAPI + React, 127.0.0.1 only)
 # Prints http://127.0.0.1:8765/#token=<token> — open the FULL url incl. the #token fragment.
-# First time only: cd webdash/frontend && npm install && npm run build
+# First time only (static/ is gitignored — no UI until built):
+#   cd webdash/frontend && npm install && npm run build
 python3 main.py dashboard --web            # --port 8888 to change port
 
 # Run a red team engagement (Single Target)
