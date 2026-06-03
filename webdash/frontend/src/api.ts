@@ -68,6 +68,16 @@ export type RunResp = { run_id: string; status: string };
 
 export type PlaybookPhase = { name: string; tools: string[]; post_analysis: string | null };
 export type PlaybookVar = { required: boolean; description: string };
+export type Ioc = { type: string; value: string };
+export type StixBrief = {
+  iocs: Ioc[];
+  ttps: string[];
+  actors: string[];
+  malware: string[];
+  counts: Record<string, number>;
+  hunt_task: string;
+};
+
 export type CleanupAction = {
   id: string;
   description: string;

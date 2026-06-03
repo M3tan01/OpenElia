@@ -23,6 +23,7 @@ const NAV: NavGroup[] = [
     views: [
       { id: "audit", label: "Audit Timeline" },
       { id: "cost", label: "Cost & MITRE" },
+      { id: "stix", label: "Threat Hunt" },
       { id: "cleanup", label: "Rollback Queue" },
     ],
   },
