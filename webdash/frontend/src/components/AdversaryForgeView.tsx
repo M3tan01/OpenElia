@@ -34,7 +34,8 @@ export function AdversaryForgeView() {
 
   return (
     <Panel title="Adversary Forge" className="h-full">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
+      <div className="flex flex-col h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-auto">
         {/* left: config workspace */}
         <div className="space-y-3">
           <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
@@ -96,8 +97,8 @@ export function AdversaryForgeView() {
         </div>
       </div>
 
-      {/* footer security anchor */}
-      <div className="mt-3 border-t border-line pt-2 flex items-center justify-between">
+      {/* footer security anchor — pinned to panel bottom */}
+      <div className="mt-3 border-t border-line pt-2 flex items-center justify-between shrink-0">
         <span className="text-[11px] font-mono text-dim">
           Forge generates a profile only — running it still requires the gated /run path.
         </span>
@@ -109,6 +110,7 @@ export function AdversaryForgeView() {
         >
           {pending ? "···" : "▶ Forge Profile"}
         </button>
+      </div>
       </div>
     </Panel>
   );
