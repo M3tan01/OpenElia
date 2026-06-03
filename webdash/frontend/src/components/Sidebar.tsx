@@ -13,6 +13,7 @@ const NAV: NavGroup[] = [
       { id: "agents", label: "Agent Activity" },
       { id: "graph", label: "Attack Graph" },
       { id: "apt", label: "APT Profiles" },
+      { id: "forge", label: "Adversary Forge" },
     ],
   },
   {
