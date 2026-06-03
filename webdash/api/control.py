@@ -48,6 +48,13 @@ class PurpleRun(BaseModel):
     confirm: bool = False
 
 
+class ForgeRun(BaseModel):
+    actor: str
+    brain_tier: str = "local"
+    auto_commit: bool = False
+    confirm: bool = False
+
+
 class Confirm(BaseModel):
     confirm: bool = False
 
@@ -90,6 +97,28 @@ async def run_purple(req: PurpleRun, data: DashboardData = Depends(get_data), rm
         rm, domain="purple", task=req.task, targets=[req.target], stealth=req.stealth,
         proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile, state_dir=str(data.dir),
     )
+
+
+@router.post("/forge")
+async def run_forge(req: ForgeRun, data: DashboardData = Depends(get_data)) -> dict:
+    # Forge only reads + generates a profile; it does NOT launch ops, so it needs
+    # token + confirm but not scope_gate. Running the forged profile later still
+    # goes through the gated /run/* endpoints.
+    require_confirm(req.confirm)
+    from adversary_forge import AdversaryForge
+    from adversary_schema import AdversaryProfile, save_profile
+
+    result = await AdversaryForge().forge(req.actor, brain_tier=req.brain_tier)
+    profile = AdversaryProfile(**result["profile"])  # unified schema gate
+    saved_path = None
+    if req.auto_commit:
+        saved_path = save_profile(profile, f"tailored_{req.actor.lower()}")
+    return {
+        "profile": profile.model_dump(),
+        "omitted": result["omitted"],
+        "metadata": result["metadata"],
+        "saved_path": saved_path,
+    }
 
 
 @router.get("/run/{run_id}/status")

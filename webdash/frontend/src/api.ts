@@ -68,6 +68,14 @@ export type RunResp = { run_id: string; status: string };
 
 export type SystemResp = { gateway: string; active_engagements: number };
 
+export type ActorResp = string;
+export type ForgeResp = {
+  profile: AdversaryResp;
+  omitted: { t_code: string; reason: string }[];
+  metadata: { actor: string; tier: string; detected_os?: string[]; kept: number; dropped: number };
+  saved_path: string | null;
+};
+
 // --- live stream -------------------------------------------------------------- //
 export interface StreamState {
   connected: boolean;

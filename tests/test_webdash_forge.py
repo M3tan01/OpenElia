@@ -23,3 +23,36 @@ def test_actors_missing_map_returns_empty(tmp_path, monkeypatch, client, auth):
     r = client.get("/api/actors", headers=auth)
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_forge_requires_token(client):
+    assert client.post("/api/forge", json={"actor": "APT29"}).status_code == 401
+
+
+def test_forge_requires_confirm(client, auth):
+    r = client.post("/api/forge", json={"actor": "APT29", "confirm": False}, headers=auth)
+    assert r.status_code == 400
+
+
+def test_forge_returns_profile_and_omitted(monkeypatch, client, auth):
+    fake = {
+        "profile": {"name": "APT29", "alias": "APT29", "description": "d",
+                    "preferred_ttps": ["T1059.001"], "tools": [],
+                    "stealth_required": False, "rationale": "r"},
+        "omitted": [{"t_code": "T1110", "reason": "RoE blacklist"}],
+        "metadata": {"actor": "APT29", "tier": "local", "kept": 1, "dropped": 1},
+    }
+
+    async def fake_forge(self, actor_name, brain_tier="local"):
+        return fake
+
+    monkeypatch.setattr("adversary_forge.AdversaryForge.forge", fake_forge)
+    r = client.post("/api/forge",
+                    json={"actor": "APT29", "brain_tier": "local",
+                          "auto_commit": False, "confirm": True},
+                    headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["profile"]["name"] == "APT29"
+    assert body["omitted"][0]["t_code"] == "T1110"
+    assert body["saved_path"] is None  # auto_commit False -> not written
