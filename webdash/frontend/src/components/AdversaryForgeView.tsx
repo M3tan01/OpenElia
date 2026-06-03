@@ -41,13 +41,19 @@ export function AdversaryForgeView() {
           <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
             Configuration
           </div>
-          <select
-            value={actor}
-            onChange={(e) => setActor(e.target.value)}
-            className="w-full bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
-          >
-            {(actors ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+          {actors === null && !err ? (
+            <div className="text-dim text-xs italic">loading actors…</div>
+          ) : actors && actors.length === 0 ? (
+            <div className="text-amber/70 text-xs">no actors — run scripts/extract_actor_ttps.py</div>
+          ) : (
+            <select
+              value={actor}
+              onChange={(e) => setActor(e.target.value)}
+              className="w-full bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
+            >
+              {(actors ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          )}
           <div className="flex gap-2">
             {(["local", "expensive"] as Tier[]).map((t) => (
               <button
