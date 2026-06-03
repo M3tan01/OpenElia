@@ -48,6 +48,7 @@ def post_run_hook(task: AgentTask, result: AgentResult, context: dict) -> None:
         "output_keys": list(result.output.keys()),
         "completed_at": result.completed_at,
         "tokens_used": result.tokens_used,
+        "priority": round(getattr(task, "priority", 0.0), 4),
     }
     results_log = state_dir / "task_results.jsonl"
     try:
