@@ -63,6 +63,28 @@ class GraphManager:
     def query_by_type(self, node_type):
         return [n for n, d in self.graph.nodes(data=True) if d.get("type") == node_type]
 
+    def target_signal(self, target) -> float:
+        """Attack-graph value of a target in [0, 1] — used to bias scheduling.
+
+        Derived from what we ALREADY know about the target: its exposed services
+        and the vulnerabilities reachable through them. A richer host (more
+        services / known vulns) ranks higher. A target absent from the graph
+        returns 0.0, so a fresh/empty graph is neutral and the scheduler falls
+        back to the risk-only priority.
+        """
+        if target not in self.graph:
+            return 0.0
+        services = [n for n in self.graph.successors(target)
+                    if self.graph.nodes[n].get("type") == "service"]
+        vuln_count = 0
+        for svc in services:
+            vuln_count += sum(
+                1 for n in self.graph.successors(svc)
+                if self.graph.nodes[n].get("type") == "vulnerability"
+            )
+        raw = 0.1 * len(services) + 0.2 * vuln_count
+        return min(1.0, raw)
+
     def detected_os(self) -> set:
         """Lowercased OS strings across host nodes. Hosts with no os are skipped.
 

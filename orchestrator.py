@@ -164,8 +164,12 @@ class Orchestrator:
                 )
                 # Turn the (previously display-only) risk signal into a scheduling
                 # priority so high-success / low-detection targets run first.
+                # The attack graph adds a boost for targets we already know are
+                # service-/vuln-rich (0 for unknown targets → neutral).
+                graph_signal = self.risk_calculator.graph_manager.target_signal(target)
                 priority = prioritizer.score(
                     risk["success_probability"], risk["detection_risk"],
+                    graph_signal=graph_signal,
                 )
                 for tier, agent_name in self._RED_AGENTS:
                     agent_task = AgentTask(
