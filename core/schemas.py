@@ -55,6 +55,7 @@ class AgentTask(BaseModel):
     apt_profile: str | None = None
     created_at: str = Field(default_factory=_now_iso)
     retry_count: int = 0
+    priority: float = 0.0  # higher = scheduled sooner within its tier (see core.prioritizer)
 
     model_config = {"frozen": True}   # Tasks are immutable — retries create new instances
 

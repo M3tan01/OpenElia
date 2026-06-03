@@ -11,6 +11,7 @@ Design:
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 from collections.abc import Awaitable, Callable
 
@@ -32,15 +33,20 @@ class AsyncWorkerPool:
     """
 
     def __init__(self, workers_per_tier: int = 3) -> None:
-        self._queues: dict[AgentTier, asyncio.Queue[AgentTask]] = {
-            tier: asyncio.Queue() for tier in AgentTier
+        # PriorityQueue per tier: highest AgentTask.priority drains first WITHIN a
+        # tier (tier stratification is unchanged). Items are
+        # (-priority, seq, task); the monotonic seq gives a stable FIFO tiebreak
+        # for equal priorities and ensures the frozen AgentTask is never compared.
+        self._queues: dict[AgentTier, asyncio.PriorityQueue] = {
+            tier: asyncio.PriorityQueue() for tier in AgentTier
         }
+        self._seq = itertools.count()
         self._results: list[AgentResult] = []
         self._workers_per_tier = workers_per_tier
 
     async def submit(self, task: AgentTask) -> None:
-        """Enqueue a task into its tier queue. Non-blocking."""
-        await self._queues[task.tier].put(task)
+        """Enqueue a task into its tier queue, ordered by priority. Non-blocking."""
+        await self._queues[task.tier].put((-task.priority, next(self._seq), task))
 
     async def run_until_complete(
         self,
@@ -85,7 +91,7 @@ class AsyncWorkerPool:
         queue = self._queues[tier]
         while not stop.is_set():
             try:
-                task = queue.get_nowait()
+                _neg_priority, _seq, task = queue.get_nowait()
             except asyncio.QueueEmpty:
                 await asyncio.sleep(0)  # yield — recheck stop or new items
                 continue
@@ -97,7 +103,8 @@ class AsyncWorkerPool:
                 log.warning("[WorkerPool] Task %s failed: %s", task.task_id, exc)
                 if task.retry_count < MAX_RETRIES:
                     retried = task.model_copy(update={"retry_count": task.retry_count + 1})
-                    await queue.put(retried)
+                    # Re-enqueue as a priority tuple (queue holds tuples, not raw tasks).
+                    await queue.put((-retried.priority, next(self._seq), retried))
                 else:
                     self._results.append(
                         AgentResult(

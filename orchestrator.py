@@ -154,12 +154,18 @@ class Orchestrator:
         """Build AgentTask objects and submit them to the pool."""
 
         if domain in ("red", "purple"):
+            from core import prioritizer
             for target in targets:
                 risk = self.risk_calculator.calculate_exploit_risk(target, task, stealth)
                 print(
                     f"[Orchestrator] Risk Analysis ({target}): "
                     f"Success {risk['success_probability']}% | "
                     f"Detection {risk['detection_risk']}"
+                )
+                # Turn the (previously display-only) risk signal into a scheduling
+                # priority so high-success / low-detection targets run first.
+                priority = prioritizer.score(
+                    risk["success_probability"], risk["detection_risk"],
                 )
                 for tier, agent_name in self._RED_AGENTS:
                     agent_task = AgentTask(
@@ -171,6 +177,7 @@ class Orchestrator:
                         stealth=stealth,
                         proxy_port=proxy_port,
                         apt_profile=apt_profile,
+                        priority=priority,
                     )
                     await self._pool.submit(agent_task)
 

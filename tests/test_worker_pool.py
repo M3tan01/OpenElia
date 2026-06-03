@@ -77,3 +77,38 @@ async def test_tasks_run_concurrently_within_same_tier():
 
     assert len(results) == 3
     assert elapsed < 0.15, f"Tasks ran serially (elapsed={elapsed:.2f}s) — concurrency broken"
+
+
+async def test_higher_priority_drains_first_within_tier():
+    """With one worker on a tier, the highest-priority task runs first regardless
+    of arrival order."""
+    order: list[str] = []
+
+    async def _rec(task: AgentTask) -> AgentResult:
+        order.append(task.agent_name)
+        return AgentResult(task_id=task.task_id, agent_name=task.agent_name,
+                           status="success", output={})
+
+    pool = AsyncWorkerPool(workers_per_tier=1)
+    # Arrival order low, high, mid → expected drain order high, mid, low.
+    await pool.submit(AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name="low", payload={}, priority=0.1))
+    await pool.submit(AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name="high", payload={}, priority=0.9))
+    await pool.submit(AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name="mid", payload={}, priority=0.5))
+    await pool.run_until_complete(_rec)
+    assert order == ["high", "mid", "low"]
+
+
+async def test_equal_priority_preserves_fifo():
+    """Equal priorities fall back to FIFO via the monotonic seq tiebreak."""
+    order: list[str] = []
+
+    async def _rec(task: AgentTask) -> AgentResult:
+        order.append(task.agent_name)
+        return AgentResult(task_id=task.task_id, agent_name=task.agent_name,
+                           status="success", output={})
+
+    pool = AsyncWorkerPool(workers_per_tier=1)
+    for n in ("a", "b", "c"):
+        await pool.submit(AgentTask(domain=Domain.RED, tier=AgentTier.RECON, agent_name=n, payload={}, priority=0.5))
+    await pool.run_until_complete(_rec)
+    assert order == ["a", "b", "c"]
