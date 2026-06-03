@@ -79,38 +79,71 @@ export type ForgeResp = {
 // --- live stream -------------------------------------------------------------- //
 export interface StreamState {
   connected: boolean;
+  authError: boolean;  // server rejected the token (1008) — relaunch required
   snapshot: StateResp | null;
   audit: AuditEvent[];
   tasks: TaskResult[];
 }
 
+const WS_BACKOFF_MAX_MS = 15000;
+const WS_AUTH_CLOSE = 1008;  // policy violation — bad/expired token (see webdash/stream.py)
+
 export function useStream(): StreamState {
-  const [state, setState] = useState<StreamState>({ connected: false, snapshot: null, audit: [], tasks: [] });
-  const ref = useRef<WebSocket | null>(null);
+  const [state, setState] = useState<StreamState>({
+    connected: false, authError: false, snapshot: null, audit: [], tasks: [],
+  });
+  const wsRef = useRef<WebSocket | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attemptRef = useRef(0);
+  const unmountedRef = useRef(false);
 
   useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    // Token rides in the WebSocket subprotocol (Sec-WebSocket-Protocol header),
-    // not the URL — keeps it out of server access logs and browser history.
-    const ws = new WebSocket(
-      `${proto}://${window.location.host}/api/stream`,
-      TOKEN ? [TOKEN] : undefined
-    );
-    ref.current = ws;
+    unmountedRef.current = false;
 
-    ws.onopen = () => setState((s) => ({ ...s, connected: true }));
-    ws.onclose = () => setState((s) => ({ ...s, connected: false }));
-    ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.type === "snapshot") {
-        setState((s) => ({ ...s, snapshot: msg.state }));
-      } else if (msg.type === "audit") {
-        setState((s) => ({ ...s, audit: [msg.event, ...s.audit].slice(0, 300) }));
-      } else if (msg.type === "task") {
-        setState((s) => ({ ...s, tasks: [msg.event, ...s.tasks].slice(0, 300) }));
-      }
+    const connect = () => {
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      // Token rides in the WebSocket subprotocol (Sec-WebSocket-Protocol header),
+      // not the URL — keeps it out of server access logs and browser history.
+      const ws = new WebSocket(
+        `${proto}://${window.location.host}/api/stream`,
+        TOKEN ? [TOKEN] : undefined
+      );
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        attemptRef.current = 0;  // reset backoff on a healthy connection
+        setState((s) => ({ ...s, connected: true, authError: false }));
+      };
+      ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === "snapshot") {
+          setState((s) => ({ ...s, snapshot: msg.state }));
+        } else if (msg.type === "audit") {
+          setState((s) => ({ ...s, audit: [msg.event, ...s.audit].slice(0, 300) }));
+        } else if (msg.type === "task") {
+          setState((s) => ({ ...s, tasks: [msg.event, ...s.tasks].slice(0, 300) }));
+        }
+      };
+      ws.onclose = (ev) => {
+        if (unmountedRef.current) return;
+        if (ev.code === WS_AUTH_CLOSE) {
+          // Token rejected — reconnecting would only loop. Stop and surface it.
+          setState((s) => ({ ...s, connected: false, authError: true }));
+          return;
+        }
+        setState((s) => ({ ...s, connected: false }));
+        const delay = Math.min(WS_BACKOFF_MAX_MS, 1000 * 2 ** attemptRef.current);
+        attemptRef.current += 1;
+        timerRef.current = setTimeout(connect, delay);
+      };
     };
-    return () => ws.close();
+
+    connect();
+    return () => {
+      unmountedRef.current = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      wsRef.current?.close();
+    };
   }, []);
 
   return state;

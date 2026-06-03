@@ -81,11 +81,13 @@ export default function App() {
         <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest">
           <span
             className={`inline-block w-2 h-2 rounded-full ${
-              stream.connected ? "bg-phos glow animate-blink" : "bg-dim"
+              stream.connected ? "bg-phos glow animate-blink"
+                : stream.authError ? "bg-amber" : "bg-dim"
             }`}
           />
-          <span className={stream.connected ? "text-phos" : "text-dim"}>
-            {stream.connected ? "telemetry live" : "offline"}
+          <span className={stream.connected ? "text-phos" : stream.authError ? "text-amber" : "text-dim"}>
+            {stream.connected ? "telemetry live"
+              : stream.authError ? "token expired — relaunch" : "offline"}
           </span>
         </div>
       </header>
