@@ -149,22 +149,26 @@ class ModelManager:
 
     @classmethod
     def _sanitize_url(cls, url: str) -> str:
-        """AUTONOMIC RESILIENCE: Ensure URL has /v1 and trailing slash."""
+        """AUTONOMIC RESILIENCE: Ensure URL has /v1; do not force a trailing slash.
+
+        The OpenAI-compatible client accepts base URLs with or without a
+        trailing slash, and forcing one risks a double slash when callers
+        join paths (f"{url}/models"). We normalize the /v1 suffix only and
+        return the URL otherwise untouched (sans trailing slash).
+        """
         if not url: return ""
-        u = url.strip()
-        
+        u = url.strip().rstrip("/")
+
         # If it's a standard provider but missing /v1, add it
         if "api.openai.com" in u and "/v1" not in u:
-            u = u.rstrip("/") + "/v1"
+            u = u + "/v1"
         if "api.anthropic.com" in u and "/v1" not in u:
-            u = u.rstrip("/") + "/v1"
-            
-        # Generic check for Ollama / local proxies
-        if u.endswith(":11434") or u.endswith(":11434/"):
-            u = u.rstrip("/") + "/v1"
+            u = u + "/v1"
 
-        if not u.endswith("/"):
-            u += "/"
+        # Generic check for Ollama / local proxies
+        if u.endswith(":11434"):
+            u = u + "/v1"
+
         return u
 
     @classmethod
