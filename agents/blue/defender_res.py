@@ -190,9 +190,45 @@ class DefenderRes(BaseAgent):
                     "UPDATE response_actions SET status = ?, output = ? WHERE id = ?",
                     (status, output, action_id),
                 )
+                if status == "SUCCESS":
+                    self._register_remediation_undo(stripped, target)
                 return f"Remediation {status}: {output[:200]}"
             except Exception as e:
                 return f"Remediation execution error: {e}"
+
+    def _register_remediation_undo(self, command: str, target: str) -> None:
+        """Register a rollback for a reversible firewall-block remediation.
+
+        Only handles the well-defined iptables/ip6tables append-block case
+        (``-A <chain> ... -j DROP/REJECT`` → ``-D <chain> ...``). The undo runs the
+        inverse rule through the same allowlisted command family; the registry also
+        re-gates it through the security firewall before firing on kill-switch.
+        Anything not cleanly invertible registers nothing.
+        """
+        parts = command.split()
+        if not parts or parts[0] not in ("iptables", "ip6tables"):
+            return
+        if "-A" not in parts or not any(p in parts for p in ("DROP", "REJECT")):
+            return  # only append-style block rules are cleanly reversible
+        binary = parts[0]
+        inverse = command.replace(" -A ", " -D ", 1)
+        if inverse == command:
+            return
+
+        import shlex
+        import subprocess
+
+        def _undo() -> None:
+            subprocess.run(shlex.split(inverse), capture_output=True, text=True, timeout=30)  # nosec: B603
+
+        self.state.cleanup_registry.register(
+            engagement_id=self.state.active_engagement_id,
+            description=f"Revert firewall block on {target}",
+            undo_command=inverse,
+            target=target,
+            source=self.AGENT_NAME,
+            undo=_undo,
+        )
 
     async def _execute_res_tool(self, tool_name: str, tool_input: dict) -> str:
         if tool_name == "write_response_action":

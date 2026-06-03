@@ -194,6 +194,18 @@ class StateManager:
             row = conn.execute("SELECT is_locked FROM engagement WHERE id = ?", (eid,)).fetchone()
             return bool(row["is_locked"]) if row else False
 
+    @property
+    def cleanup_registry(self):
+        """Lazy CleanupRegistry bound to this engagement DB (rollback of offensive
+        actions; fired LIFO on kill-switch). Cached per StateManager instance so
+        in-memory undo callables registered this session survive until run_all."""
+        reg = getattr(self, "_cleanup_registry", None)
+        if reg is None:
+            from core.cleanup_registry import CleanupRegistry
+            reg = CleanupRegistry(self.db_path)
+            self._cleanup_registry = reg
+        return reg
+
     # ------------------------------------------------------------------ #
     # Message Bus Logic
     # ------------------------------------------------------------------ #
