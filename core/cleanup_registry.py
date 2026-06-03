@@ -140,6 +140,11 @@ class CleanupRegistry:
                 self._mark(aid, _STATUS_REFUSED)
                 summary.append({"id": aid, "status": _STATUS_REFUSED})
                 continue
+            except Exception:  # noqa: BLE001 — gate-infra failure must not abort the
+                # whole rollback; fail this one undo closed and keep going.
+                self._mark(aid, _STATUS_FAILED)
+                summary.append({"id": aid, "status": _STATUS_FAILED})
+                continue
 
             # 2. Execute the in-memory callable. A recovered row with no callable is
             #    left pending for manual operator recovery (never auto-shelled).

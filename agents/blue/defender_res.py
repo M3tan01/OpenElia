@@ -205,21 +205,33 @@ class DefenderRes(BaseAgent):
         re-gates it through the security firewall before firing on kill-switch.
         Anything not cleanly invertible registers nothing.
         """
-        parts = command.split()
-        if not parts or parts[0] not in ("iptables", "ip6tables"):
-            return
-        if "-A" not in parts or not any(p in parts for p in ("DROP", "REJECT")):
-            return  # only append-style block rules are cleanly reversible
-        binary = parts[0]
-        inverse = command.replace(" -A ", " -D ", 1)
-        if inverse == command:
-            return
-
         import shlex
         import subprocess
 
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return
+        if not tokens or tokens[0] not in ("iptables", "ip6tables"):
+            return
+        if not any(t in tokens for t in ("DROP", "REJECT")):
+            return  # only block rules are cleanly reversible
+        # Invert by flipping the actual append/insert FLAG token (not a substring
+        # that might appear inside an arg like --comment "x -A y"). `-D` deletes a
+        # matching rule. Skip `-I` with a numeric position (`-D` takes no position).
+        inv_tokens = list(tokens)
+        flag_idx = next((i for i, t in enumerate(tokens) if t in ("-A", "-I", "--append", "--insert")), None)
+        if flag_idx is None:
+            return
+        if tokens[flag_idx] in ("-I", "--insert"):
+            # An insert with an explicit numeric rule-number can't be inverted with -D.
+            if flag_idx + 2 < len(tokens) and tokens[flag_idx + 2].isdigit():
+                return
+        inv_tokens[flag_idx] = "-D"
+        inverse = " ".join(shlex.quote(t) for t in inv_tokens)
+
         def _undo() -> None:
-            subprocess.run(shlex.split(inverse), capture_output=True, text=True, timeout=30)  # nosec: B603
+            subprocess.run(inv_tokens, capture_output=True, text=True, timeout=30)  # nosec: B603
 
         self.state.cleanup_registry.register(
             engagement_id=self.state.active_engagement_id,
