@@ -11,6 +11,7 @@ const NAV: NavGroup[] = [
       { id: "c2", label: "C2 Console" },
       { id: "engagements", label: "Sessions" },
       { id: "playbooks", label: "Playbooks" },
+      { id: "findings", label: "Findings" },
       { id: "agents", label: "Agent Activity" },
       { id: "graph", label: "Attack Graph" },
       { id: "apt", label: "APT Profiles" },
@@ -22,6 +23,7 @@ const NAV: NavGroup[] = [
     views: [
       { id: "audit", label: "Audit Timeline" },
       { id: "cost", label: "Cost & MITRE" },
+      { id: "cleanup", label: "Rollback Queue" },
     ],
   },
   {

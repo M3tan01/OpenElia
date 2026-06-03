@@ -108,7 +108,10 @@ def test_second_run_conflicts(client, state_dir, roe, auth):
 
 
 def test_lock_then_unlock_flips_state(client, state_dir, auth):
-    assert client.post("/api/lock", headers=auth, json={"confirm": True}).json() == {"locked": True}
+    lock_resp = client.post("/api/lock", headers=auth, json={"confirm": True}).json()
+    assert lock_resp["locked"] is True
+    # lock now also reports the rollback-registry run summary
+    assert set(lock_resp["cleanup"]) == {"executed", "refused", "failed", "pending"}
     assert client.get("/api/state", headers=auth).json()["engagement"]["is_locked"] is True
     assert client.post("/api/unlock", headers=auth, json={"confirm": True}).json() == {"locked": False}
     assert client.get("/api/state", headers=auth).json()["engagement"]["is_locked"] is False

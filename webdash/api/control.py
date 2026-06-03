@@ -182,11 +182,24 @@ def lock(req: Confirm, data: DashboardData = Depends(get_data)) -> dict:
     from security_manager import AuditLogger
     from state_manager import StateManager
 
-    StateManager(db_path=str(data.db_path)).set_locked(True)
+    sm = StateManager(db_path=str(data.db_path))
+    sm.read()
+    sm.set_locked(True)
     AuditLogger(log_path=str(data.audit_log)).log_event(
         "webdash", "SYSTEM", "", "LOCKED", "kill-switch engaged via dashboard"
     )
-    return {"locked": True}
+
+    # Fire registered rollback actions (LIFO, firewall-gated). Cleanup must never
+    # mask the kill-switch itself, so any error is swallowed into the summary.
+    cleanup = {"executed": 0, "refused": 0, "failed": 0, "pending": 0}
+    try:
+        if sm.active_engagement_id:
+            for s in sm.cleanup_registry.run_all(sm.active_engagement_id):
+                if s["status"] in cleanup:
+                    cleanup[s["status"]] += 1
+    except Exception:  # nosec B110 — cleanup failure must not block the lock
+        pass
+    return {"locked": True, "cleanup": cleanup}
 
 
 @router.post("/unlock")

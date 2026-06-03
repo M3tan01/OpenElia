@@ -28,11 +28,11 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
 // --- types -------------------------------------------------------------------- //
 export interface Engagement { id: string; target: string; scope: string; started: string; is_locked: boolean; }
-export interface Finding { severity: string; title: string; mitre_ttp: string; }
+export interface Finding { severity: string; title: string; mitre_ttp: string; cvss_score?: number | null; cvss_vector?: string | null; }
 export interface StateResp { engagement?: Engagement; findings?: Finding[]; blue_alerts?: unknown[]; [k: string]: unknown; }
 export interface AuditEvent { timestamp: string; source: string; target: string; status: string; reason: string; }
 export interface AuditResp { events: AuditEvent[]; count: number; chain_ok: boolean; chain_status: string; chain_msg: string; }
-export interface TaskResult { task_id: string; agent_name: string; status: string; completed_at?: string; tokens_used?: number; }
+export interface TaskResult { task_id: string; agent_name: string; status: string; completed_at?: string; tokens_used?: number; priority?: number; }
 export interface GraphNode { id: string; type?: string; [k: string]: unknown; }
 export interface GraphLink { source: string; target: string; relation?: string; }
 export interface GraphResp { summary: Record<string, number>; nodes: GraphNode[]; links: GraphLink[]; }
@@ -68,6 +68,23 @@ export type RunResp = { run_id: string; status: string };
 
 export type PlaybookPhase = { name: string; tools: string[]; post_analysis: string | null };
 export type PlaybookVar = { required: boolean; description: string };
+export type CleanupAction = {
+  id: string;
+  description: string;
+  undo_command: string;
+  target: string;
+  source: string;
+  status: string;
+  registered_at: string;
+};
+
+export type ScopeCheckResp = {
+  target: string;
+  allowed: boolean;
+  quiet_hours_active: boolean;
+  quiet_msg: string;
+};
+
 export type PlaybookSummary = {
   name: string;
   description: string;

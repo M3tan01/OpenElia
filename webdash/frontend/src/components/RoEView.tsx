@@ -1,6 +1,60 @@
 import { useEffect, useState } from "react";
-import { apiGet, RoEResp } from "../api";
+import { apiGet, RoEResp, ScopeCheckResp } from "../api";
 import { Badge, Panel } from "./Panel";
+
+function ScopeCheck() {
+  const [target, setTarget] = useState("");
+  const [result, setResult] = useState<ScopeCheckResp | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function check() {
+    const t = target.trim();
+    if (!t || pending) return;
+    setPending(true); setErr(null); setResult(null);
+    try {
+      setResult(await apiGet<ScopeCheckResp>(`/api/scope/check?target=${encodeURIComponent(t)}`));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setPending(false); }
+  }
+
+  return (
+    <section>
+      <h3 className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70 mb-1.5">
+        Scope Check
+      </h3>
+      <div className="flex gap-2">
+        <input
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") check(); }}
+          placeholder="host or CIDR"
+          className="flex-1 bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={check}
+          disabled={pending}
+          className="font-display uppercase tracking-widest text-xs px-3 py-1 border border-amber text-amber glow disabled:opacity-40"
+        >
+          {pending ? "···" : "check"}
+        </button>
+      </div>
+      {err && <div className="mt-1.5"><Badge ok={false}>{err}</Badge></div>}
+      {result && (
+        <div className="mt-1.5 font-mono text-[11px]">
+          <span className={result.allowed ? "text-phos" : "text-rose-400"}>
+            {result.allowed ? "✓ in scope" : "✗ out of scope / blacklisted"}
+          </span>
+          {result.quiet_hours_active && (
+            <span className="text-amber/70"> · quiet hours active</span>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function ItemList({ items }: { items: string[] }) {
   if (items.length === 0) {
@@ -84,6 +138,8 @@ export function RoEView() {
               {renderQuietHours(data.quiet_hours)}
             </span>
           </section>
+
+          <ScopeCheck />
         </div>
       )}
     </Panel>

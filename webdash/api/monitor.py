@@ -4,6 +4,8 @@ webdash/api/monitor.py — read-only monitoring endpoints (all token-gated).
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, Query
 
 from webdash.data import DashboardData, get_data, roe as _roe_data
@@ -92,6 +94,34 @@ def get_actors(data: DashboardData = Depends(get_data)) -> list[str]:
 def get_system(data: DashboardData = Depends(get_data)) -> dict:
     """Lightweight system status: gateway health + active engagement count. Read-only."""
     return data.system()
+
+
+@router.get("/cleanup")
+def get_cleanup(data: DashboardData = Depends(get_data)) -> list[dict]:
+    """Pending rollback/undo actions for the active engagement (read-only)."""
+    from state_manager import StateManager
+
+    sm = StateManager(db_path=str(data.db_path))
+    sm.read()
+    eid = sm.active_engagement_id
+    if not eid:
+        return []
+    return sm.cleanup_registry.pending(eid)
+
+
+@router.get("/scope/check")
+def scope_check(target: str = Query(..., min_length=1)) -> dict:
+    """Dry-run a target against the RoE scope gate. Read-only — never launches."""
+    from security_manager import ScopeValidator
+
+    sv = ScopeValidator(roe_path=os.getenv("OPENELIA_ROE_PATH", "roe.json"))
+    in_quiet, qmsg = sv.is_within_quiet_hours()
+    return {
+        "target": target,
+        "allowed": bool(sv.is_allowed(target)),
+        "quiet_hours_active": bool(in_quiet),
+        "quiet_msg": qmsg if in_quiet else "",
+    }
 
 
 @router.get("/playbooks")

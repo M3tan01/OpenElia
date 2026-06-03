@@ -34,15 +34,24 @@ export function AgentActivity({ liveTasks }: { liveTasks: TaskResult[] }) {
   return (
     <Panel title="Agent Activity">
       {Object.keys(TIERS).map((tier) => {
-        const rows = all.filter((t) => tierOf(t.agent_name) === tier);
+        const rows = all
+          .filter((t) => tierOf(t.agent_name) === tier)
+          .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
         return (
           <div key={tier} className="mb-3">
             <div className="font-display text-[10px] tracking-[0.18em] uppercase text-amber mb-1">{tier} <span className="text-dim">({rows.length})</span></div>
             {rows.length === 0 && <div className="text-xs text-slate-600 italic">idle</div>}
             {rows.map((t) => (
-              <div key={t.task_id} className="flex justify-between text-xs py-0.5">
+              <div key={t.task_id} className="flex justify-between items-center text-xs py-0.5">
                 <span className="text-slate-300">{t.agent_name}</span>
-                <span className={STATUS_COLOR[t.status] ?? "text-slate-400"}>{t.status}</span>
+                <span className="flex items-center gap-2">
+                  {typeof t.priority === "number" && t.priority > 0 && (
+                    <span className="font-mono text-[10px] text-amber/60" title="scheduling priority">
+                      ▲{t.priority.toFixed(2)}
+                    </span>
+                  )}
+                  <span className={STATUS_COLOR[t.status] ?? "text-slate-400"}>{t.status}</span>
+                </span>
               </div>
             ))}
           </div>
