@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, PlaybookSummary, RunResp } from "../api";
 import { Badge, Panel } from "./Panel";
+import { PlaybookCreateForm } from "./PlaybookCreateForm";
 
 type Tier = "local" | "expensive";
 
@@ -12,12 +13,18 @@ export function PlaybooksView() {
   const [pending, setPending] = useState(false);
   const [run, setRun] = useState<RunResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback((select?: string) => {
     apiGet<PlaybookSummary[]>("/api/playbooks")
-      .then((p) => { setPlaybooks(p); if (p.length) setSelected(p[0].name); })
+      .then((p) => {
+        setPlaybooks(p);
+        setSelected((cur) => select ?? cur ?? (p.length ? p[0].name : null));
+      })
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const pb = (playbooks ?? []).find((p) => p.name === selected) ?? null;
   const targetRequired = !!pb?.variables?.target?.required;
@@ -48,8 +55,17 @@ export function PlaybooksView() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
         {/* left: playbook catalogue */}
         <div className="space-y-2 overflow-auto scroll-thin">
-          <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
-            Catalogue
+          <div className="flex items-center justify-between">
+            <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
+              Catalogue
+            </div>
+            <button
+              type="button"
+              onClick={() => { setCreating(true); setRun(null); setErr(null); }}
+              className="font-mono text-[11px] text-amber hover:glow"
+            >
+              ＋ New
+            </button>
           </div>
           {!playbooks && !err && <div className="text-dim text-xs italic">loading…</div>}
           {playbooks?.length === 0 && (
@@ -78,7 +94,13 @@ export function PlaybooksView() {
           })}
         </div>
 
-        {/* right: detail + launch */}
+        {/* right: create form OR detail + launch */}
+        {creating ? (
+          <PlaybookCreateForm
+            onCreated={() => { setCreating(false); load(); }}
+            onCancel={() => setCreating(false)}
+          />
+        ) : (
         <div className="border border-line bg-surface/50 p-3 overflow-auto scroll-thin flex flex-col">
           <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70 mb-2">
             {pb ? `${pb.name} — flow` : "Detail"}
@@ -132,22 +154,25 @@ export function PlaybooksView() {
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* footer launch anchor */}
-      <div className="mt-3 border-t border-line pt-2 flex items-center justify-between">
-        <span className="text-[11px] font-mono text-dim">
-          Offensive playbooks pass the RoE scope gate and kill-switch check before launch.
-        </span>
-        <button
-          type="button"
-          onClick={launch}
-          disabled={!pb || pending}
-          className="font-display uppercase tracking-widest bg-amber/15 border border-amber text-amber glow text-xs px-4 py-1 disabled:opacity-40 hover:bg-amber/25"
-        >
-          {pending ? "···" : "▶ Run Playbook"}
-        </button>
-      </div>
+      {!creating && (
+        <div className="mt-3 border-t border-line pt-2 flex items-center justify-between">
+          <span className="text-[11px] font-mono text-dim">
+            Offensive playbooks pass the RoE scope gate and kill-switch check before launch.
+          </span>
+          <button
+            type="button"
+            onClick={launch}
+            disabled={!pb || pending}
+            className="font-display uppercase tracking-widest bg-amber/15 border border-amber text-amber glow text-xs px-4 py-1 disabled:opacity-40 hover:bg-amber/25"
+          >
+            {pending ? "···" : "▶ Run Playbook"}
+          </button>
+        </div>
+      )}
     </Panel>
   );
 }

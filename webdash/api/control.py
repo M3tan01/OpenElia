@@ -7,6 +7,7 @@ Orchestrator.route() is launched as a background run.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -64,8 +65,88 @@ class PlaybookRun(BaseModel):
     confirm: bool = False
 
 
+class PlaybookVarReq(BaseModel):
+    required: bool = False
+    description: str = ""
+
+
+class PlaybookPhaseReq(BaseModel):
+    name: str
+    tools: list[str] = []
+    post_analysis: str | None = None
+
+
+class PlaybookCreate(BaseModel):
+    name: str
+    description: str = ""
+    domain: Literal["red", "blue", "purple"] = "red"
+    passive: bool = False
+    stealth: bool = False
+    brain_tier: Literal["local", "expensive"] = "local"
+    apt_profile: str | None = None
+    variables: dict[str, PlaybookVarReq] = {}
+    phases: list[PlaybookPhaseReq]
+    overwrite: bool = False
+    confirm: bool = False
+
+
 class Confirm(BaseModel):
     confirm: bool = False
+
+
+_PLAYBOOK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
+@router.post("/playbooks")
+def create_playbook(req: PlaybookCreate) -> dict:
+    """Author a new playbook from the dashboard. Token + confirm gated; the name
+    is sanitized and the content is validated through the Playbook model before
+    anything is written under playbooks/."""
+    require_confirm(req.confirm)
+    if not _PLAYBOOK_NAME_RE.match(req.name):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="name must be lowercase alphanumeric with _ or - (no path separators)",
+        )
+
+    from pathlib import Path
+
+    import yaml
+
+    from core.playbook import Playbook
+
+    # Validate by constructing the model (enforces domain + non-empty phases).
+    try:
+        pb = Playbook(
+            name=req.name,
+            description=req.description,
+            domain=req.domain,
+            passive=req.passive,
+            stealth=req.stealth,
+            brain_tier=req.brain_tier,
+            apt_profile=req.apt_profile,
+            variables={k: {"required": v.required, "description": v.description}
+                       for k, v in req.variables.items()},
+            phases=[{"name": p.name, "tools": p.tools, "post_analysis": p.post_analysis}
+                    for p in req.phases],
+        )
+    except Exception as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"invalid playbook: {exc}")
+
+    pdir = Path("playbooks")
+    pdir.mkdir(exist_ok=True)
+    dest = (pdir / f"{req.name}.yaml").resolve()
+    # Defense-in-depth: the resolved path must stay inside playbooks/.
+    if pdir.resolve() not in dest.parents:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="invalid playbook path")
+    if dest.exists() and not req.overwrite:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"playbook '{req.name}' already exists (set overwrite to replace)",
+        )
+
+    dest.write_text(yaml.safe_dump(pb.model_dump(), sort_keys=False))
+    return {"name": req.name, "saved": f"playbooks/{req.name}.yaml"}
 
 
 async def _launch(rm: RunManager, **kwargs) -> dict:
