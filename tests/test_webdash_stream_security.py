@@ -102,7 +102,9 @@ def test_get_or_create_mints_when_absent(monkeypatch):
     monkeypatch.setattr(security.SecretStore, "set_secret", classmethod(lambda cls, k, v: store.__setitem__(k, v)))
     monkeypatch.setattr(security.SecretStore, "get_secret", classmethod(lambda cls, k: store.get(k)))
     tok = security.get_or_create_token()
-    assert store["WEBDASH_TOKEN"] == tok
+    # Stored as a JSON record {token, issued}, not a bare string (TTL support).
+    import json as _json
+    assert _json.loads(store["WEBDASH_TOKEN"])["token"] == tok
 
 
 def test_verify_false_when_no_token(monkeypatch):

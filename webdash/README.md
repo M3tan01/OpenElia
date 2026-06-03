@@ -51,10 +51,13 @@ accepted trade-offs at that scope — revisit every one before binding anywhere 
   safe *only* because the server binds `127.0.0.1`. **Never bind to `0.0.0.0` or a
   routable interface without terminating TLS in front of it** (e.g. a localhost-only
   reverse proxy). `run()` refuses non-localhost hosts to enforce this.
-- **Token has no TTL or rotation.** The bearer token is generated once and persists in
-  the OS keychain until manually replaced (`WEBDASH_TOKEN`). There is no expiry, refresh,
-  or revocation flow. Fine for a solo session; add rotation before any multi-user or
-  long-lived deployment.
+- **Token expires; rotation is launch-time only.** The bearer token carries an issue
+  timestamp and is rejected once older than `WEBDASH_TOKEN_TTL` (default 8h; set `0` to
+  disable). An expired token is **rotated on the next `dashboard --web` launch**, which
+  prints a fresh `#token=` URL. There is no in-session refresh or revocation endpoint:
+  when a token expires while a tab is open, every call returns `401 token expired` and the
+  operator must relaunch and reopen the new URL. Legacy tokens minted before TTL existed
+  (bare strings, no issue time) never expire until the next mint.
 - **No per-endpoint rate limiting.** The auth + confirm + scope gates are the only
   throttle. Add rate limiting if the surface is ever exposed beyond localhost.
 
@@ -77,6 +80,8 @@ accepted trade-offs at that scope — revisit every one before binding anywhere 
 - `OPENELIA_STATE_DIR` — state directory the API reads (default `state`).
 - `OPENELIA_ROE_PATH` — Rules-of-Engagement file for the scope gate (default `roe.json`).
 - `WEBDASH_TOKEN` — override/seed the bearer token (else generated + kept in keychain).
+- `WEBDASH_TOKEN_TTL` — token lifetime in seconds (default `28800` = 8h; `0` disables expiry).
+  Expired tokens are rotated on the next launch.
 
 ## Tests
 
