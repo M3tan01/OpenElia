@@ -274,13 +274,26 @@ async def cmd_lock(args) -> None:
         print("No active engagement to lock.")
         return
     state.set_locked(True)
-    
+
     from security_manager import AuditLogger
     logger = AuditLogger()
     logger.log_event("OPERATOR", "SYSTEM", "MANUAL KILL-SWITCH ACTIVATED", "LOCKED", "Emergency Halt")
-    
+
     print("\n[bold red]🚨 GLOBAL KILL-SWITCH ACTIVATED 🚨[/bold red]")
     print("[red]All autonomous agent execution has been suspended.[/red]")
+
+    # Fire any registered rollback actions (LIFO). Undos are gated by the security
+    # firewall; recovered-without-callable entries are surfaced, never auto-run.
+    try:
+        summary = state.cleanup_registry.run_all(state.active_engagement_id)
+        if summary:
+            executed = sum(1 for s in summary if s["status"] == "executed")
+            refused = sum(1 for s in summary if s["status"] == "refused")
+            still_pending = sum(1 for s in summary if s["status"] == "pending")
+            print(f"[red]Cleanup: {executed} reverted, {refused} refused, "
+                  f"{still_pending} need manual recovery (see registry).[/red]")
+    except Exception as exc:  # cleanup must never mask the kill-switch itself
+        print(f"[yellow]Cleanup registry error during lock: {exc}[/yellow]")
 
 async def cmd_unlock(args) -> None:
     """Tier 1: Global Kill-Switch Reversal (Unlock Engagement)"""
