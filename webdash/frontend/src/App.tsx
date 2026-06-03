@@ -15,6 +15,7 @@ import { ModelSelector } from "./components/ModelSelector";
 import { PlaybooksView } from "./components/PlaybooksView";
 import { RoEView } from "./components/RoEView";
 import { Sidebar } from "./components/Sidebar";
+import { StixHuntView } from "./components/StixHuntView";
 
 function Solo({ children }: { children: ReactNode }) {
   return (
@@ -110,6 +111,7 @@ export default function App() {
               case "playbooks":    return <Solo><PlaybooksView /></Solo>;
               case "findings":     return <Solo><FindingsView /></Solo>;
               case "cleanup":      return <Solo><CleanupView /></Solo>;
+              case "stix":         return <Solo><StixHuntView /></Solo>;
               case "apt":          return <Solo><APTProfilesView /></Solo>;
               case "forge":        return <Solo><AdversaryForgeView /></Solo>;
               default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;

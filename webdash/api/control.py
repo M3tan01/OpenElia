@@ -91,6 +91,32 @@ class PlaybookCreate(BaseModel):
     confirm: bool = False
 
 
+class StixParse(BaseModel):
+    content: str
+
+
+_STIX_MAX_BYTES = 8_000_000  # 8 MB cap on uploaded STIX content
+
+
+@router.post("/stix/parse")
+def stix_parse(req: StixParse) -> dict:
+    """Parse an uploaded STIX bundle into a hunt brief. Read-only — extracts
+    IOCs/TTPs/actors and a composed hunt task for operator review. Does NOT run
+    anything (the operator launches the hunt via /run/blue after preview)."""
+    if len(req.content.encode("utf-8", "ignore")) > _STIX_MAX_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="STIX file too large (8 MB cap)")
+
+    from core.stix_ingest import compose_hunt_task, parse_stix
+
+    try:
+        brief = parse_stix(req.content)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    brief["hunt_task"] = compose_hunt_task(brief)
+    return brief
+
+
 class Confirm(BaseModel):
     confirm: bool = False
 
