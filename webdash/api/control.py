@@ -55,6 +55,15 @@ class ForgeRun(BaseModel):
     confirm: bool = False
 
 
+class PlaybookRun(BaseModel):
+    name: str
+    target: str | None = None
+    variables: dict[str, str] = {}
+    stealth: bool = False
+    brain_tier: Literal["local", "expensive"] = "local"
+    confirm: bool = False
+
+
 class Confirm(BaseModel):
     confirm: bool = False
 
@@ -122,6 +131,41 @@ async def run_forge(req: ForgeRun, data: DashboardData = Depends(get_data)) -> d
         "metadata": result["metadata"],
         "saved_path": saved_path,
     }
+
+
+@router.post("/run/playbook")
+async def run_playbook(req: PlaybookRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
+    require_confirm(req.confirm)
+    require_unlocked(str(data.db_path))
+
+    from pathlib import Path
+
+    from core.playbook import Playbook
+
+    pb_path = Path("playbooks") / f"{req.name}.yaml"
+    try:
+        pb = Playbook.load(pb_path)
+    except FileNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"playbook '{req.name}' not found")
+
+    values = dict(req.variables)
+    if req.target:
+        values["target"] = req.target
+    try:
+        values = pb.resolve_variables(values)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    task = pb.compose_task(values)
+    target = values.get("target", "unknown")
+    # Offensive playbooks pass the RoE scope gate before launch.
+    if pb.domain in ("red", "purple"):
+        scope_gate(target, task)
+    return await _launch(
+        rm, domain=pb.domain, task=task, targets=[target],
+        stealth=req.stealth or pb.stealth, brain_tier=req.brain_tier,
+        apt_profile=pb.apt_profile, state_dir=str(data.dir),
+    )
 
 
 @router.get("/run/{run_id}/status")

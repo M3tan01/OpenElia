@@ -10,6 +10,7 @@ const NAV: NavGroup[] = [
     views: [
       { id: "c2", label: "C2 Console" },
       { id: "engagements", label: "Sessions" },
+      { id: "playbooks", label: "Playbooks" },
       { id: "agents", label: "Agent Activity" },
       { id: "graph", label: "Attack Graph" },
       { id: "apt", label: "APT Profiles" },
