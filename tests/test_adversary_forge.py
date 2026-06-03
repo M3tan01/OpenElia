@@ -78,7 +78,9 @@ from adversary_forge import AdversaryForge
 
 def _write_map(tmp_path):
     m = {
-        "APT29": {"aliases": ["Cozy Bear"], "techniques": [
+        "APT29": {"aliases": ["Cozy Bear"],
+                  "software": ["Cobalt Strike", "Mimikatz"],
+                  "techniques": [
             {"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]},
             {"t_code": "T1110", "name": "Brute Force", "platforms": ["windows", "linux"]},
         ]},
@@ -93,6 +95,22 @@ def test_load_actor_by_name(tmp_path):
     rec = f.load_actor("APT29")
     assert rec["name"] == "APT29"
     assert len(rec["techniques"]) == 2
+
+
+def test_load_actor_returns_software(tmp_path):
+    f = AdversaryForge(actor_map_path=_write_map(tmp_path))
+    rec = f.load_actor("APT29")
+    assert rec["software"] == ["Cobalt Strike", "Mimikatz"]
+
+
+def test_load_actor_software_defaults_empty(tmp_path):
+    # a map entry with no software key must not break load_actor
+    m = {"NoTools": {"aliases": [], "techniques": [
+        {"t_code": "T1059", "name": "x", "platforms": ["windows"]}]}}
+    p = tmp_path / "m.json"
+    p.write_text(json.dumps(m))
+    f = AdversaryForge(actor_map_path=str(p))
+    assert f.load_actor("NoTools")["software"] == []
 
 
 def test_load_actor_by_alias_case_insensitive(tmp_path):
@@ -194,7 +212,8 @@ def test_sequence_falls_back_on_bad_json(tmp_path, monkeypatch):
 def test_forge_end_to_end(tmp_path, monkeypatch):
     _patch_llm(monkeypatch, '["T1059.001", "T1110"]')
     actor_map = tmp_path / "actor_ttps.json"
-    actor_map.write_text(json.dumps({"APT29": {"aliases": [], "techniques": [
+    actor_map.write_text(json.dumps({"APT29": {
+        "aliases": [], "software": ["Cobalt Strike", "Mimikatz"], "techniques": [
         {"t_code": "T1059.001", "name": "PowerShell", "platforms": ["windows"]},
         {"t_code": "T1110", "name": "Brute Force", "platforms": ["windows"]},
         {"t_code": "T1059.004", "name": "Unix Shell", "platforms": ["linux"]},
@@ -208,6 +227,7 @@ def test_forge_end_to_end(tmp_path, monkeypatch):
     prof = result["profile"]
     assert prof["name"] == "APT29"
     assert prof["preferred_ttps"] == ["T1059.001"]  # T1110 RoE-dropped, T1059.004 platform-dropped
+    assert prof["tools"] == ["Cobalt Strike", "Mimikatz"]  # software -> tools
     reasons = {d["t_code"]: d["reason"] for d in result["omitted"]}
     assert "RoE" in reasons["T1110"]
     assert "platform" in reasons["T1059.004"].lower()

@@ -35,11 +35,18 @@ def build() -> dict:
             Filter("source_ref", "=", actor.id),
         ])
         techniques = []
+        software: set[str] = set()
         for rel in rels:
             target = store.get(rel.target_ref)
-            if not target or target.type != "attack-pattern":
+            if not target:
                 continue
             if getattr(target, "x_mitre_deprecated", False) or getattr(target, "revoked", False):
+                continue
+            # actor 'uses' a tool/malware -> emulation tool inventory
+            if target.type in ("tool", "malware"):
+                software.add(target.name)
+                continue
+            if target.type != "attack-pattern":
                 continue
             t_code = next(
                 (e.external_id for e in target.external_references
@@ -56,6 +63,7 @@ def build() -> dict:
         if techniques:
             out[actor.name] = {
                 "aliases": list(getattr(actor, "aliases", [])),
+                "software": sorted(software),
                 "techniques": techniques,
             }
     return out
