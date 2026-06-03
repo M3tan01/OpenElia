@@ -34,19 +34,26 @@ export function AdversaryForgeView() {
 
   return (
     <Panel title="Adversary Forge" className="h-full">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
+      <div className="flex flex-col h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-auto">
         {/* left: config workspace */}
         <div className="space-y-3">
           <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
             Configuration
           </div>
-          <select
-            value={actor}
-            onChange={(e) => setActor(e.target.value)}
-            className="w-full bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
-          >
-            {(actors ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+          {actors === null && !err ? (
+            <div className="text-dim text-xs italic">loading actors…</div>
+          ) : actors && actors.length === 0 ? (
+            <div className="text-amber/70 text-xs">no actors — run scripts/extract_actor_ttps.py</div>
+          ) : (
+            <select
+              value={actor}
+              onChange={(e) => setActor(e.target.value)}
+              className="w-full bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
+            >
+              {(actors ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          )}
           <div className="flex gap-2">
             {(["local", "expensive"] as Tier[]).map((t) => (
               <button
@@ -96,8 +103,8 @@ export function AdversaryForgeView() {
         </div>
       </div>
 
-      {/* footer security anchor */}
-      <div className="mt-3 border-t border-line pt-2 flex items-center justify-between">
+      {/* footer security anchor — pinned to panel bottom */}
+      <div className="mt-3 border-t border-line pt-2 flex items-center justify-between shrink-0">
         <span className="text-[11px] font-mono text-dim">
           Forge generates a profile only — running it still requires the gated /run path.
         </span>
@@ -109,6 +116,7 @@ export function AdversaryForgeView() {
         >
           {pending ? "···" : "▶ Forge Profile"}
         </button>
+      </div>
       </div>
     </Panel>
   );

@@ -41,6 +41,26 @@ same-origin. Without a build the API works but `/` has no UI.
 - `/api/models` never returns API keys; `/api/models/auth` is write-only.
 - Every control action is written to the HMAC-chained audit log.
 
+### Limitations & hardening notes
+
+This console is built for a **single operator on localhost**. The following are
+accepted trade-offs at that scope — revisit every one before binding anywhere else:
+
+- **No transport encryption.** Traffic is plain `http`/`ws`. The bearer token rides
+  the WebSocket subprotocol (kept off URLs/logs) but is still sent in clear. This is
+  safe *only* because the server binds `127.0.0.1`. **Never bind to `0.0.0.0` or a
+  routable interface without terminating TLS in front of it** (e.g. a localhost-only
+  reverse proxy). `run()` refuses non-localhost hosts to enforce this.
+- **Token expires; rotation is launch-time only.** The bearer token carries an issue
+  timestamp and is rejected once older than `WEBDASH_TOKEN_TTL` (default 8h; set `0` to
+  disable). An expired token is **rotated on the next `dashboard --web` launch**, which
+  prints a fresh `#token=` URL. There is no in-session refresh or revocation endpoint:
+  when a token expires while a tab is open, every call returns `401 token expired` and the
+  operator must relaunch and reopen the new URL. Legacy tokens minted before TTL existed
+  (bare strings, no issue time) never expire until the next mint.
+- **No per-endpoint rate limiting.** The auth + confirm + scope gates are the only
+  throttle. Add rate limiting if the surface is ever exposed beyond localhost.
+
 ## Layout
 
 | Component | Endpoints |
@@ -60,6 +80,8 @@ same-origin. Without a build the API works but `/` has no UI.
 - `OPENELIA_STATE_DIR` — state directory the API reads (default `state`).
 - `OPENELIA_ROE_PATH` — Rules-of-Engagement file for the scope gate (default `roe.json`).
 - `WEBDASH_TOKEN` — override/seed the bearer token (else generated + kept in keychain).
+- `WEBDASH_TOKEN_TTL` — token lifetime in seconds (default `28800` = 8h; `0` disables expiry).
+  Expired tokens are rotated on the next launch.
 
 ## Tests
 

@@ -7,6 +7,17 @@
       "AguilaCiega",
       "APT-Q-98"
     ],
+    "software": [
+      "AsyncRAT",
+      "Caminho",
+      "DCRAT",
+      "HeartCrypt",
+      "Imminent Monitor",
+      "PureCrypter",
+      "QuasarRAT",
+      "Remcos",
+      "njRAT"
+    ],
     "techniques": [
       {
         "name": "Domains",
@@ -340,6 +351,25 @@
       "Comment Group",
       "Comment Panda"
     ],
+    "software": [
+      "BISCUIT",
+      "CALENDAR",
+      "Cachedump",
+      "GLOOXMAIL",
+      "Lslsass",
+      "Mimikatz",
+      "Net",
+      "Pass-The-Hash Toolkit",
+      "PoisonIvy",
+      "PsExec",
+      "Seasalt",
+      "Tasklist",
+      "WEBC2",
+      "gsecdump",
+      "ipconfig",
+      "pwdump",
+      "xCmd"
+    ],
     "techniques": [
       {
         "name": "LSASS Memory",
@@ -555,6 +585,11 @@
       "Numbered Panda",
       "DNSCALC"
     ],
+    "software": [
+      "HTRAN",
+      "Ixeshe",
+      "RIPTIDE"
+    ],
     "techniques": [
       {
         "name": "Malicious File",
@@ -609,6 +644,9 @@
     "aliases": [
       "APT16"
     ],
+    "software": [
+      "ELMER"
+    ],
     "techniques": [
       {
         "name": "Server",
@@ -623,6 +661,9 @@
     "aliases": [
       "APT17",
       "Deputy Dog"
+    ],
+    "software": [
+      "BLACKCOFFEE"
     ],
     "techniques": [
       {
@@ -647,6 +688,13 @@
       "TG-0416",
       "Dynamite Panda",
       "Threat Group-0416"
+    ],
+    "software": [
+      "HTTPBrowser",
+      "Pisloader",
+      "cmd",
+      "gh0st RAT",
+      "hcdLoader"
     ],
     "techniques": [
       {
@@ -782,6 +830,10 @@
       "C0d0so0",
       "Codoso Team",
       "Sunshop Group"
+    ],
+    "software": [
+      "Cobalt Strike",
+      "Empire"
     ],
     "techniques": [
       {
@@ -995,6 +1047,37 @@
       "Forest Blizzard",
       "FROZENLAKE",
       "GruesomeLarch"
+    ],
+    "software": [
+      "ADVSTORESHELL",
+      "CHOPSTICK",
+      "CORESHELL",
+      "Cannon",
+      "DealersChoice",
+      "Downdelph",
+      "Drovorub",
+      "Forfiles",
+      "Fysbis",
+      "HIDEDRV",
+      "JHUHUGIT",
+      "Koadic",
+      "Komplex",
+      "LAMEHUG",
+      "LoJax",
+      "Mimikatz",
+      "Net",
+      "OLDBAIT",
+      "Responder",
+      "Tor",
+      "USBStealer",
+      "Wevtutil",
+      "Winexe",
+      "XAgentOSX",
+      "XTunnel",
+      "Zebrocy",
+      "certutil",
+      "cipher.exe",
+      "reGeorg"
     ],
     "techniques": [
       {
@@ -1887,6 +1970,57 @@
       "UNC3524",
       "Midnight Blizzard"
     ],
+    "software": [
+      "AADInternals",
+      "AdFind",
+      "BloodHound",
+      "BoomBox",
+      "CloudDuke",
+      "Cobalt Strike",
+      "CosmicDuke",
+      "CozyCar",
+      "EnvyScout",
+      "FatDuke",
+      "FoggyWeb",
+      "GeminiDuke",
+      "GoldFinder",
+      "GoldMax",
+      "HAMMERTOSS",
+      "Impacket",
+      "LiteDuke",
+      "Mimikatz",
+      "MiniDuke",
+      "NativeZone",
+      "Net",
+      "OnionDuke",
+      "POSHSPY",
+      "PinchDuke",
+      "PolyglotDuke",
+      "PowerDuke",
+      "PsExec",
+      "QUIETEXIT",
+      "ROADTools",
+      "Raindrop",
+      "RegDuke",
+      "SDelete",
+      "SUNBURST",
+      "SUNSPOT",
+      "SeaDuke",
+      "Sibot",
+      "Sliver",
+      "SoreFang",
+      "Systeminfo",
+      "TEARDROP",
+      "Tasklist",
+      "Tor",
+      "TrailBlazer",
+      "VaporRage",
+      "WellMail",
+      "WellMess",
+      "ipconfig",
+      "meek",
+      "reGeorg"
+    ],
     "techniques": [
       {
         "name": "Multi-Factor Authentication Request Generation",
@@ -2527,6 +2661,14 @@
       "Threat Group-0110",
       "TG-0110"
     ],
+    "software": [
+      "LaZagne",
+      "OSInfo",
+      "PlugX",
+      "RemoteCMD",
+      "SHOTPUT",
+      "schtasks"
+    ],
     "techniques": [
       {
         "name": "Scheduled Task",
@@ -2961,6 +3103,13 @@
     "aliases": [
       "APT30"
     ],
+    "software": [
+      "BACKSPACE",
+      "FLASHFLOOD",
+      "NETEAGLE",
+      "SHIPSHAPE",
+      "SPACESHIP"
+    ],
     "techniques": [
       {
         "name": "Spearphishing Attachment",
@@ -2990,6 +3139,23 @@
       "APT-C-00",
       "Canvas Cyclone",
       "BISMUTH"
+    ],
+    "software": [
+      "Arp",
+      "Cobalt Strike",
+      "Denis",
+      "Goopy",
+      "KOMPROGO",
+      "Kerrdown",
+      "Mimikatz",
+      "Net",
+      "OSX_OCEANLOTUS.D",
+      "PHOREAL",
+      "RotaJakiro",
+      "SOUNDBITE",
+      "WINDSHIELD",
+      "ipconfig",
+      "netsh"
     ],
     "techniques": [
       {
@@ -3693,6 +3859,24 @@
       "Elfin",
       "Peach Sandstorm"
     ],
+    "software": [
+      "AutoIt backdoor",
+      "DEADWOOD",
+      "Empire",
+      "LaZagne",
+      "Mimikatz",
+      "NETWIRE",
+      "NanoCore",
+      "Net",
+      "POWERTON",
+      "PoshC2",
+      "PowerSploit",
+      "Pupy",
+      "Ruler",
+      "StoneDrill",
+      "TURNEDUP",
+      "ftp"
+    ],
     "techniques": [
       {
         "name": "Credentials In Files",
@@ -4002,6 +4186,21 @@
       "TEMP.Reaper",
       "Ricochet Chollima"
     ],
+    "software": [
+      "BLUELIGHT",
+      "CORALDECK",
+      "Cobalt Strike",
+      "DOGCALL",
+      "Final1stspy",
+      "HAPPYWORK",
+      "KARAE",
+      "NavRAT",
+      "POORAIM",
+      "ROKRAT",
+      "SHUTTERSPEED",
+      "SLOWDRIFT",
+      "WINERACK"
+    ],
     "techniques": [
       {
         "name": "Registry Run Keys / Startup Folder",
@@ -4291,6 +4490,14 @@
       "Stardust Chollima",
       "Sapphire Sleet",
       "COPERNICIUM"
+    ],
+    "software": [
+      "DarkComet",
+      "ECCENTRICBANDWAGON",
+      "HOPLIGHT",
+      "KillDisk",
+      "Mimikatz",
+      "Net"
     ],
     "techniques": [
       {
@@ -4820,6 +5027,19 @@
       "Chafer",
       "Remix Kitten"
     ],
+    "software": [
+      "ASPXSpy",
+      "Cadelspy",
+      "CrackMapExec",
+      "MechaFlounder",
+      "Mimikatz",
+      "NBTscan",
+      "PsExec",
+      "Remexi",
+      "Windows Credential Editor",
+      "ftp",
+      "pwdump"
+    ],
     "techniques": [
       {
         "name": "Network Service Discovery",
@@ -5342,6 +5562,40 @@
       "Wicked Panda",
       "Brass Typhoon",
       "BARIUM"
+    ],
+    "software": [
+      "ASPXSpy",
+      "BITSAdmin",
+      "BLACKCOFFEE",
+      "China Chopper",
+      "Cobalt Strike",
+      "DUSTPAN",
+      "DUSTTRAP",
+      "Derusbi",
+      "Empire",
+      "Impacket",
+      "KEYPLUG",
+      "LightSpy",
+      "MESSAGETAP",
+      "MOPSLED",
+      "Mimikatz",
+      "Net",
+      "Ping",
+      "PlugX",
+      "PowerSploit",
+      "ROCKBOOT",
+      "ShadowPad",
+      "Winnti for Linux",
+      "ZxShell",
+      "certutil",
+      "dsquery",
+      "ftp",
+      "gh0st RAT",
+      "ipconfig",
+      "netstat",
+      "njRAT",
+      "pwdump",
+      "sqlmap"
     ],
     "techniques": [
       {
@@ -6113,6 +6367,10 @@
     "aliases": [
       "APT42"
     ],
+    "software": [
+      "NICECURL",
+      "TAMECAT"
+    ],
     "techniques": [
       {
         "name": "PowerShell",
@@ -6423,6 +6681,21 @@
       "Keyhole Panda",
       "UNC2630"
     ],
+    "software": [
+      "Mimikatz",
+      "Net",
+      "PACEMAKER",
+      "PULSECHECK",
+      "PcShare",
+      "PoisonIvy",
+      "RAPIDPULSE",
+      "SLIGHTPULSE",
+      "SLOWPULSE",
+      "Skeleton Key",
+      "Tasklist",
+      "gh0st RAT",
+      "netstat"
+    ],
     "techniques": [
       {
         "name": "PowerShell",
@@ -6719,6 +6992,17 @@
       "Agonizing Serpens",
       "BlackShadow"
     ],
+    "software": [
+      "ASPXSpy",
+      "Apostle",
+      "BFG Agonizer",
+      "DEADWOOD",
+      "IPsec Helper",
+      "Mimikatz",
+      "Moneybird",
+      "MultiLayer Wiper",
+      "NBTscan"
+    ],
     "techniques": [
       {
         "name": "Remote System Discovery",
@@ -6957,6 +7241,10 @@
       "Flying Kitten",
       "Operation Saffron Rose"
     ],
+    "software": [
+      "Havij",
+      "sqlmap"
+    ],
     "techniques": [
       {
         "name": "Keylogging",
@@ -7023,6 +7311,16 @@
       "GOLD SAHARA",
       "PUNK SPIDER",
       "Howling Scorpius"
+    ],
+    "software": [
+      "AdFind",
+      "Akira",
+      "Akira _v2",
+      "LaZagne",
+      "Megazord",
+      "Mimikatz",
+      "PsExec",
+      "Rclone"
     ],
     "techniques": [
       {
@@ -7205,6 +7503,10 @@
       "PLUTONIUM",
       "Onyx Sleet"
     ],
+    "software": [
+      "Rifdoor",
+      "gh0st RAT"
+    ],
     "techniques": [
       {
         "name": "System Network Connections Discovery",
@@ -7324,6 +7626,10 @@
     "aliases": [
       "Aoqin Dragon"
     ],
+    "software": [
+      "Heyoka Backdoor",
+      "Mongall"
+    ],
     "techniques": [
       {
         "name": "Malicious File",
@@ -7415,6 +7721,7 @@
       "UNC1720",
       "UNC4736"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Financial Theft",
@@ -7444,6 +7751,14 @@
   "Aquatic Panda": {
     "aliases": [
       "Aquatic Panda"
+    ],
+    "software": [
+      "Cobalt Strike",
+      "ShadowPad",
+      "Wevtutil",
+      "Winnti for Linux",
+      "Winnti for Windows",
+      "njRAT"
     ],
     "techniques": [
       {
@@ -7766,6 +8081,16 @@
       "Axiom",
       "Group 72"
     ],
+    "software": [
+      "Derusbi",
+      "Hikit",
+      "Hydraq",
+      "PlugX",
+      "PoisonIvy",
+      "Zox",
+      "ZxShell",
+      "gh0st RAT"
+    ],
     "techniques": [
       {
         "name": "Steganography",
@@ -7924,6 +8249,9 @@
       "BITTER",
       "T-APT-17"
     ],
+    "software": [
+      "ZxxZ"
+    ],
     "techniques": [
       {
         "name": "Ingress Tool Transfer",
@@ -8076,6 +8404,22 @@
       "BRONZE BUTLER",
       "REDBALDKNIGHT",
       "Tick"
+    ],
+    "software": [
+      "ABK",
+      "Avenger",
+      "BBK",
+      "Daserf",
+      "Mimikatz",
+      "Net",
+      "ShadowPad",
+      "Windows Credential Editor",
+      "at",
+      "build_downer",
+      "cmd",
+      "down_new",
+      "gsecdump",
+      "schtasks"
     ],
     "techniques": [
       {
@@ -8458,6 +8802,13 @@
     "aliases": [
       "BackdoorDiplomacy"
     ],
+    "software": [
+      "China Chopper",
+      "Mimikatz",
+      "NBTscan",
+      "QuasarRAT",
+      "Turian"
+    ],
     "techniques": [
       {
         "name": "Obfuscated Files or Information",
@@ -8612,6 +8963,16 @@
     "aliases": [
       "BlackByte",
       "Hecamede"
+    ],
+    "software": [
+      "AdFind",
+      "Arp",
+      "BlackByte 2.0 Ransomware",
+      "BlackByte Ransomware",
+      "Cobalt Strike",
+      "Exbyte",
+      "Mimikatz",
+      "PsExec"
     ],
     "techniques": [
       {
@@ -9070,6 +9431,7 @@
     "aliases": [
       "BlackOasis"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Obfuscated Files or Information",
@@ -9088,6 +9450,14 @@
     "aliases": [
       "BlackTech",
       "Palmerworm"
+    ],
+    "software": [
+      "Flagpro",
+      "Kivars",
+      "PLEAD",
+      "PsExec",
+      "TSCookie",
+      "Waterbear"
     ],
     "techniques": [
       {
@@ -9223,6 +9593,10 @@
   "Blue Mockingbird": {
     "aliases": [
       "Blue Mockingbird"
+    ],
+    "software": [
+      "FRP",
+      "Mimikatz"
     ],
     "techniques": [
       {
@@ -9414,6 +9788,9 @@
       "Tortoise Shell",
       "Yellow Liderc"
     ],
+    "software": [
+      "IMAPLoader"
+    ],
     "techniques": [
       {
         "name": "Spearphishing via Service",
@@ -9586,6 +9963,12 @@
       "Carbanak",
       "Anunak"
     ],
+    "software": [
+      "Carbanak",
+      "Mimikatz",
+      "PsExec",
+      "netsh"
+    ],
     "techniques": [
       {
         "name": "Masquerade Task or Service",
@@ -9679,6 +10062,14 @@
   "Chimera": {
     "aliases": [
       "Chimera"
+    ],
+    "software": [
+      "BloodHound",
+      "Cobalt Strike",
+      "Mimikatz",
+      "Net",
+      "PsExec",
+      "esentutl"
     ],
     "techniques": [
       {
@@ -10251,6 +10642,16 @@
       "Emperor Dragonfly",
       "BRONZE STARLIGHT"
     ],
+    "software": [
+      "Cheerscrypt",
+      "Cobalt Strike",
+      "HUI Loader",
+      "Impacket",
+      "Pandora",
+      "PlugX",
+      "Rclone",
+      "Sliver"
+    ],
     "techniques": [
       {
         "name": "Windows Management Instrumentation",
@@ -10439,6 +10840,12 @@
       "Threat Group 2889",
       "TG-2889"
     ],
+    "software": [
+      "Mimikatz",
+      "Net Crawler",
+      "PsExec",
+      "TinyZBot"
+    ],
     "techniques": [
       {
         "name": "LSASS Memory",
@@ -10485,6 +10892,14 @@
       "GOLD KINGSWOOD",
       "Cobalt Gang",
       "Cobalt Spider"
+    ],
+    "software": [
+      "Cobalt Strike",
+      "Mimikatz",
+      "More_eggs",
+      "PsExec",
+      "SDelete",
+      "SpicyOmelette"
     ],
     "techniques": [
       {
@@ -10790,6 +11205,9 @@
       "Confucius",
       "Confucius APT"
     ],
+    "software": [
+      "WarzoneRAT"
+    ],
     "techniques": [
       {
         "name": "Spearphishing Link",
@@ -10977,6 +11395,12 @@
       "DEV#POPPER",
       "PurpleBravo",
       "TAG-121"
+    ],
+    "software": [
+      "BeaverTail",
+      "HexEval Loader",
+      "InvisibleFerret",
+      "XORIndex Loader"
     ],
     "techniques": [
       {
@@ -11454,6 +11878,12 @@
     "aliases": [
       "CopyKittens"
     ],
+    "software": [
+      "Cobalt Strike",
+      "Empire",
+      "Matryoshka",
+      "TDTESS"
+    ],
     "techniques": [
       {
         "name": "Archive via Custom Method",
@@ -11529,6 +11959,14 @@
       "Daggerfly",
       "Evasive Panda",
       "BRONZE HIGHLAND"
+    ],
+    "software": [
+      "BITSAdmin",
+      "MacMa",
+      "MgBot",
+      "Nightdoor",
+      "PlugX",
+      "Reg"
     ],
     "techniques": [
       {
@@ -11684,6 +12122,11 @@
     "aliases": [
       "Dark Caracal"
     ],
+    "software": [
+      "Bandook",
+      "CrossRAT",
+      "FinFisher"
+    ],
     "techniques": [
       {
         "name": "Encrypted/Encoded File",
@@ -11800,6 +12243,11 @@
     "aliases": [
       "DarkHydrus"
     ],
+    "software": [
+      "Cobalt Strike",
+      "Mimikatz",
+      "RogueRobin"
+    ],
     "techniques": [
       {
         "name": "Malicious File",
@@ -11861,6 +12309,10 @@
   "DarkVishnya": {
     "aliases": [
       "DarkVishnya"
+    ],
+    "software": [
+      "PsExec",
+      "Winexe"
     ],
     "techniques": [
       {
@@ -11968,6 +12420,7 @@
       "DUBNIUM",
       "Zigzag Hail"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Security Software Discovery",
@@ -12212,6 +12665,15 @@
       "PinkPanther",
       "Black Vine"
     ],
+    "software": [
+      "Derusbi",
+      "Mivast",
+      "Net",
+      "Ping",
+      "Sakula",
+      "StreamEx",
+      "Tasklist"
+    ],
     "techniques": [
       {
         "name": "Process Discovery",
@@ -12312,6 +12774,18 @@
       "Energetic Bear",
       "Ghost Blizzard",
       "BROMINE"
+    ],
+    "software": [
+      "Backdoor.Oldrea",
+      "CrackMapExec",
+      "Impacket",
+      "MCMD",
+      "Mimikatz",
+      "Net",
+      "PsExec",
+      "Reg",
+      "Trojan.Karagany",
+      "netsh"
     ],
     "techniques": [
       {
@@ -12837,6 +13311,10 @@
     "aliases": [
       "EXOTIC LILY"
     ],
+    "software": [
+      "Bazar",
+      "Bumblebee"
+    ],
     "techniques": [
       {
         "name": "Spearphishing via Service",
@@ -12970,6 +13448,17 @@
       "Charcoal Typhoon",
       "CHROMIUM",
       "ControlX"
+    ],
+    "software": [
+      "Cobalt Strike",
+      "Mimikatz",
+      "NBTscan",
+      "Nltest",
+      "PowerSploit",
+      "ShadowPad",
+      "Tasklist",
+      "Winnti for Linux",
+      "certutil"
     ],
     "techniques": [
       {
@@ -13365,6 +13854,17 @@
       "Beijing Group",
       "Sneaky Panda"
     ],
+    "software": [
+      "Briba",
+      "Hydraq",
+      "Linfo",
+      "Naid",
+      "Nerex",
+      "Pasam",
+      "PoisonIvy",
+      "Vasport",
+      "Wiarp"
+    ],
     "techniques": [
       {
         "name": "Encrypted/Encoded File",
@@ -13464,6 +13964,19 @@
       "Cadet Blizzard",
       "Frozenvista",
       "UAC-0056"
+    ],
+    "software": [
+      "BloodHound",
+      "CrackMapExec",
+      "Impacket",
+      "P.A.S. Webshell",
+      "PsExec",
+      "Rclone",
+      "Responder",
+      "Saint Bot",
+      "WhisperGate",
+      "ngrok",
+      "reGeorg"
     ],
     "techniques": [
       {
@@ -13928,6 +14441,7 @@
     "aliases": [
       "Equation"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Hidden File System",
@@ -13970,6 +14484,11 @@
   "Evilnum": {
     "aliases": [
       "Evilnum"
+    ],
+    "software": [
+      "EVILNUM",
+      "LaZagne",
+      "More_eggs"
     ],
     "techniques": [
       {
@@ -14082,6 +14601,9 @@
     "aliases": [
       "FIN10"
     ],
+    "software": [
+      "Empire"
+    ],
     "techniques": [
       {
         "name": "File Deletion",
@@ -14189,6 +14711,12 @@
     "aliases": [
       "FIN13",
       "Elephant Beetle"
+    ],
+    "software": [
+      "Empire",
+      "Impacket",
+      "Mimikatz",
+      "certutil"
     ],
     "techniques": [
       {
@@ -14703,6 +15231,7 @@
     "aliases": [
       "FIN4"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Valid Accounts",
@@ -14832,6 +15361,14 @@
   "FIN5": {
     "aliases": [
       "FIN5"
+    ],
+    "software": [
+      "FLIPSIDE",
+      "PsExec",
+      "RawPOS",
+      "SDelete",
+      "Windows Credential Editor",
+      "pwdump"
     ],
     "techniques": [
       {
@@ -14970,6 +15507,20 @@
       "Skeleton Spider",
       "TAAL",
       "Camouflage Tempest"
+    ],
+    "software": [
+      "AdFind",
+      "Cobalt Strike",
+      "FlawedAmmyy",
+      "FrameworkPOS",
+      "GrimAgent",
+      "LockerGoga",
+      "Maze",
+      "Mimikatz",
+      "More_eggs",
+      "PsExec",
+      "Ryuk",
+      "Windows Credential Editor"
     ],
     "techniques": [
       {
@@ -15365,6 +15916,27 @@
       "Carbon Spider",
       "ELBRUS",
       "Sangria Tempest"
+    ],
+    "software": [
+      "AdFind",
+      "BOOSTWRITE",
+      "Carbanak",
+      "Cobalt Strike",
+      "CrackMapExec",
+      "GRIFFON",
+      "HALFBAKED",
+      "JSS Loader",
+      "Lizar",
+      "Maze",
+      "Mimikatz",
+      "POWERSOURCE",
+      "Pillowmint",
+      "PowerSploit",
+      "RDFSNIFFER",
+      "REvil",
+      "SQLRat",
+      "SystemBC",
+      "TEXTMATE"
     ],
     "techniques": [
       {
@@ -15981,6 +16553,19 @@
       "FIN8",
       "Syssphinx"
     ],
+    "software": [
+      "BADHATCH",
+      "Impacket",
+      "Net",
+      "Nltest",
+      "PUNCHBUGGY",
+      "PUNCHTRACK",
+      "Ping",
+      "PsExec",
+      "Ragnar Locker",
+      "Sardonic",
+      "dsquery"
+    ],
     "techniques": [
       {
         "name": "Valid Accounts",
@@ -16315,6 +16900,10 @@
     "aliases": [
       "Ferocious Kitten"
     ],
+    "software": [
+      "BITSAdmin",
+      "MarkiRAT"
+    ],
     "techniques": [
       {
         "name": "Malicious File",
@@ -16378,6 +16967,13 @@
       "Pioneer Kitten",
       "RUBIDIUM",
       "Lemon Sandstorm"
+    ],
+    "software": [
+      "China Chopper",
+      "Pay2Key",
+      "PsExec",
+      "SystemBC",
+      "ngrok"
     ],
     "techniques": [
       {
@@ -16783,6 +17379,24 @@
       "GALLIUM",
       "Granite Typhoon"
     ],
+    "software": [
+      "BlackMould",
+      "China Chopper",
+      "HTRAN",
+      "Mimikatz",
+      "NBTscan",
+      "Net",
+      "Ping",
+      "PingPull",
+      "PlugX",
+      "PoisonIvy",
+      "PsExec",
+      "Reg",
+      "Windows Credential Editor",
+      "at",
+      "cmd",
+      "ipconfig"
+    ],
     "techniques": [
       {
         "name": "Windows Command Shell",
@@ -17080,6 +17694,7 @@
     "aliases": [
       "GCMAN"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "VNC",
@@ -17105,6 +17720,10 @@
     "aliases": [
       "GOLD SOUTHFIELD",
       "Pinchy Spider"
+    ],
+    "software": [
+      "ConnectWise",
+      "REvil"
     ],
     "techniques": [
       {
@@ -17204,6 +17823,7 @@
     "aliases": [
       "Gallmaker"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Malicious File",
@@ -17270,6 +17890,14 @@
       "DEV-0157",
       "Aqua Blizzard",
       "NastyShrew"
+    ],
+    "software": [
+      "Ping",
+      "PowerPunch",
+      "Pteranodon",
+      "QuietSieve",
+      "Reg",
+      "Remcos"
     ],
     "techniques": [
       {
@@ -17920,6 +18548,12 @@
     "aliases": [
       "Gorgon Group"
     ],
+    "software": [
+      "NanoCore",
+      "QuasarRAT",
+      "Remcos",
+      "njRAT"
+    ],
     "techniques": [
       {
         "name": "Process Hollowing",
@@ -18062,6 +18696,10 @@
     "aliases": [
       "Group5"
     ],
+    "software": [
+      "NanoCore",
+      "njRAT"
+    ],
     "techniques": [
       {
         "name": "Keylogging",
@@ -18108,6 +18746,14 @@
       "HAFNIUM",
       "Operation Exchange Marauder",
       "Silk Typhoon"
+    ],
+    "software": [
+      "ASPXSpy",
+      "China Chopper",
+      "Covenant",
+      "Impacket",
+      "PsExec",
+      "Tarrask"
     ],
     "techniques": [
       {
@@ -18534,6 +19180,20 @@
       "Siamesekitten",
       "Spirlin"
     ],
+    "software": [
+      "BITSAdmin",
+      "DanBot",
+      "DnsSystem",
+      "Empire",
+      "Kevin",
+      "Milan",
+      "Mimikatz",
+      "Ping",
+      "PoshC2",
+      "Shark",
+      "ipconfig",
+      "netstat"
+    ],
     "techniques": [
       {
         "name": "System Network Configuration Discovery",
@@ -18875,6 +19535,11 @@
     "aliases": [
       "Higaisa"
     ],
+    "software": [
+      "PlugX",
+      "certutil",
+      "gh0st RAT"
+    ],
     "techniques": [
       {
         "name": "Visual Basic",
@@ -19145,6 +19810,16 @@
       "INC Ransom",
       "GOLD IONIC"
     ],
+    "software": [
+      "AdFind",
+      "INC Ransomware",
+      "Net",
+      "Nltest",
+      "PsExec",
+      "Rclone",
+      "Tor",
+      "esentutl"
+    ],
     "techniques": [
       {
         "name": "Data Encrypted for Impact",
@@ -19407,6 +20082,11 @@
       "Inception Framework",
       "Cloud Atlas"
     ],
+    "software": [
+      "LaZagne",
+      "PowerShower",
+      "VBShower"
+    ],
     "techniques": [
       {
         "name": "Encrypted/Encoded File",
@@ -19618,6 +20298,11 @@
     "aliases": [
       "IndigoZebra"
     ],
+    "software": [
+      "BoxCaon",
+      "PoisonIvy",
+      "xCaon"
+    ],
     "techniques": [
       {
         "name": "Domains",
@@ -19685,6 +20370,16 @@
       "Manatee Tempest",
       "DEV-0243",
       "UNC2165"
+    ],
+    "software": [
+      "BitPaymer",
+      "Cobalt Strike",
+      "Donut",
+      "Dridex",
+      "Empire",
+      "Mimikatz",
+      "PsExec",
+      "WastedLocker"
     ],
     "techniques": [
       {
@@ -20003,6 +20698,19 @@
       "RoyalAPT",
       "NICKEL",
       "Nylon Typhoon"
+    ],
+    "software": [
+      "Mimikatz",
+      "MirageFox",
+      "Neoichor",
+      "Net",
+      "Okrum",
+      "Ping",
+      "Systeminfo",
+      "Tasklist",
+      "ipconfig",
+      "netstat",
+      "spwebmember"
     ],
     "techniques": [
       {
@@ -20460,6 +21168,27 @@
       "Springtail",
       "Earth Kumiho",
       "PatheticSlug"
+    ],
+    "software": [
+      "Amadey",
+      "AppleSeed",
+      "BabyShark",
+      "Brave Prince",
+      "CSPY Downloader",
+      "GoBear",
+      "Gold Dragon",
+      "Gomir",
+      "HTTPTroy",
+      "KGH_SPY",
+      "Mimikatz",
+      "NOKKI",
+      "PsExec",
+      "QuasarRAT",
+      "TRANSLATEXT",
+      "Troll Stealer",
+      "certutil",
+      "gh0st RAT",
+      "schtasks"
     ],
     "techniques": [
       {
@@ -21629,6 +22358,9 @@
       "DEV-0537",
       "Strawberry Tempest"
     ],
+    "software": [
+      "Mimikatz"
+    ],
     "techniques": [
       {
         "name": "Gather Victim Identity Information",
@@ -22025,6 +22757,34 @@
       "ZINC",
       "NICKEL ACADEMY",
       "Diamond Sleet"
+    ],
+    "software": [
+      "AppleJeus",
+      "AuditCred",
+      "BADCALL",
+      "BLINDINGCAN",
+      "Bankshot",
+      "Cryptoistic",
+      "Dacls",
+      "Dtrack",
+      "ECCENTRICBANDWAGON",
+      "FALLCHILL",
+      "HARDRAIN",
+      "HOPLIGHT",
+      "HotCroissant",
+      "KEYMARBLE",
+      "MagicRAT",
+      "Proxysvc",
+      "RATANKBA",
+      "RawDisk",
+      "Responder",
+      "TAINTEDSCRIBE",
+      "TYPEFRAME",
+      "ThreatNeedle",
+      "Volgmer",
+      "WannaCry",
+      "netsh",
+      "route"
     ],
     "techniques": [
       {
@@ -22901,6 +23661,15 @@
     "aliases": [
       "LazyScripter"
     ],
+    "software": [
+      "Empire",
+      "KOCTOPUS",
+      "Koadic",
+      "QuasarRAT",
+      "Remcos",
+      "ngrok",
+      "njRAT"
+    ],
     "techniques": [
       {
         "name": "Malicious Link",
@@ -23081,6 +23850,12 @@
       "Leafminer",
       "Raspite"
     ],
+    "software": [
+      "LaZagne",
+      "MailSniper",
+      "Mimikatz",
+      "PsExec"
+    ],
     "techniques": [
       {
         "name": "Command Obfuscation",
@@ -23259,6 +24034,25 @@
       "APT40",
       "TEMP.Periscope",
       "Gingham Typhoon"
+    ],
+    "software": [
+      "BADFLICK",
+      "BITSAdmin",
+      "BLACKCOFFEE",
+      "China Chopper",
+      "Cobalt Strike",
+      "Derusbi",
+      "Empire",
+      "HOMEFRY",
+      "MURKYTOP",
+      "NanHaiShu",
+      "Net",
+      "Orz",
+      "PowerSploit",
+      "Tor",
+      "Windows Credential Editor",
+      "at",
+      "gh0st RAT"
     ],
     "techniques": [
       {
@@ -23711,6 +24505,17 @@
       "Bilbug",
       "Thrip"
     ],
+    "software": [
+      "AdFind",
+      "Elise",
+      "Emissary",
+      "Hannotog",
+      "Impacket",
+      "NBTscan",
+      "Ping",
+      "Sagerunex",
+      "certutil"
+    ],
     "techniques": [
       {
         "name": "System Network Configuration Discovery",
@@ -23913,6 +24718,10 @@
   "LuminousMoth": {
     "aliases": [
       "LuminousMoth"
+    ],
+    "software": [
+      "Cobalt Strike",
+      "PlugX"
     ],
     "techniques": [
       {
@@ -24169,6 +24978,9 @@
       "APT-C-43",
       "El Machete"
     ],
+    "software": [
+      "Machete"
+    ],
     "techniques": [
       {
         "name": "Malicious File",
@@ -24283,6 +25095,21 @@
       "Newscaster",
       "APT35",
       "Mint Sandstorm"
+    ],
+    "software": [
+      "CharmPower",
+      "DownPaper",
+      "FRP",
+      "Impacket",
+      "Mimikatz",
+      "Net",
+      "Ping",
+      "PowerLess",
+      "PsExec",
+      "Pupy",
+      "Systeminfo",
+      "ipconfig",
+      "netsh"
     ],
     "techniques": [
       {
@@ -25010,6 +25837,9 @@
     "aliases": [
       "Malteiro"
     ],
+    "software": [
+      "Mispadu"
+    ],
     "techniques": [
       {
         "name": "Malicious File",
@@ -25130,6 +25960,13 @@
   "Medusa Group": {
     "aliases": [
       "Medusa Group"
+    ],
+    "software": [
+      "Medusa Ransomware",
+      "Mimikatz",
+      "PsExec",
+      "Rclone",
+      "certutil"
     ],
     "techniques": [
       {
@@ -25678,6 +26515,10 @@
     "aliases": [
       "Metador"
     ],
+    "software": [
+      "Mafalda",
+      "metaMain"
+    ],
     "techniques": [
       {
         "name": "Web Protocols",
@@ -25765,6 +26606,24 @@
     "aliases": [
       "MirrorFace",
       "Earth Kasha"
+    ],
+    "software": [
+      "BITSAdmin",
+      "Cobalt Strike",
+      "DOWNIISSA",
+      "HiddenFace",
+      "LODEINFO",
+      "MirrorStealer",
+      "NOOPLDR",
+      "Net",
+      "Nltest",
+      "Ping",
+      "ROAMINGHOUSE",
+      "Tasklist",
+      "UPPERCUT",
+      "Wevtutil",
+      "ipconfig",
+      "nbtstat"
     ],
     "techniques": [
       {
@@ -26160,6 +27019,9 @@
     "aliases": [
       "Moafee"
     ],
+    "software": [
+      "PoisonIvy"
+    ],
     "techniques": [
       {
         "name": "Binary Padding",
@@ -26175,6 +27037,10 @@
   "Mofang": {
     "aliases": [
       "Mofang"
+    ],
+    "software": [
+      "ShimRat",
+      "ShimRatReporter"
     ],
     "techniques": [
       {
@@ -26241,6 +27107,14 @@
       "Molerats",
       "Operation Molerats",
       "Gaza Cybergang"
+    ],
+    "software": [
+      "DropBook",
+      "DustySky",
+      "MoleNet",
+      "PoisonIvy",
+      "SharpStage",
+      "Spark"
     ],
     "techniques": [
       {
@@ -26392,6 +27266,9 @@
     "aliases": [
       "Moonstone Sleet",
       "Storm-1789"
+    ],
+    "software": [
+      "Qilin"
     ],
     "techniques": [
       {
@@ -26657,6 +27534,12 @@
       "DEV-0500",
       "Marigold Sandstorm"
     ],
+    "software": [
+      "DCSrv",
+      "PsExec",
+      "PyDCrypt",
+      "StrifeWater"
+    ],
     "techniques": [
       {
         "name": "SMB/Windows Admin Shares",
@@ -26776,6 +27659,11 @@
     "aliases": [
       "MoustachedBouncer"
     ],
+    "software": [
+      "Disco",
+      "NightClub",
+      "SharpDisco"
+    ],
     "techniques": [
       {
         "name": "PowerShell",
@@ -26865,6 +27753,29 @@
       "Mango Sandstorm",
       "TA450",
       "MuddyKrill"
+    ],
+    "software": [
+      "ConnectWise",
+      "CrackMapExec",
+      "Empire",
+      "Fooder",
+      "Koadic",
+      "LP-Notes",
+      "LaZagne",
+      "Mimikatz",
+      "Mori",
+      "MuddyViper",
+      "Out1",
+      "POWERSTATS",
+      "PowGoop",
+      "PowerSploit",
+      "Rclone",
+      "RemoteUtilities",
+      "RustyWater",
+      "SHARPSTATS",
+      "STARWHALE",
+      "Small Sieve",
+      "Tsundere Botnet"
     ],
     "techniques": [
       {
@@ -27518,6 +28429,31 @@
       "TEMP.Hex",
       "Red Lich",
       "ClumsyToad"
+    ],
+    "software": [
+      "AdFind",
+      "BOOKWORM",
+      "CANONSTAGER",
+      "CLAIMLOADER",
+      "China Chopper",
+      "Cobalt Strike",
+      "CorKLOG",
+      "HIUPAN",
+      "Impacket",
+      "Mimikatz",
+      "NBTscan",
+      "PAKLOG",
+      "PUBLOAD",
+      "PlugX",
+      "PoisonIvy",
+      "RCSession",
+      "STATICPLUGIN",
+      "ShadowPad",
+      "SplatCloak",
+      "SplatDropper",
+      "StarProxy",
+      "TONESHELL",
+      "Wevtutil"
     ],
     "techniques": [
       {
@@ -28302,6 +29238,10 @@
       "GOLD PRELUDE",
       "UNC1543"
     ],
+    "software": [
+      "Cobalt Strike",
+      "SocGholish"
+    ],
     "techniques": [
       {
         "name": "Malvertising",
@@ -28415,6 +29355,23 @@
   "Naikon": {
     "aliases": [
       "Naikon"
+    ],
+    "software": [
+      "Aria-body",
+      "HDoor",
+      "Nebulae",
+      "Net",
+      "Ping",
+      "PsExec",
+      "RARSTONE",
+      "RainyDay",
+      "SslMM",
+      "Sys10",
+      "Systeminfo",
+      "Tasklist",
+      "WinMM",
+      "ftp",
+      "netsh"
     ],
     "techniques": [
       {
@@ -28552,6 +29509,9 @@
       "Nomadic Octopus",
       "DustSquad"
     ],
+    "software": [
+      "Octopus"
+    ],
     "techniques": [
       {
         "name": "Windows Command Shell",
@@ -28632,6 +29592,38 @@
       "Earth Simnavaz",
       "Crambus",
       "TA452"
+    ],
+    "software": [
+      "BONDUPDATER",
+      "Helminth",
+      "ISMInjector",
+      "LaZagne",
+      "Mango",
+      "Mimikatz",
+      "Net",
+      "ODAgent",
+      "OilBooster",
+      "OilCheck",
+      "OopsIE",
+      "POWRUNER",
+      "PowerExchange",
+      "PsExec",
+      "QUADAGENT",
+      "RDAT",
+      "RGDoor",
+      "Reg",
+      "SEASHARPEE",
+      "SampleCheck5000",
+      "SideTwist",
+      "Solar",
+      "Systeminfo",
+      "Tasklist",
+      "ZeroCleare",
+      "certutil",
+      "ftp",
+      "ipconfig",
+      "netstat",
+      "ngrok"
     ],
     "techniques": [
       {
@@ -29357,6 +30349,16 @@
     "aliases": [
       "Orangeworm"
     ],
+    "software": [
+      "Arp",
+      "Kwampirs",
+      "Net",
+      "Systeminfo",
+      "cmd",
+      "ipconfig",
+      "netstat",
+      "route"
+    ],
     "techniques": [
       {
         "name": "Web Protocols",
@@ -29381,6 +30383,11 @@
   "PLATINUM": {
     "aliases": [
       "PLATINUM"
+    ],
+    "software": [
+      "Dipsind",
+      "JPIN",
+      "adbupd"
     ],
     "techniques": [
       {
@@ -29496,6 +30503,10 @@
       "POLONIUM",
       "Plaid Rain"
     ],
+    "software": [
+      "CreepyDrive",
+      "CreepySnail"
+    ],
     "techniques": [
       {
         "name": "Exfiltration to Cloud Storage",
@@ -29577,6 +30588,10 @@
     "aliases": [
       "PROMETHIUM",
       "StrongPity"
+    ],
+    "software": [
+      "StrongPity",
+      "Truvasys"
     ],
     "techniques": [
       {
@@ -29686,6 +30701,16 @@
       "Chinastrats",
       "MONSOON",
       "Operation Hangover"
+    ],
+    "software": [
+      "AutoIt backdoor",
+      "BADNEWS",
+      "BackConfig",
+      "NDiskMonitor",
+      "PowerSploit",
+      "QuasarRAT",
+      "TINYTYPHON",
+      "Unknown Logger"
     ],
     "techniques": [
       {
@@ -30060,6 +31085,13 @@
     "aliases": [
       "PittyTiger"
     ],
+    "software": [
+      "Lurid",
+      "Mimikatz",
+      "PoisonIvy",
+      "gh0st RAT",
+      "gsecdump"
+    ],
     "techniques": [
       {
         "name": "Tool",
@@ -30089,6 +31121,17 @@
   "Play": {
     "aliases": [
       "Play"
+    ],
+    "software": [
+      "AdFind",
+      "BloodHound",
+      "Cobalt Strike",
+      "Empire",
+      "Mimikatz",
+      "Nltest",
+      "Playcrypt",
+      "PsExec",
+      "Wevtutil"
     ],
     "techniques": [
       {
@@ -30360,6 +31403,7 @@
     "aliases": [
       "Poseidon Group"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "System Network Connections Discovery",
@@ -30447,6 +31491,12 @@
       "APT2",
       "MSUpdater"
     ],
+    "software": [
+      "3PARA RAT",
+      "4H RAT",
+      "httpclient",
+      "pngdowner"
+    ],
     "techniques": [
       {
         "name": "Registry Run Keys / Startup Folder",
@@ -30488,6 +31538,9 @@
   },
   "RTM": {
     "aliases": [
+      "RTM"
+    ],
+    "software": [
       "RTM"
     ],
     "techniques": [
@@ -30557,6 +31610,12 @@
   "Rancor": {
     "aliases": [
       "Rancor"
+    ],
+    "software": [
+      "DDKONG",
+      "PLAINTEE",
+      "Reg",
+      "certutil"
     ],
     "techniques": [
       {
@@ -30642,6 +31701,7 @@
     "aliases": [
       "RedCurl"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Obfuscated Files or Information",
@@ -31036,6 +32096,9 @@
     "aliases": [
       "RedEcho"
     ],
+    "software": [
+      "ShadowPad"
+    ],
     "techniques": [
       {
         "name": "Dynamic Resolution",
@@ -31092,6 +32155,7 @@
     "aliases": [
       "Rocke"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Exploit Public-Facing Application",
@@ -31462,6 +32526,10 @@
       "UAC-0056",
       "Lorec53"
     ],
+    "software": [
+      "OutSteel",
+      "Saint Bot"
+    ],
     "techniques": [
       {
         "name": "Spearphishing Attachment",
@@ -31631,6 +32699,9 @@
     "aliases": [
       "Salt Typhoon"
     ],
+    "software": [
+      "JumbledPath"
+    ],
     "techniques": [
       {
         "name": "Clear Linux or Mac System Logs",
@@ -31787,6 +32858,35 @@
       "Seashell Blizzard",
       "FROZENBARENTS",
       "APT44"
+    ],
+    "software": [
+      "AcidPour",
+      "AcidRain",
+      "Bad Rabbit",
+      "BlackEnergy",
+      "Cobalt Strike",
+      "Cyclops Blink",
+      "Empire",
+      "Exaramel for Linux",
+      "Exaramel for Windows",
+      "GreyEnergy",
+      "Impacket",
+      "Industroyer",
+      "Industroyer2",
+      "Invoke-PSImage",
+      "Kapeka",
+      "KillDisk",
+      "Mimikatz",
+      "Neo-reGeorg",
+      "Net",
+      "NotPetya",
+      "Olympic Destroyer",
+      "P.A.S. Webshell",
+      "PoshC2",
+      "Prestige",
+      "PsExec",
+      "SDelete",
+      "VPNFilter"
     ],
     "techniques": [
       {
@@ -32527,6 +33627,12 @@
     "aliases": [
       "Scarlet Mimic"
     ],
+    "software": [
+      "CallMe",
+      "FakeM",
+      "MobileOrder",
+      "Psylo"
+    ],
     "techniques": [
       {
         "name": "Right-to-Left Override",
@@ -32546,6 +33652,17 @@
       "Octo Tempest",
       "Storm-0875",
       "UNC3944"
+    ],
+    "software": [
+      "BlackCat",
+      "ConnectWise",
+      "LaZagne",
+      "Mimikatz",
+      "Raccoon Stealer",
+      "Rclone",
+      "Tor",
+      "WarzoneRAT",
+      "ngrok"
     ],
     "techniques": [
       {
@@ -33188,6 +34305,9 @@
       "Cosmic Wolf",
       "SILICON"
     ],
+    "software": [
+      "SnappyTCP"
+    ],
     "techniques": [
       {
         "name": "Acquire Infrastructure",
@@ -33452,6 +34572,10 @@
     "aliases": [
       "SideCopy"
     ],
+    "software": [
+      "Action RAT",
+      "AuTo Stealer"
+    ],
     "techniques": [
       {
         "name": "System Location Discovery",
@@ -33607,6 +34731,9 @@
       "Sidewinder",
       "T-APT-04",
       "Rattlesnake"
+    ],
+    "software": [
+      "Koadic"
     ],
     "techniques": [
       {
@@ -33901,6 +35028,11 @@
       "Silence",
       "Whisper Spider"
     ],
+    "software": [
+      "Empire",
+      "SDelete",
+      "Winexe"
+    ],
     "techniques": [
       {
         "name": "Non-Standard Port",
@@ -34160,6 +35292,7 @@
       "TA407",
       "COBALT DICKENS"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Digital Certificates",
@@ -34282,6 +35415,13 @@
     "aliases": [
       "SilverTerrier"
     ],
+    "software": [
+      "Agent Tesla",
+      "DarkComet",
+      "Lokibot",
+      "NETWIRE",
+      "NanoCore"
+    ],
     "techniques": [
       {
         "name": "Mail Protocols",
@@ -34331,6 +35471,10 @@
   "Sowbug": {
     "aliases": [
       "Sowbug"
+    ],
+    "software": [
+      "Felismus",
+      "Starloader"
     ],
     "techniques": [
       {
@@ -34429,6 +35573,9 @@
       "Callisto Group",
       "TA446",
       "COLDRIVER"
+    ],
+    "software": [
+      "Spica"
     ],
     "techniques": [
       {
@@ -34606,6 +35753,7 @@
     "aliases": [
       "Stealth Falcon"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Windows Credential Manager",
@@ -34769,6 +35917,16 @@
   "Storm-0501": {
     "aliases": [
       "Storm-0501"
+    ],
+    "software": [
+      "AADInternals",
+      "Cobalt Strike",
+      "Embargo",
+      "Impacket",
+      "Net",
+      "Nltest",
+      "Rclone",
+      "Tasklist"
     ],
     "techniques": [
       {
@@ -35163,6 +36321,15 @@
     "aliases": [
       "Storm-1811"
     ],
+    "software": [
+      "BITSAdmin",
+      "Black Basta",
+      "Cobalt Strike",
+      "Impacket",
+      "PsExec",
+      "QakBot",
+      "Quick Assist"
+    ],
     "techniques": [
       {
         "name": "Cloud Accounts",
@@ -35456,6 +36623,9 @@
       "Strider",
       "ProjectSauron"
     ],
+    "software": [
+      "Remsec"
+    ],
     "techniques": [
       {
         "name": "Internal Proxy",
@@ -35489,6 +36659,9 @@
   "Suckfly": {
     "aliases": [
       "Suckfly"
+    ],
+    "software": [
+      "Nidiran"
     ],
     "techniques": [
       {
@@ -35548,6 +36721,17 @@
   "TA2541": {
     "aliases": [
       "TA2541"
+    ],
+    "software": [
+      "Agent Tesla",
+      "AsyncRAT",
+      "Imminent Monitor",
+      "NETWIRE",
+      "Revenge RAT",
+      "Snip3",
+      "WarzoneRAT",
+      "jRAT",
+      "njRAT"
     ],
     "techniques": [
       {
@@ -35805,6 +36989,12 @@
     "aliases": [
       "TA459"
     ],
+    "software": [
+      "NetTraveler",
+      "PlugX",
+      "ZeroT",
+      "gh0st RAT"
+    ],
     "techniques": [
       {
         "name": "Spearphishing Attachment",
@@ -35857,6 +37047,24 @@
       "Hive0065",
       "Spandex Tempest",
       "CHIMBORAZO"
+    ],
+    "software": [
+      "AdFind",
+      "Amadey",
+      "Azorult",
+      "BloodHound",
+      "Clop",
+      "Cobalt Strike",
+      "Dridex",
+      "FlawedAmmyy",
+      "FlawedGrace",
+      "Get2",
+      "Mimikatz",
+      "Net",
+      "PowerSploit",
+      "SDBbot",
+      "ServHelper",
+      "TrickBot"
     ],
     "techniques": [
       {
@@ -36170,6 +37378,13 @@
       "GOLD CABIN",
       "Shathak"
     ],
+    "software": [
+      "IcedID",
+      "QakBot",
+      "Sliver",
+      "Ursnif",
+      "Valak"
+    ],
     "techniques": [
       {
         "name": "Regsvr32",
@@ -36301,6 +37516,11 @@
     "aliases": [
       "TA577"
     ],
+    "software": [
+      "Latrodectus",
+      "Pikabot",
+      "QakBot"
+    ],
     "techniques": [
       {
         "name": "JavaScript",
@@ -36361,6 +37581,11 @@
     "aliases": [
       "TA578"
     ],
+    "software": [
+      "Bumblebee",
+      "IcedID",
+      "Latrodectus"
+    ],
     "techniques": [
       {
         "name": "Malicious Link",
@@ -36399,6 +37624,12 @@
   "TeamTNT": {
     "aliases": [
       "TeamTNT"
+    ],
+    "software": [
+      "Hildegard",
+      "LaZagne",
+      "MimiPenguin",
+      "Peirates"
     ],
     "techniques": [
       {
@@ -36935,6 +38166,10 @@
     "aliases": [
       "The White Company"
     ],
+    "software": [
+      "NETWIRE",
+      "Revenge RAT"
+    ],
     "techniques": [
       {
         "name": "Software Packing",
@@ -37010,6 +38245,10 @@
       "Threat Group-1314",
       "TG-1314"
     ],
+    "software": [
+      "Net",
+      "PsExec"
+    ],
     "techniques": [
       {
         "name": "SMB/Windows Admin Shares",
@@ -37059,6 +38298,32 @@
       "Iron Tiger",
       "LuckyMouse",
       "Linen Typhoon"
+    ],
+    "software": [
+      "ASPXSpy",
+      "China Chopper",
+      "Clambling",
+      "Cobalt Strike",
+      "HTTPBrowser",
+      "HyperBro",
+      "Impacket",
+      "Mimikatz",
+      "NBTscan",
+      "Net",
+      "Pandora",
+      "PlugX",
+      "RCSession",
+      "SysUpdate",
+      "Systeminfo",
+      "Tasklist",
+      "Windows Credential Editor",
+      "ZxShell",
+      "certutil",
+      "gh0st RAT",
+      "gsecdump",
+      "ipconfig",
+      "netstat",
+      "pwdump"
     ],
     "techniques": [
       {
@@ -37585,6 +38850,11 @@
     "aliases": [
       "Thrip"
     ],
+    "software": [
+      "Catchamas",
+      "Mimikatz",
+      "PsExec"
+    ],
     "techniques": [
       {
         "name": "PowerShell",
@@ -37625,6 +38895,17 @@
   "ToddyCat": {
     "aliases": [
       "ToddyCat"
+    ],
+    "software": [
+      "China Chopper",
+      "Cobalt Strike",
+      "LoFiSe",
+      "Net",
+      "Ninja",
+      "Pcexter",
+      "Ping",
+      "Samurai",
+      "netstat"
     ],
     "techniques": [
       {
@@ -37880,6 +39161,14 @@
       "CactusPete",
       "Karma Panda"
     ],
+    "software": [
+      "Bisonal",
+      "LaZagne",
+      "Mimikatz",
+      "NBTscan",
+      "ShadowPad",
+      "gsecdump"
+    ],
     "techniques": [
       {
         "name": "Network Share Discovery",
@@ -38031,6 +39320,13 @@
       "Mythic Leopard",
       "ProjectM"
     ],
+    "software": [
+      "Crimson",
+      "DarkComet",
+      "ObliqueRAT",
+      "Peppy",
+      "njRAT"
+    ],
     "techniques": [
       {
         "name": "Drive-by Compromise",
@@ -38166,6 +39462,14 @@
       "Tropic Trooper",
       "Pirate Panda",
       "KeyBoy"
+    ],
+    "software": [
+      "BITSAdmin",
+      "KeyBoy",
+      "PoisonIvy",
+      "ShadowPad",
+      "USBferry",
+      "YAHOYAH"
     ],
     "techniques": [
       {
@@ -38570,6 +39874,38 @@
       "Venomous Bear",
       "Secret Blizzard",
       "BELUGASTURGEON"
+    ],
+    "software": [
+      "Arp",
+      "Carbon",
+      "ComRAT",
+      "Crutch",
+      "Empire",
+      "Epic",
+      "Gazer",
+      "HyperStack",
+      "IronNetInjector",
+      "KOPILUWAK",
+      "Kazuar",
+      "LightNeuron",
+      "LunarLoader",
+      "LunarMail",
+      "LunarWeb",
+      "Mimikatz",
+      "Mosquito",
+      "NBTscan",
+      "Net",
+      "Penquin",
+      "PowerStallion",
+      "PsExec",
+      "Reg",
+      "Systeminfo",
+      "Tasklist",
+      "TinyTurla",
+      "Uroburos",
+      "certutil",
+      "nbtstat",
+      "netstat"
     ],
     "techniques": [
       {
@@ -39212,6 +40548,16 @@
     "aliases": [
       "UNC3886"
     ],
+    "software": [
+      "CASTLETAP",
+      "MEDUSA",
+      "MOPSLED",
+      "REPTILE",
+      "RIFLESPINE",
+      "THINCRUST",
+      "VIRTUALPIE",
+      "VIRTUALPITA"
+    ],
     "techniques": [
       {
         "name": "Indicator Removal from Tools",
@@ -39699,6 +41045,7 @@
       "BANISHED KITTEN",
       "Red Sandstorm"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Screen Capture",
@@ -40315,6 +41662,10 @@
     "aliases": [
       "Velvet Ant"
     ],
+    "software": [
+      "Impacket",
+      "PlugX"
+    ],
     "techniques": [
       {
         "name": "Internal Proxy",
@@ -40545,6 +41896,10 @@
       "Volatile Cedar",
       "Lebanese Cedar"
     ],
+    "software": [
+      "Caterpillar WebShell",
+      "Explosive"
+    ],
     "techniques": [
       {
         "name": "Vulnerability Scanning",
@@ -40606,6 +41961,25 @@
       "Voltzite",
       "Insidious Taurus",
       "DazedToad"
+    ],
+    "software": [
+      "FRP",
+      "Impacket",
+      "Mimikatz",
+      "Net",
+      "Nltest",
+      "Ping",
+      "PsExec",
+      "Reg",
+      "Systeminfo",
+      "Tasklist",
+      "VersaMem",
+      "Wevtutil",
+      "certutil",
+      "cmd",
+      "ipconfig",
+      "netsh",
+      "netstat"
     ],
     "techniques": [
       {
@@ -41366,6 +42740,16 @@
       "WIRTE",
       "Ashen Lepus"
     ],
+    "software": [
+      "AshTag",
+      "Empire",
+      "Ferocious",
+      "Havoc",
+      "IronWind",
+      "LitePower",
+      "Rclone",
+      "SameCoin"
+    ],
     "techniques": [
       {
         "name": "PowerShell",
@@ -41605,6 +42989,10 @@
       "Water Galura",
       "GOLD FEATHER"
     ],
+    "software": [
+      "Qilin",
+      "Tor"
+    ],
     "techniques": [
       {
         "name": "Social Media Accounts",
@@ -41640,6 +43028,9 @@
   "Whitefly": {
     "aliases": [
       "Whitefly"
+    ],
+    "software": [
+      "Mimikatz"
     ],
     "techniques": [
       {
@@ -41735,6 +43126,9 @@
     "aliases": [
       "Windigo"
     ],
+    "software": [
+      "Ebury"
+    ],
     "techniques": [
       {
         "name": "System Information Discovery",
@@ -41824,6 +43218,9 @@
     "aliases": [
       "Windshift",
       "Bahamut"
+    ],
+    "software": [
+      "WindTail"
     ],
     "techniques": [
       {
@@ -42020,6 +43417,11 @@
       "Winnti Group",
       "Blackfly"
     ],
+    "software": [
+      "PipeMon",
+      "PlugX",
+      "Winnti for Windows"
+    ],
     "techniques": [
       {
         "name": "Rootkit",
@@ -42086,6 +43488,7 @@
       "TA473",
       "UAC-0114"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "Command and Scripting Interpreter",
@@ -42359,6 +43762,30 @@
       "DEV-0193",
       "Pistachio Tempest",
       "DEV-0237"
+    ],
+    "software": [
+      "AdFind",
+      "Anchor",
+      "BITSAdmin",
+      "Bazar",
+      "BloodHound",
+      "Cobalt Strike",
+      "Conti",
+      "Diavol",
+      "Dyre",
+      "Emotet",
+      "Empire",
+      "GrimAgent",
+      "LaZagne",
+      "Mimikatz",
+      "Net",
+      "Nltest",
+      "Ping",
+      "PsExec",
+      "Rubeus",
+      "Ryuk",
+      "SystemBC",
+      "TrickBot"
     ],
     "techniques": [
       {
@@ -42942,6 +44369,7 @@
       "APT31",
       "Violet Typhoon"
     ],
+    "software": [],
     "techniques": [
       {
         "name": "System Information Discovery",
@@ -43219,6 +44647,15 @@
     "aliases": [
       "admin@338"
     ],
+    "software": [
+      "BUBBLEWRAP",
+      "LOWBALL",
+      "Net",
+      "PoisonIvy",
+      "Systeminfo",
+      "ipconfig",
+      "netstat"
+    ],
     "techniques": [
       {
         "name": "Spearphishing Attachment",
@@ -43352,6 +44789,33 @@
       "CVNX",
       "HOGFISH",
       "BRONZE RIVERSIDE"
+    ],
+    "software": [
+      "AdFind",
+      "ChChes",
+      "Cobalt Strike",
+      "Ecipekac",
+      "EvilGrab",
+      "FYAnti",
+      "HUI Loader",
+      "Impacket",
+      "Mimikatz",
+      "Net",
+      "P8RAT",
+      "Ping",
+      "PlugX",
+      "PoisonIvy",
+      "PowerSploit",
+      "PsExec",
+      "QuasarRAT",
+      "RedLeaves",
+      "SNUGRIDE",
+      "SodaMaster",
+      "UPPERCUT",
+      "certutil",
+      "cmd",
+      "esentutl",
+      "pwdump"
     ],
     "techniques": [
       {
