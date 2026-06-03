@@ -92,3 +92,37 @@ def get_actors(data: DashboardData = Depends(get_data)) -> list[str]:
 def get_system(data: DashboardData = Depends(get_data)) -> dict:
     """Lightweight system status: gateway health + active engagement count. Read-only."""
     return data.system()
+
+
+@router.get("/playbooks")
+def get_playbooks() -> list[dict]:
+    """Available declarative engagement playbooks (read-only)."""
+    from pathlib import Path
+
+    from core.playbook import Playbook
+
+    out: list[dict] = []
+    pdir = Path("playbooks")
+    if not pdir.is_dir():
+        return out
+    for f in sorted(pdir.glob("*.yaml")):
+        try:
+            pb = Playbook.load(f)
+        except Exception:  # nosec B112 — a malformed playbook is skipped, not fatal to the read-only listing
+            continue
+        out.append({
+            "name": pb.name,
+            "description": pb.description,
+            "domain": pb.domain,
+            "passive": pb.passive,
+            "stealth": pb.stealth,
+            "phases": [
+                {"name": ph.name, "tools": ph.tools, "post_analysis": ph.post_analysis}
+                for ph in pb.phases
+            ],
+            "variables": {
+                k: {"required": v.required, "description": v.description}
+                for k, v in pb.variables.items()
+            },
+        })
+    return out

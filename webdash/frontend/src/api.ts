@@ -66,6 +66,18 @@ export type AdversaryResp = {
 
 export type RunResp = { run_id: string; status: string };
 
+export type PlaybookPhase = { name: string; tools: string[]; post_analysis: string | null };
+export type PlaybookVar = { required: boolean; description: string };
+export type PlaybookSummary = {
+  name: string;
+  description: string;
+  domain: string;
+  passive: boolean;
+  stealth: boolean;
+  phases: PlaybookPhase[];
+  variables: Record<string, PlaybookVar>;
+};
+
 export type SystemResp = { gateway: string; active_engagements: number };
 
 export type ActorResp = string;

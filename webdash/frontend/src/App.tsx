@@ -10,6 +10,7 @@ import { CostMitre } from "./components/CostMitre";
 import { EngagementsView } from "./components/EngagementsView";
 import { HamburgerToggle } from "./components/HamburgerToggle";
 import { ModelSelector } from "./components/ModelSelector";
+import { PlaybooksView } from "./components/PlaybooksView";
 import { RoEView } from "./components/RoEView";
 import { Sidebar } from "./components/Sidebar";
 
@@ -104,6 +105,7 @@ export default function App() {
               case "models": return <Solo><ModelSelector /></Solo>;
               case "roe":          return <Solo><RoEView /></Solo>;
               case "engagements": return <Solo><EngagementsView /></Solo>;
+              case "playbooks":    return <Solo><PlaybooksView /></Solo>;
               case "apt":          return <Solo><APTProfilesView /></Solo>;
               case "forge":        return <Solo><AdversaryForgeView /></Solo>;
               default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
