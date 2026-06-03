@@ -1,6 +1,22 @@
 from graph_manager import GraphManager
 
 
+def test_make_stem_slugs_spaces_and_punctuation():
+    from adversary_schema import make_stem
+    stem = make_stem("Aquatic Panda")
+    assert stem == "tailored_aquatic_panda"
+
+
+def test_make_stem_output_always_saveable(tmp_path):
+    # spaced/punctuated actor names must round-trip through the strict save guard
+    from adversary_schema import AdversaryProfile, make_stem, save_profile
+    p = AdversaryProfile(name="Aquatic Panda", alias="a", description="d",
+                         preferred_ttps=[], tools=[], stealth_required=False,
+                         rationale="r")
+    path = save_profile(p, make_stem("Aquatic Panda"), adversaries_dir=str(tmp_path))
+    assert path.endswith("tailored_aquatic_panda.json")
+
+
 def test_detected_os_collects_lowercased_host_os(tmp_path):
     gm = GraphManager(db_path=str(tmp_path / "g.json"))
     gm.add_host("10.0.0.5", os="Windows")

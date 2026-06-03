@@ -4,6 +4,8 @@ produced offline by scripts/extract_actor_ttps.py).
 """
 from __future__ import annotations
 
+# `json` (load_actor) and `_json` (sequence/_read_blacklist) are the same module;
+# the alias is retained intentionally — do not "consolidate" in a cleanup pass.
 import json
 import json as _json
 import os

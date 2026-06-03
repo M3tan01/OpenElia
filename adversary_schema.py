@@ -8,10 +8,24 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 from pydantic import BaseModel, Field
 
 from adversary_manager import AdversaryManager
+
+
+def make_stem(actor: str) -> str:
+    """Build a safe adversaries/ file stem from an actor name.
+
+    Slugifies spaces/punctuation to '_' and bounds length so the result always
+    satisfies AdversaryManager._APT_NAME_RE. Many MITRE actor names contain
+    spaces (e.g. "Aquatic Panda") and would otherwise fail save_profile's strict
+    guard after the profile was already forged.
+    """
+    slug = re.sub(r"[^a-z0-9_-]+", "_", actor.lower()).strip("_")
+    stem = f"tailored_{slug}"[:32].rstrip("_")
+    return stem or "tailored_profile"
 
 
 class AdversaryProfile(BaseModel):

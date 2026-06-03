@@ -106,13 +106,16 @@ async def run_forge(req: ForgeRun, data: DashboardData = Depends(get_data)) -> d
     # goes through the gated /run/* endpoints.
     require_confirm(req.confirm)
     from adversary_forge import AdversaryForge
-    from adversary_schema import AdversaryProfile, save_profile
+    from adversary_schema import AdversaryProfile, make_stem, save_profile
 
     result = await AdversaryForge().forge(req.actor, brain_tier=req.brain_tier)
     profile = AdversaryProfile(**result["profile"])  # unified schema gate
     saved_path = None
     if req.auto_commit:
-        saved_path = save_profile(profile, f"tailored_{req.actor.lower()}")
+        try:
+            saved_path = save_profile(profile, make_stem(req.actor))
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return {
         "profile": profile.model_dump(),
         "omitted": result["omitted"],

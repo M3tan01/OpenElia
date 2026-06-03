@@ -584,7 +584,7 @@ async def cmd_purple(args) -> None:
 async def cmd_forge(args) -> None:
     """Forge a topology/RoE-constrained adversary profile from a MITRE actor."""
     from adversary_forge import AdversaryForge
-    from adversary_schema import AdversaryProfile, save_profile
+    from adversary_schema import AdversaryProfile, make_stem, save_profile
 
     _require_api_key(args.brain_tier)
     forge = AdversaryForge()
@@ -597,7 +597,7 @@ async def cmd_forge(args) -> None:
         print(f"    - dropped {d['t_code']}: {d['reason']}")
     if getattr(args, "auto_commit", False):
         adir = getattr(args, "adversaries_dir", "adversaries")
-        path = save_profile(profile, f"tailored_{args.actor.lower()}", adversaries_dir=adir)
+        path = save_profile(profile, make_stem(args.actor), adversaries_dir=adir)
         print(f"[+] Saved to {path}")
     else:
         print("[i] Dry run (use --auto-commit to write). Profile preview:")
@@ -841,7 +841,6 @@ def build_parser() -> argparse.ArgumentParser:
     forge_p = sub.add_parser("forge", parents=[common],
                              help="Forge an RoE/topology-constrained adversary profile")
     forge_p.add_argument("--actor", required=True, help="MITRE threat-actor name or alias")
-    forge_p.add_argument("--scope", help="Network block (informational; run uses RoE)")
     forge_p.add_argument("--auto-commit", action="store_true",
                          help="Write the profile to adversaries/ (default: dry run)")
 
