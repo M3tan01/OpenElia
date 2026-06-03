@@ -1,0 +1,20 @@
+name: internal-network
+description: "Stealthy internal network engagement across {target} — host discovery, service enum, and bounded lateral movement."
+domain: red
+passive: false
+stealth: true
+brain_tier: local
+variables:
+  target:
+    required: true
+    description: "Internal subnet in CIDR (e.g. 10.0.0.0/24) or a single host"
+phases:
+  - name: discovery
+    tools: [nmap]
+    post_analysis: "Low-and-slow host discovery across {target}. Prioritise hosts with exposed SMB/RDP/SSH."
+  - name: service_enum
+    tools: [nmap, crackmapexec]
+    post_analysis: "Enumerate services and shares on live hosts. Note authentication surfaces and signing posture."
+  - name: lateral
+    tools: [crackmapexec, impacket]
+    post_analysis: "Bounded lateral movement using only in-scope credentials. HITL before each pivot; respect quiet hours."

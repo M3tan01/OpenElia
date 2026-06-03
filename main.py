@@ -617,6 +617,128 @@ async def cmd_forge(args) -> None:
         print(profile.model_dump_json(indent=2))
 
 
+PLAYBOOK_DIR = "playbooks"
+
+
+def _expand_targets(target: str | None) -> list[str]:
+    """Expand a target string into a host list. CIDR → host IPs; bare host →
+    single-element list; None/empty → empty list."""
+    if not target:
+        return []
+    if "/" in target:
+        try:
+            network = ipaddress.ip_network(target, strict=False)
+            return [str(ip) for ip in network.hosts()]
+        except ValueError:
+            return [target]
+    return [target]
+
+
+def _parse_vars(pairs: list[str]) -> dict[str, str]:
+    """Parse --var key=value pairs into a dict. Bad pairs are skipped."""
+    out: dict[str, str] = {}
+    for pair in pairs or []:
+        if "=" in pair:
+            key, _, value = pair.partition("=")
+            out[key.strip()] = value.strip()
+    return out
+
+
+async def cmd_playbook(args) -> None:
+    """Run a declarative engagement playbook (list / run)."""
+    from core.playbook import Playbook
+
+    action = args.playbook_action
+
+    if action == "list":
+        pdir = Path(PLAYBOOK_DIR)
+        if not pdir.is_dir():
+            print(f"[main] No playbook directory at '{PLAYBOOK_DIR}'.")
+            return
+        files = sorted(pdir.glob("*.yaml"))
+        if not files:
+            print(f"[main] No playbooks found in '{PLAYBOOK_DIR}'.")
+            return
+        print("Available playbooks:")
+        for f in files:
+            try:
+                pb = Playbook.load(f)
+                print(f"  {pb.name:<20} [{pb.domain}] {pb.description}")
+            except Exception as exc:  # malformed playbook must not abort the listing
+                print(f"  {f.stem:<20} [INVALID] {exc}")
+        return
+
+    # action == "run"
+    pb_path = Path(PLAYBOOK_DIR) / f"{args.name}.yaml"
+    try:
+        pb = Playbook.load(pb_path)
+    except FileNotFoundError:
+        print(f"ERROR: Playbook '{args.name}' not found at {pb_path}.")
+        sys.exit(1)
+
+    values = _parse_vars(getattr(args, "var", []))
+    if args.target:
+        values["target"] = args.target
+    try:
+        values = pb.resolve_variables(values)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+
+    task_str = pb.compose_task(values)
+    targets = _expand_targets(values.get("target")) or ["unknown"]
+    # CLI flags override the playbook's declared defaults.
+    stealth = args.stealth or pb.stealth
+    brain_tier = args.brain_tier if args.brain_tier != "local" else pb.brain_tier
+    apt_profile = args.apt or pb.apt_profile
+
+    if getattr(args, "dry_run", False):
+        from orchestrator import Orchestrator
+        print(f"[dry-run] Playbook: {pb.name}  domain={pb.domain}  passive={pb.passive}")
+        print(f"[dry-run] Targets: {', '.join(targets)}")
+        print(f"[dry-run] stealth={stealth}  brain_tier={brain_tier}  apt={apt_profile}")
+        if pb.passive:
+            agents = ["pentester_recon (passive)"]
+        elif pb.domain in ("red", "purple"):
+            agents = [n for _, n in Orchestrator._RED_AGENTS]
+            if pb.domain == "purple":
+                agents += [n for _, n in Orchestrator._BLUE_AGENTS]
+        elif pb.domain == "blue":
+            agents = [n for _, n in Orchestrator._BLUE_AGENTS]
+        else:
+            agents = ["reporter_agent"]
+        print(f"[dry-run] Agents that would run: {', '.join(agents)}")
+        print("[dry-run] Composed task:\n")
+        print(task_str)
+        return
+
+    _require_api_key(brain_tier)
+    from state_manager import StateManager
+    from orchestrator import Orchestrator
+    state = StateManager()
+    scope = args.scope or f"Playbook engagement: {pb.name}"
+    for target in targets:
+        state.initialize_engagement(target, scope)
+        print(f"[main] Engagement initialized — target: {target}")
+
+    if pb.passive:
+        from agents.red.pentester_recon import PentesterRecon
+        for target in targets:
+            recon = PentesterRecon(state, brain_tier=brain_tier)
+            await recon.run_passive(task=task_str, target=target)
+        return
+
+    orch = Orchestrator(state)
+    await orch.route(
+        task_str,
+        targets=targets,
+        stealth=stealth,
+        brain_tier=brain_tier,
+        apt_profile=apt_profile,
+        force_domain=pb.domain,
+    )
+
+
 async def cmd_dashboard(args) -> None:
     # --web launches the FastAPI + React web dashboard (localhost only);
     # default remains the Rich TUI.
@@ -857,6 +979,17 @@ def build_parser() -> argparse.ArgumentParser:
     forge_p.add_argument("--auto-commit", action="store_true",
                          help="Write the profile to adversaries/ (default: dry run)")
 
+    playbook_p = sub.add_parser("playbook", help="Run a declarative engagement playbook")
+    playbook_sub = playbook_p.add_subparsers(dest="playbook_action", required=True)
+    playbook_sub.add_parser("list", help="List available playbooks")
+    pb_run = playbook_sub.add_parser("run", parents=[common], help="Run a named playbook")
+    pb_run.add_argument("name", help="Playbook name (file stem under playbooks/)")
+    pb_run.add_argument("--target", help="Target host or CIDR (sets the 'target' variable)")
+    pb_run.add_argument("--var", action="append", default=[], help="Override a variable as key=value (repeatable)")
+    pb_run.add_argument("--scope", help="Engagement scope note")
+    pb_run.add_argument("--stealth", action="store_true", help="Force stealth on (OR'd with the playbook default)")
+    pb_run.add_argument("--dry-run", action="store_true", help="Print the composed plan without executing")
+
     clear_p = sub.add_parser("clear", help="Clear state")
     clear_p.add_argument("--force", "-f", action="store_true")
 
@@ -891,7 +1024,7 @@ def main() -> None:
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model, "forge": cmd_forge}
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model, "forge": cmd_forge, "playbook": cmd_playbook}
     handler = handlers.get(args.command)
     if handler:
         asyncio.run(handler(args))
