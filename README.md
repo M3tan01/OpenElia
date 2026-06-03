@@ -200,6 +200,10 @@ python3 main.py red --target 10.10.10.0/29 --apt apt29
 # Run a collaborative purple team loop (2 iterations)
 python3 main.py purple --target 10.10.10.50 --iterations 2
 
+# Forge a topology/RoE-constrained adversary profile from a MITRE actor, then run it
+python3 main.py forge --actor APT29 --auto-commit
+python3 main.py red --target 10.10.10.50 --apt tailored_apt29
+
 # Generate executive report with MITRE heatmap and chain of custody
 python3 main.py report
 python3 main.py report --brain-tier expensive

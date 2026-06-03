@@ -45,8 +45,8 @@ same-origin. Without a build the API works but `/` has no UI.
 
 | Component | Endpoints |
 |---|---|
-| `api/monitor.py` (read, token) | `/state /audit /tasks /graph /heatmap /cost /chain/verify` |
-| `api/control.py` (control-gated) | `/run/red\|blue\|purple`, `/lock`, `/unlock`, `/run/{id}/status` |
+| `api/monitor.py` (read, token) | `/state /audit /tasks /graph /heatmap /cost /chain/verify /roe /engagements /adversaries /actors /system` |
+| `api/control.py` (control-gated) | `/run/red\|blue\|purple`, `/forge`, `/lock`, `/unlock`, `/run/{id}/status` |
 | `api/models.py` | GET `/models`; POST `/models/local\|cloud\|hybrid\|auth` |
 | `stream.py` | WebSocket `/api/stream` — snapshot + live audit/task tail |
 | `security.py` / `guards.py` | token auth / confirm + scope + unlocked guards |

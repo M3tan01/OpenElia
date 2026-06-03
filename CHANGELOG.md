@@ -4,6 +4,24 @@ All notable changes to the OpenElia project will be documented in this file.
 
 ## [Unreleased]
 
+### ✨ Features
+- **Adversary Forge**: Generate topology- and RoE-constrained MITRE adversary
+  emulation profiles from a threat-actor name. Offline `scripts/extract_actor_ttps.py`
+  parses the ATT&CK STIX bundle into a committed slim `actor_ttps.json` (the only
+  `stix2` user — never imported at runtime). Runtime `adversary_forge.py` resolves
+  the actor, deterministically drops RoE-blacklisted T-codes (fail-closed) and
+  platform-mismatched techniques against the discovered host OS (`GraphManager.detected_os`),
+  then an LLM orders the survivors under a hallucination guard (cannot inject new
+  T-codes; brain failure falls back to deterministic order). Output passes the
+  `AdversaryProfile` pydantic schema gate (`adversary_schema.py`) before being saved
+  via the path-traversal-guarded `save_profile`. Forge only reads + generates —
+  running a forged profile still goes through the gated `/run/*` path.
+  - CLI: `python main.py forge --actor <name> [--brain-tier local|expensive] [--auto-commit]`
+    (dry-run default) + TypeScript passthrough in `src/src/{index,cli}.ts`.
+  - Webdash: `GET /api/actors`, `POST /api/forge` (token + confirm gated, schema-validated),
+    and the React **Adversary Forge** view (config workspace / live pipeline / gated footer).
+  - RoE: new optional `blacklisted_techniques` field (whitelist + sentinel + `roe.example.json`).
+
 ### Removed
 - **OpenClaw module** (`openclaw/`) and `tests/test_openclaw.py`: the zero-trust external-data
   ingestion layer was never wired into the engine (no production importers). Removed as dead

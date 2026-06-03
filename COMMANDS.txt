@@ -181,6 +181,38 @@
     python main.py red --target 10.10.10.50 --task "Focus on SMB vulnerabilities" --cred-alias corp_admin
 
 
+  python main.py forge [flags]
+  ─────────────────────────────────────────────────────────────────────────────
+  Description : Forge a topology- and RoE-constrained adversary emulation profile
+                from a MITRE threat-actor name. Deterministic pipeline: look up
+                the actor's techniques in the offline ATT&CK map (actor_ttps.json)
+                → drop RoE-blacklisted T-codes (fail-closed) and techniques whose
+                platforms don't match the discovered host OS → an LLM orders the
+                survivors (hallucination-guarded: it can only reorder, never add
+                T-codes). Output is validated through the AdversaryProfile schema
+                gate and saved to adversaries/tailored_<actor>.json.
+                Read + generate only — it never launches an operation. Run the
+                forged profile afterwards with `red --apt tailored_<actor>`.
+  Flags:
+    --actor <name>        MITRE threat-actor name or alias (e.g. APT29, "Cozy
+                          Bear", FIN7). Required. Matched case-insensitively
+                          against actor_ttps.json names + aliases.
+    --auto-commit         Write the profile to adversaries/. Default is a dry run
+                          that prints the profile + filtered T-codes without
+                          writing.
+    --brain-tier <tier>   Intelligence level for sequencing: 'local' (default,
+                          Ollama) or 'expensive' (configured paid API).
+    --scope <text>        Informational network block (the actual run still
+                          enforces roe.json scope).
+  Examples:
+    # Dry run — preview APT29 profile constrained to current topology + RoE
+    python main.py forge --actor APT29
+
+    # Forge + write FIN7 profile using the expensive brain, then run it
+    python main.py forge --actor FIN7 --brain-tier expensive --auto-commit
+    python main.py red --target 10.10.10.50 --apt tailored_fin7
+
+
   python main.py nmap [flags]
   ─────────────────────────────────────────────────────────────────────────────
   Description : Run a targeted nmap scan outside the full pipeline. Target
