@@ -1,4 +1,5 @@
-<img width="1439" height="809" alt="image" src="https://github.com/user-attachments/assets/e2c44fde-e645-4183-b91d-2ef10494050f" />
+<img width="1201" height="687" alt="image" src="https://github.com/user-attachments/assets/f238c5e5-3843-4b7a-994d-1a58dfe29b21" />
+
 
 # 🛡️ OpenElia Core
 
