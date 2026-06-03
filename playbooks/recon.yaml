@@ -1,0 +1,17 @@
+name: recon
+description: "Passive reconnaissance of {target} — OSINT and surface mapping, no active probing."
+domain: red
+passive: true
+stealth: true
+brain_tier: local
+variables:
+  target:
+    required: true
+    description: "Root domain or IP/CIDR to profile"
+phases:
+  - name: osint
+    tools: [theHarvester, whois, crt.sh]
+    post_analysis: "Catalogue domains, emails, and exposed assets for {target}. Flag anything indicating live services."
+  - name: surface_map
+    tools: [dnsx, httpx]
+    post_analysis: "Map alive hosts and tech stacks from passive sources only — do not actively scan."

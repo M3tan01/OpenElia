@@ -1,0 +1,20 @@
+name: web-owasp
+description: "OWASP Top 10 web application assessment of {target}."
+domain: red
+passive: false
+stealth: false
+brain_tier: local
+variables:
+  target:
+    required: true
+    description: "Base URL or host of the web application"
+phases:
+  - name: recon
+    tools: [nmap, httpx, gobuster]
+    post_analysis: "Enumerate virtual hosts, directories, and the tech stack for {target}."
+  - name: discovery
+    tools: [nuclei, nikto]
+    post_analysis: "Identify OWASP Top 10 candidates: injection points, auth flaws, misconfig, exposed components."
+  - name: exploit
+    tools: [sqlmap, burpsuite]
+    post_analysis: "Confirm high-confidence findings (SQLi/XSS/IDOR) with targeted, scope-bound tests. HITL before any active exploit."
