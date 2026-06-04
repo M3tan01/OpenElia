@@ -21,6 +21,17 @@ function cvssClass(score: number): string {
   return "text-phos";
 }
 
+function exportFindings(findings: Finding[]): void {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const blob = new Blob([JSON.stringify(findings, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `openelia-findings-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function FindingsView() {
   const [findings, setFindings] = useState<Finding[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -35,8 +46,20 @@ export function FindingsView() {
     return () => clearInterval(id);
   }, []);
 
+  const count = findings?.length ?? 0;
+  const exportBtn = (
+    <button
+      className="font-display uppercase tracking-wider bg-amber/15 border border-amber text-amber text-[11px] px-2 py-1 hover:bg-amber/25 disabled:opacity-40"
+      disabled={count === 0}
+      title={count === 0 ? "no findings to export" : `export ${count} findings as JSON`}
+      onClick={() => findings && exportFindings(findings)}
+    >
+      ↓ export {count > 0 && `(${count})`}
+    </button>
+  );
+
   return (
-    <Panel title="Findings" className="h-full">
+    <Panel title="Findings" right={exportBtn} className="h-full">
       {err && <div className="mb-3"><Badge ok={false}>{err}</Badge></div>}
       {!findings && !err && <div className="text-dim text-xs italic">loading…</div>}
       {findings?.length === 0 && <div className="text-dim text-xs italic">no findings yet</div>}
