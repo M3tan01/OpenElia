@@ -210,6 +210,24 @@ def parse_stix(content: str | bytes | dict) -> dict:
             if name and name not in malware:
                 malware.append(name)
 
+    return _make_brief(iocs, ttps, actors, malware)
+
+
+def _make_brief(
+    iocs: list[dict],
+    ttps: list[str] | None = None,
+    actors: list[str] | None = None,
+    malware: list[str] | None = None,
+) -> dict:
+    """Assemble the canonical hunt-brief dict shared by parse_stix and parse_ioc_list.
+
+    Keeps the brief shape (the frontend/endpoint contract) in one place so the two
+    parsers cannot drift. ttps/actors/malware default to empty (a plain IOC list
+    carries none).
+    """
+    ttps = ttps or []
+    actors = actors or []
+    malware = malware or []
     return {
         "iocs": iocs,
         "ttps": ttps,
@@ -336,18 +354,7 @@ def parse_ioc_list(content: str) -> dict:
     if not iocs:
         raise ValueError("no valid IOCs found")
 
-    return {
-        "iocs": iocs,
-        "ttps": [],
-        "actors": [],
-        "malware": [],
-        "counts": {
-            "iocs": len(iocs),
-            "ttps": 0,
-            "actors": 0,
-            "malware": 0,
-        },
-    }
+    return _make_brief(iocs)
 
 
 def compose_hunt_task(brief: dict, max_iocs: int = 200) -> str:
