@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiGet, StateResp, TOKEN, useStream } from "./api";
 import { AgentActivity } from "./components/AgentActivity";
 import { AdversaryForgeView } from "./components/AdversaryForgeView";
+import { AgentsView } from "./components/AgentsView";
 import { APTProfilesView } from "./components/APTProfilesView";
 import { AttackGraph } from "./components/AttackGraph";
 import { AuditTimeline } from "./components/AuditTimeline";
@@ -101,7 +102,8 @@ export default function App() {
         <div className="flex-1 min-w-0 flex flex-col">
           {(() => {
             switch (activeView) {
-              case "agents": return <Solo><AgentActivity liveTasks={stream.tasks} /></Solo>;
+              case "agents":        return <Solo><AgentActivity liveTasks={stream.tasks} /></Solo>;
+              case "agents-roster": return <Solo><AgentsView /></Solo>;
               case "graph":  return <Solo><AttackGraph /></Solo>;
               case "audit":  return <Solo><AuditTimeline liveAudit={stream.audit} /></Solo>;
               case "cost":   return <Solo><CostMitre /></Solo>;
