@@ -35,13 +35,19 @@ _IOC_TYPE = {
 # ---------------------------------------------------------------------------
 
 # Substitution rules applied in order (most-specific first).
-_REFANG_SUBS: list[tuple[re.Pattern, str]] = [
+# NOTE: Assumes input is a single IOC token, not free prose — space-delimited
+# rules (' dot ', ' at ') and substring rules ('hxxp') would over-match plain text.
+_REFANG_SUBS: list[tuple[re.Pattern[str], object]] = [
     # scheme-level: hxxp / hxxps (case-insensitive)
     (re.compile(r'hxxps?', re.IGNORECASE), lambda m: m.group().lower().replace('hxxps', 'https').replace('hxxp', 'http')),
     # [://] → ://
     (re.compile(r'\[://\]'), '://'),
     # [:] → :
     (re.compile(r'\[:\]'), ':'),
+    # [at] → @  (must precede the generic bracket-strip rule)
+    (re.compile(r'\[at\]', re.IGNORECASE), '@'),
+    # [dot] → .  (must precede the generic bracket-strip rule)
+    (re.compile(r'\[dot\]', re.IGNORECASE), '.'),
     # [.] (.)  (dot)  <space>dot<space>  →  .
     (re.compile(r'\[\.\]|\(\.\)|\(dot\)| dot ', re.IGNORECASE), '.'),
     # [@] (at) <space>at<space>  →  @
@@ -55,15 +61,14 @@ _REFANG_SUBS: list[tuple[re.Pattern, str]] = [
 def refang(value: str) -> str:
     """Normalize defanged IOC notation back to its canonical form.
 
-    Handles: hxxp/hxxps, [.] (.) (dot) ' dot ', [//] [:] [@] (at) ' at '.
+    Handles: hxxp/hxxps, [.] (.) (dot) ' dot ', [//] [:] [@] (at) ' at ',
+    [at] → @, [dot] → .  (bracket-word forms; resolved before generic strip).
+    Does NOT handle free-text prose — input must be a single IOC token.
     Pure stdlib (re only). Returns the refanged string unchanged when no
     defanging notation is present.
     """
     for pattern, repl in _REFANG_SUBS:
-        if callable(repl):
-            value = pattern.sub(repl, value)
-        else:
-            value = pattern.sub(repl, value)
+        value = pattern.sub(repl, value)  # re.sub handles callable and str uniformly
     return value
 
 
@@ -136,6 +141,10 @@ def _iocs_from_pattern(pattern: str) -> list[dict]:
         ioc_type = _IOC_TYPE.get(obj_type.lower(), obj_type.lower())
         value = refang(value)
         if is_valid_ioc(ioc_type, value):
+            # Canonicalize IP addresses so equivalent forms (expanded vs compressed
+            # IPv6) deduplicate correctly in parse_stix's seen_ioc set.
+            if ioc_type == "ip":
+                value = str(ipaddress.ip_address(value))
             out.append({"type": ioc_type, "value": value})
     return out
 

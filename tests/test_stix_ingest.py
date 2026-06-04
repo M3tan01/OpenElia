@@ -271,3 +271,35 @@ def test_parse_stix_refangs_defanged_url():
     brief = parse_stix(_bundle(objs))
     values = [i["value"] for i in brief["iocs"]]
     assert "https://evil.example/c2" in values
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 — [at] / [dot] bracket-word refanging
+# ---------------------------------------------------------------------------
+
+def test_refang_bracket_at_dot():
+    """[at] and [dot] bracket-word forms are converted to @ and . respectively."""
+    assert refang("user[at]evil[dot]com") == "user@evil.com"
+
+
+def test_parse_stix_bracket_at_dot_email_addr():
+    """[at]/[dot] indicator survives parse_stix for an email-addr STIX object."""
+    objs = [{"type": "indicator", "pattern": "[email-addr:value = 'user[at]evil[dot]com']"}]
+    brief = parse_stix(_bundle(objs))
+    values = [i["value"] for i in brief["iocs"]]
+    assert "user@evil.com" in values
+    assert brief["counts"]["iocs"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 — IPv6 canonicalization collapses equivalent forms to one IOC
+# ---------------------------------------------------------------------------
+
+def test_parse_stix_ipv6_canonical_dedup():
+    """Expanded and compressed IPv6 representations collapse to a single IOC."""
+    objs = [
+        {"type": "indicator", "pattern": "[ipv6-addr:value = '2001:0db8:0000:0000:0000:0000:0000:0001']"},
+        {"type": "indicator", "pattern": "[ipv6-addr:value = '2001:db8::1']"},
+    ]
+    brief = parse_stix(_bundle(objs))
+    assert brief["counts"]["iocs"] == 1
