@@ -53,6 +53,12 @@ AGENT_META: dict[str, str] = {
     "reporter_agent": "Executive & technical reporting",
 }
 
+# Fail loud at import if the description table drifts from the registry — otherwise
+# a new/renamed agent would silently ship an empty description to the Agents view.
+assert AGENT_META.keys() == {a for agents in AGENT_REGISTRY.values() for a in agents}, (
+    "AGENT_META is out of sync with AGENT_REGISTRY"
+)
+
 
 def agent_roster() -> list[dict]:
     """Flatten AGENT_REGISTRY into an enriched list for the Agents view.
