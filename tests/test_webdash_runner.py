@@ -12,7 +12,7 @@ async def test_completed_run_marked_done():
     from webdash.runner import RunManager
 
     rm = RunManager()
-    rm._invoke = lambda *a: _done()  # type: ignore[assignment]
+    rm._invoke = lambda *a, **kw: _done()  # type: ignore[assignment]
 
     async def _done():
         return {"domain": "red"}
@@ -28,7 +28,7 @@ async def test_cancelled_run_marked_cancelled():
 
     rm = RunManager()
 
-    async def _hang(*a):
+    async def _hang(*a, **kw):
         await asyncio.sleep(10)
 
     rm._invoke = _hang  # type: ignore[assignment]
