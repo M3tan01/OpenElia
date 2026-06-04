@@ -370,3 +370,34 @@ def test_roe_backfills_blacklisted_techniques_when_absent(tmp_path, monkeypatch,
     monkeypatch.setenv("OPENELIA_ROE_PATH", str(roe))
     r = client.get("/api/roe", headers=auth)
     assert r.json()["blacklisted_techniques"] == []
+
+
+# --- /api/agents tests ------------------------------------------------------- #
+
+def test_agents_roster_lists_all(client, auth):
+    """GET /api/agents with auth → 200; 10 entries; spot-checks on domain, stealth."""
+    resp = client.get("/api/agents", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    agents = body["agents"]
+    assert len(agents) == 10
+
+    # defender_hunt: blue, no stealth
+    hunt = next(a for a in agents if a["name"] == "defender_hunt")
+    assert hunt["domain"] == "blue"
+    assert hunt["supports_stealth"] is False
+
+    # pentester_recon: red, stealth True
+    recon = next(a for a in agents if a["name"] == "pentester_recon")
+    assert recon["domain"] == "red"
+    assert recon["supports_stealth"] is True
+
+    # every entry has a non-empty description
+    for a in agents:
+        assert a["description"], f"Empty description for {a['name']}"
+
+
+def test_agents_roster_requires_token(client):
+    """GET /api/agents with no auth header → 401."""
+    resp = client.get("/api/agents")
+    assert resp.status_code == 401

@@ -40,6 +40,39 @@ AGENT_REGISTRY: dict[str, list[str]] = {
 }
 
 
+AGENT_META: dict[str, str] = {
+    "pentester_recon": "Reconnaissance — host/port/service discovery",
+    "pentester_vuln": "Vulnerability analysis",
+    "pentester_exploit": "Exploitation",
+    "pentester_lat": "Lateral movement",
+    "pentester_ex": "Exfiltration / actions on objectives",
+    "defender_mon": "Monitoring — telemetry & log collection",
+    "defender_ana": "Analysis — alert triage & correlation",
+    "defender_hunt": "Threat hunting",
+    "defender_res": "Response — containment & remediation",
+    "reporter_agent": "Executive & technical reporting",
+}
+
+
+def agent_roster() -> list[dict]:
+    """Flatten AGENT_REGISTRY into an enriched list for the Agents view.
+
+    Domain order: red → blue → reporter (registry insertion order).
+    Each entry: name, domain, description, supports_stealth.
+    Pure static metadata — no state dir required.
+    """
+    result: list[dict] = []
+    for domain, agents in AGENT_REGISTRY.items():
+        for name in agents:
+            result.append({
+                "name": name,
+                "domain": domain,
+                "description": AGENT_META.get(name, ""),
+                "supports_stealth": domain in ("red", "purple"),
+            })
+    return result
+
+
 def _tail_jsonl(path: Path, limit: int) -> list[dict]:
     """Last `limit` parsed JSON objects from a JSONL file. Skips bad lines."""
     if not path.exists():

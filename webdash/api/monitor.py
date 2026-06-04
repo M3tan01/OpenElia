@@ -8,7 +8,7 @@ import os
 
 from fastapi import APIRouter, Depends, Query
 
-from webdash.data import DashboardData, get_data, roe as _roe_data
+from webdash.data import DashboardData, agent_roster, get_data, roe as _roe_data
 from webdash.security import require_token
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
@@ -65,6 +65,12 @@ def verify_chain(data: DashboardData = Depends(get_data)) -> dict:
         "chain_status": result["chain_status"],
         "chain_msg": result["chain_msg"],
     }
+
+
+@router.get("/agents")
+def get_agents() -> dict:
+    """Agent roster (name, domain, description, stealth support) for the Agents view."""
+    return {"agents": agent_roster()}
 
 
 @router.get("/roe")
