@@ -183,10 +183,7 @@ def test_run_blue_with_valid_agent_starts(client, state_dir, roe, auth, mock_inv
     rec = _wait_done(client, auth, run_id)
     assert rec["status"] == "done"
     # Verify _invoke was called with agent="defender_hunt"
-    call_kwargs = mock_invoke.call_args
-    args = call_kwargs.args if call_kwargs.args else ()
-    # _invoke signature: domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent
-    assert args[-1] == "defender_hunt"
+    assert mock_invoke.call_args.kwargs["agent"] == "defender_hunt"
 
 
 def test_run_blue_wrong_domain_agent_returns_400(client, state_dir, roe, auth):
@@ -218,6 +215,4 @@ def test_run_blue_no_agent_unchanged(client, state_dir, auth, mock_invoke):
     rec = _wait_done(client, auth, resp.json()["run_id"])
     assert rec["status"] == "done"
     # agent param should be None
-    call_kwargs = mock_invoke.call_args
-    args = call_kwargs.args if call_kwargs.args else ()
-    assert args[-1] is None
+    assert mock_invoke.call_args.kwargs["agent"] is None

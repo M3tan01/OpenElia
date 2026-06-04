@@ -64,7 +64,11 @@ class RunManager:
         }
         self._active = run_id
         t = asyncio.create_task(
-            self._execute(run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent)
+            self._execute(
+                run_id=run_id, domain=domain, task=task, targets=targets,
+                stealth=stealth, proxy_port=proxy_port, brain_tier=brain_tier,
+                apt_profile=apt_profile, agent=agent, state_dir=state_dir,
+            )
         )
         self._tasks.add(t)
         t.add_done_callback(self._tasks.discard)
@@ -74,7 +78,9 @@ class RunManager:
         rec = self._runs[run_id]
         try:
             rec["result"] = await self._invoke(
-                domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent
+                domain=domain, task=task, targets=targets, stealth=stealth,
+                proxy_port=proxy_port, brain_tier=brain_tier, apt_profile=apt_profile,
+                agent=agent, state_dir=state_dir,
             )
             rec["status"] = "done"
         except (Exception, SystemExit) as exc:  # capture errors + kill-switch SystemExit; let CancelledError propagate

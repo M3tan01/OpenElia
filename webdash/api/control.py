@@ -234,8 +234,8 @@ async def _launch(rm: RunManager, **kwargs) -> dict:
 async def run_red(req: RedRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
     require_confirm(req.confirm)
     require_unlocked(str(data.db_path))
-    scope_gate(req.target, req.task)
     _validate_agent("red", req.agent)
+    scope_gate(req.target, req.task)
     return await _launch(
         rm, domain="red", task=req.task, targets=[req.target], stealth=req.stealth,
         proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile,
@@ -259,8 +259,8 @@ async def run_blue(req: BlueRun, data: DashboardData = Depends(get_data), rm: Ru
 async def run_purple(req: PurpleRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
     require_confirm(req.confirm)
     require_unlocked(str(data.db_path))
-    scope_gate(req.target, req.task)
     _validate_agent("purple", req.agent)
+    scope_gate(req.target, req.task)
     return await _launch(
         rm, domain="purple", task=req.task, targets=[req.target], stealth=req.stealth,
         proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile,

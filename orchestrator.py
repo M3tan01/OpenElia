@@ -217,7 +217,8 @@ class Orchestrator:
                 await self._pool.submit(agent_task)
 
         if domain == "reporter":
-            if not (force_agent and force_agent != "reporter_agent"):
+            reporter_forced_out = force_agent is not None and force_agent != "reporter_agent"
+            if not reporter_forced_out:
                 agent_task = AgentTask(
                     domain=Domain.REPORTER,
                     tier=AgentTier.EXECUTION,
