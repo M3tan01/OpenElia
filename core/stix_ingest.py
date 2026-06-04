@@ -224,6 +224,127 @@ def parse_stix(content: str | bytes | dict) -> dict:
     }
 
 
+# CSV header field names that identify a header row (case-insensitive).
+_CSV_HEADER_FIELDS: frozenset[str] = frozenset({"ioc", "indicator", "value", "type"})
+
+
+def detect_ioc_type(value: str) -> str | None:
+    """Auto-detect the IOC type of *value*. Returns the type string or None.
+
+    Detection order (first match wins):
+      ip → url → hash → email → domain
+    Input must already be refanged. Pure function; no side effects.
+    """
+    # ip: try ipaddress first — catches both IPv4 and IPv6
+    try:
+        ipaddress.ip_address(value)
+        return "ip"
+    except ValueError:
+        pass
+
+    # url: starts with http:// or https://
+    if value.startswith("http://") or value.startswith("https://"):
+        return "url"
+
+    # hash: 32/40/64 hex chars
+    if len(value) in (32, 40, 64) and _HEX_RE.match(value):
+        return "hash"
+
+    # email: contains exactly one @
+    if "@" in value:
+        return "email"
+
+    # domain: contains a dot, passes label validation, and has at least one
+    # non-numeric label (so dotted-quad strings that fail ip_address — e.g.
+    # 999.999.0.1 — are not misclassified as domains).
+    if "." in value:
+        labels = value.rstrip(".").split(".")
+        if (
+            len(labels) >= 2
+            and all(_DOMAIN_LABEL_RE.match(lbl) for lbl in labels)
+            and any(not lbl.isdigit() for lbl in labels)
+        ):
+            return "domain"
+
+    return None
+
+
+def parse_ioc_list(content: str) -> dict:
+    """Parse a plain IOC list (newline-delimited or simple CSV) into a hunt brief.
+
+    Each line is treated as one IOC candidate. If the line contains commas, only
+    the first non-empty comma-separated field is used. A CSV header row (whose
+    first field is one of: ioc, indicator, value, type — case-insensitive) is
+    skipped. Blank lines and lines starting with '#' are skipped.
+
+    Each candidate is refanged, auto-detected, validated, and deduplicated by
+    (type, value). Returns the same shape as parse_stix with ttps/actors/malware
+    always empty. Raises ValueError if no valid IOCs are found.
+    """
+    lines = content.splitlines()
+    iocs: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    header_checked = False
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        # CSV: take first non-empty field
+        if "," in stripped:
+            first_field = stripped.split(",")[0].strip()
+            # Skip CSV header row (first line whose first field is a known header token)
+            if not header_checked:
+                header_checked = True
+                if first_field.lower() in _CSV_HEADER_FIELDS:
+                    continue
+            candidate = first_field
+        else:
+            if not header_checked:
+                header_checked = True
+            candidate = stripped
+
+        if not candidate:
+            continue
+
+        candidate = refang(candidate)
+        ioc_type = detect_ioc_type(candidate)
+        if ioc_type is None:
+            continue
+
+        # Canonicalize IPs so dedup is correct across equivalent representations
+        if ioc_type == "ip":
+            try:
+                candidate = str(ipaddress.ip_address(candidate))
+            except ValueError:
+                continue
+
+        if not is_valid_ioc(ioc_type, candidate):
+            continue
+
+        key = (ioc_type, candidate)
+        if key not in seen:
+            seen.add(key)
+            iocs.append({"type": ioc_type, "value": candidate})
+
+    if not iocs:
+        raise ValueError("no valid IOCs found")
+
+    return {
+        "iocs": iocs,
+        "ttps": [],
+        "actors": [],
+        "malware": [],
+        "counts": {
+            "iocs": len(iocs),
+            "ttps": 0,
+            "actors": 0,
+            "malware": 0,
+        },
+    }
+
+
 def compose_hunt_task(brief: dict, max_iocs: int = 200) -> str:
     """Build a readable defensive hunt objective from a parsed STIX brief."""
     lines = ["Threat hunt seeded from uploaded STIX CTI. Search logs/endpoints for the"

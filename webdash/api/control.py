@@ -117,6 +117,29 @@ def stix_parse(req: StixParse) -> dict:
     return brief
 
 
+class IocListParse(BaseModel):
+    content: str
+
+
+@router.post("/ioc/parse")
+def ioc_parse(req: IocListParse) -> dict:
+    """Parse a plain IOC list into a hunt brief. Read-only — extracts IOCs and
+    composes a hunt task for operator review. No TTPs/actors/malware extraction
+    (a plain list carries none). Does NOT launch anything."""
+    if len(req.content.encode("utf-8", "ignore")) > _STIX_MAX_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="IOC list too large (8 MB cap)")
+
+    from core.stix_ingest import compose_hunt_task, parse_ioc_list
+
+    try:
+        brief = parse_ioc_list(req.content)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    brief["hunt_task"] = compose_hunt_task(brief)
+    return brief
+
+
 class Confirm(BaseModel):
     confirm: bool = False
 
