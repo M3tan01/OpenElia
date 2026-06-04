@@ -436,3 +436,20 @@ def test_parse_ioc_list_empty_raises():
 def test_parse_ioc_list_all_invalid_raises():
     with pytest.raises(ValueError, match="no valid IOCs found"):
         parse_ioc_list("# only a comment\n\n999.999.0.1")
+
+
+def test_parse_ioc_list_bom_first_ioc_kept():
+    """UTF-8 BOM prefix (U+FEFF) on the first line must not cause the first IOC to be dropped."""
+    content = "﻿10.0.0.1\nevil.example.org"
+    brief = parse_ioc_list(content)
+    values = [ioc["value"] for ioc in brief["iocs"]]
+    assert brief["counts"]["iocs"] == 2
+    assert "10.0.0.1" in values
+    assert "evil.example.org" in values
+
+
+def test_parse_ioc_list_crlf_line_endings():
+    """Windows-style CRLF line endings are handled correctly (splitlines covers \\r\\n)."""
+    content = "10.0.0.1\r\nevil.example.org"
+    brief = parse_ioc_list(content)
+    assert brief["counts"]["iocs"] == 2
