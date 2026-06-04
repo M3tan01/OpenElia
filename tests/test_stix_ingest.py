@@ -303,3 +303,136 @@ def test_parse_stix_ipv6_canonical_dedup():
     ]
     brief = parse_stix(_bundle(objs))
     assert brief["counts"]["iocs"] == 1
+
+
+# ---------------------------------------------------------------------------
+# parse_ioc_list() + detect_ioc_type() tests
+# ---------------------------------------------------------------------------
+
+from core.stix_ingest import detect_ioc_type, parse_ioc_list  # noqa: E402
+
+
+def test_detect_ioc_type_ip():
+    assert detect_ioc_type("192.168.1.1") == "ip"
+
+
+def test_detect_ioc_type_url():
+    assert detect_ioc_type("http://evil.example/path") == "url"
+    assert detect_ioc_type("https://evil.example/path") == "url"
+
+
+def test_detect_ioc_type_hash_md5():
+    assert detect_ioc_type("a" * 32) == "hash"
+
+
+def test_detect_ioc_type_hash_sha1():
+    assert detect_ioc_type("b" * 40) == "hash"
+
+
+def test_detect_ioc_type_hash_sha256():
+    assert detect_ioc_type("c" * 64) == "hash"
+
+
+def test_detect_ioc_type_email():
+    assert detect_ioc_type("user@evil.example.com") == "email"
+
+
+def test_detect_ioc_type_domain():
+    assert detect_ioc_type("evil.example.com") == "domain"
+
+
+def test_detect_ioc_type_unknown():
+    assert detect_ioc_type("not-an-ioc") is None
+    assert detect_ioc_type("999.999.0.1") is None
+
+
+def test_parse_ioc_list_mixed_types():
+    """All five IOC types detected from a mixed newline list."""
+    content = "\n".join([
+        "198.51.100.1",
+        "https://evil.example/c2",
+        "d" * 64,
+        "attacker@evil.example.com",
+        "evil.example.com",
+    ])
+    brief = parse_ioc_list(content)
+    types = {ioc["type"] for ioc in brief["iocs"]}
+    assert types == {"ip", "url", "hash", "email", "domain"}
+    assert brief["counts"]["iocs"] == 5
+    assert brief["counts"]["ttps"] == 0
+    assert brief["counts"]["actors"] == 0
+    assert brief["counts"]["malware"] == 0
+    assert brief["ttps"] == []
+    assert brief["actors"] == []
+    assert brief["malware"] == []
+
+
+def test_parse_ioc_list_skips_blanks_and_comments():
+    content = "\n".join([
+        "",
+        "# this is a comment",
+        "10.0.0.1",
+        "",
+        "# another comment",
+        "evil.example.org",
+    ])
+    brief = parse_ioc_list(content)
+    assert brief["counts"]["iocs"] == 2
+
+
+def test_parse_ioc_list_csv_first_field():
+    """CSV line: first non-empty comma-separated field is used as IOC."""
+    content = "1.2.3.4,first-seen,2024"
+    brief = parse_ioc_list(content)
+    values = [ioc["value"] for ioc in brief["iocs"]]
+    assert "1.2.3.4" in values
+
+
+def test_parse_ioc_list_csv_header_skipped():
+    """A CSV header line (contains ioc/indicator/value/type) is skipped."""
+    content = "\n".join([
+        "value,note",
+        "10.0.0.1,some note",
+        "evil.example.org,another note",
+    ])
+    brief = parse_ioc_list(content)
+    values = [ioc["value"] for ioc in brief["iocs"]]
+    assert "10.0.0.1" in values
+    assert "evil.example.org" in values
+    # The header row itself must not appear as an IOC value
+    assert "value" not in values
+
+
+def test_parse_ioc_list_defanged_entry_refanged():
+    """Defanged domain evil[.]com is refanged to evil.com."""
+    content = "evil[.]com"
+    brief = parse_ioc_list(content)
+    values = [ioc["value"] for ioc in brief["iocs"]]
+    assert "evil.com" in values
+
+
+def test_parse_ioc_list_malformed_ip_dropped():
+    """999.999.0.1 fails validation and is silently dropped."""
+    content = "\n".join(["999.999.0.1", "10.0.0.1"])
+    brief = parse_ioc_list(content)
+    values = [ioc["value"] for ioc in brief["iocs"]]
+    assert "999.999.0.1" not in values
+    assert "10.0.0.1" in values
+    assert brief["counts"]["iocs"] == 1
+
+
+def test_parse_ioc_list_dedup():
+    """Duplicate (type, value) pairs collapsed to one entry."""
+    content = "\n".join(["10.0.0.1", "10.0.0.1"])
+    brief = parse_ioc_list(content)
+    assert brief["counts"]["iocs"] == 1
+
+
+def test_parse_ioc_list_empty_raises():
+    with pytest.raises(ValueError, match="no valid IOCs found"):
+        parse_ioc_list("")
+
+
+def test_parse_ioc_list_all_invalid_raises():
+    with pytest.raises(ValueError, match="no valid IOCs found"):
+        parse_ioc_list("# only a comment\n\n999.999.0.1")

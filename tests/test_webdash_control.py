@@ -136,3 +136,32 @@ def test_run_purple_in_scope_starts(client, state_dir, roe, auth, mock_invoke):
 def test_run_purple_out_of_scope_is_403(client, state_dir, roe, auth):
     resp = client.post("/api/run/purple", headers=auth, json={"target": "1.1.1.1", "confirm": True})
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# POST /api/ioc/parse endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_ioc_parse_valid_list_returns_brief(client, state_dir, auth):
+    content = "\n".join([
+        "198.51.100.5",
+        "evil.example.org",
+        "https://c2.example.com/beacon",
+    ])
+    resp = client.post("/api/ioc/parse", headers=auth, json={"content": content})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["counts"]["iocs"] > 0
+    assert isinstance(body["hunt_task"], str)
+    assert len(body["hunt_task"]) > 0
+
+
+def test_ioc_parse_all_invalid_returns_400(client, state_dir, auth):
+    resp = client.post("/api/ioc/parse", headers=auth, json={"content": "# comment only\n\n"})
+    assert resp.status_code == 400
+
+
+def test_ioc_parse_missing_token_returns_401(client, state_dir):
+    content = "10.0.0.1\nevil.example.org"
+    resp = client.post("/api/ioc/parse", json={"content": content})
+    assert resp.status_code == 401
