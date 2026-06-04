@@ -62,6 +62,7 @@ export type AdversaryResp = {
   tools: string[];
   stealth_required: boolean;
   rationale: string;
+  stem?: string;
 };
 
 export type RunResp = { run_id: string; status: string };

@@ -216,7 +216,11 @@ class DashboardData:
                 continue
             if not profile:
                 continue
-            result.append({**_ADVERSARY_SENTINEL, **{k: profile[k] for k in _ADVERSARY_WHITELIST if k in profile}})
+            result.append({
+                **_ADVERSARY_SENTINEL,
+                **{k: profile[k] for k in _ADVERSARY_WHITELIST if k in profile},
+                "stem": stem,  # file stem — needed to delete the profile from the dashboard
+            })
         return result
 
     # --- actor map ---------------------------------------------------------- #

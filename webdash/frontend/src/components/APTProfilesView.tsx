@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, AdversaryResp, RoEResp, RunResp, StateResp } from "../api";
 import { Badge, Panel } from "./Panel";
 
@@ -112,13 +112,30 @@ function ProfileCard({
   profile,
   prohibited,
   defaultTarget,
+  onDeleted,
 }: {
   profile: AdversaryResp;
   prohibited: Set<string>;
   defaultTarget: string;
+  onDeleted: () => void;
 }) {
   const [applying, setApplying] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delPending, setDelPending] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
   const conflicts = profile.tools.filter((t) => prohibited.has(t));
+
+  async function del() {
+    if (!profile.stem || delPending) return;
+    setDelPending(true); setDelErr(null);
+    try {
+      await apiPost("/api/adversaries/delete", { stem: profile.stem, confirm: true });
+      onDeleted();
+    } catch (e: unknown) {
+      setDelErr(e instanceof Error ? e.message : String(e));
+      setConfirmDel(false);
+    } finally { setDelPending(false); }
+  }
 
   return (
     <div className="border border-line bg-surface/50 p-3 space-y-2">
@@ -143,8 +160,39 @@ function ProfileCard({
               RoE CONFLICT: {conflicts.join(", ")}
             </span>
           )}
+          {profile.stem && !confirmDel && (
+            <button
+              type="button"
+              onClick={() => setConfirmDel(true)}
+              title="delete this profile"
+              className="font-mono text-[10px] px-2 py-0.5 border border-line text-dim uppercase tracking-wider hover:border-redteam/60 hover:text-redteam"
+            >
+              ✕ delete
+            </button>
+          )}
+          {confirmDel && (
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={del}
+                disabled={delPending}
+                className="font-mono text-[10px] px-2 py-0.5 border border-redteam/60 text-redteam uppercase tracking-wider hover:bg-redteam/10 disabled:opacity-40"
+              >
+                {delPending ? "···" : "confirm delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDel(false)}
+                className="font-mono text-[10px] px-2 py-0.5 border border-line text-dim uppercase tracking-wider hover:text-amber/70"
+              >
+                cancel
+              </button>
+            </span>
+          )}
         </div>
       </div>
+
+      {delErr && <Badge ok={false}>{delErr}</Badge>}
 
       {/* description */}
       {profile.description && (
@@ -203,6 +251,12 @@ export function APTProfilesView() {
   const [defaultTarget, setDefaultTarget] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
+  const reloadProfiles = useCallback(() => {
+    apiGet<AdversaryResp[]>("/api/adversaries")
+      .then(setProfiles)
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
+  }, []);
+
   useEffect(() => {
     Promise.all([
       apiGet<AdversaryResp[]>("/api/adversaries"),
@@ -244,10 +298,11 @@ export function APTProfilesView() {
         <div className="space-y-3">
           {profiles.map((p) => (
             <ProfileCard
-              key={p.name}
+              key={p.stem ?? p.name}
               profile={p}
               prohibited={prohibited}
               defaultTarget={defaultTarget}
+              onDeleted={reloadProfiles}
             />
           ))}
         </div>
