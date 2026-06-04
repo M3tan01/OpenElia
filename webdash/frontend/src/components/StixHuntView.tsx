@@ -172,9 +172,12 @@ export function StixHuntView() {
     });
   }, [allIocs, iocQuery, activeTypes]);
 
+  function copyValue(text: string) {
+    navigator.clipboard?.writeText(text).catch(() => setErr("clipboard unavailable"));
+  }
+
   function copyAll() {
-    const text = filteredIocs.map(ioc => ioc.value).join("\n");
-    navigator.clipboard.writeText(text).catch(() => {/* ignore */});
+    copyValue(filteredIocs.map((x) => x.value).join("\n"));
   }
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -295,6 +298,7 @@ export function StixHuntView() {
                   value={iocQuery}
                   onChange={e => setIocQuery(e.target.value)}
                   placeholder="filter IOCs…"
+                  aria-label="filter IOCs"
                   className="flex-1 bg-void border border-line px-2 py-0.5 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
                 />
                 <button
@@ -314,6 +318,7 @@ export function StixHuntView() {
                   <button
                     type="button"
                     onClick={() => setActiveTypes(new Set())}
+                    aria-label="show all IOC types"
                     className={`font-mono text-[10px] px-1.5 py-0.5 border ${
                       activeTypes.size === 0
                         ? "border-amber text-amber bg-amber/10"
@@ -327,6 +332,7 @@ export function StixHuntView() {
                       key={t}
                       type="button"
                       onClick={() => toggleType(t)}
+                      aria-label={`filter to ${t}`}
                       className={`font-mono text-[10px] px-1.5 py-0.5 border ${
                         activeTypes.has(t)
                           ? "border-amber text-amber bg-amber/10"
@@ -351,13 +357,14 @@ export function StixHuntView() {
           {/* IOC list */}
           <div className="space-y-0.5">
             {filteredIocs.map((ioc, i) => (
-              <div key={i} className="flex items-center gap-2 font-mono text-[11px]">
+              <div key={`${ioc.type}:${ioc.value}:${i}`} className="flex items-center gap-2 font-mono text-[11px]">
                 <span className="text-phos/80 uppercase w-14 shrink-0">{ioc.type}</span>
                 <span className="text-slate-300 truncate flex-1">{defang(ioc.value)}</span>
                 <button
                   type="button"
                   title="copy value"
-                  onClick={() => navigator.clipboard.writeText(ioc.value).catch(() => {/* ignore */})}
+                  aria-label="copy IOC value"
+                  onClick={() => copyValue(ioc.value)}
                   className="text-dim hover:text-slate-200 shrink-0 leading-none"
                 >
                   ⧉
