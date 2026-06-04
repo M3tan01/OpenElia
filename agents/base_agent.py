@@ -238,6 +238,7 @@ class BaseAgent(ABC):
                     mitre_ttp=tool_input["mitre_ttp"],
                     cvss_score=tool_input.get("cvss_score"),
                     cvss_vector=tool_input.get("cvss_vector"),
+                    source_agent=self.AGENT_NAME,
                 )
                 return f"Finding logged: [{tool_input['severity'].upper()}] {tool_input['title']}"
 

@@ -254,3 +254,110 @@ class TestCVSSInFindings:
         # No duplicate columns added across the repeated migration passes.
         assert all_cols.count("cvss_score") == 1
         assert all_cols.count("cvss_vector") == 1
+
+
+# ---------------------------------------------------------------------------
+# source_agent attribution in findings (Task D1)
+# ---------------------------------------------------------------------------
+
+class TestSourceAgentInFindings:
+    def test_add_finding_with_source_agent_round_trips(self, sm):
+        """source_agent is stored and retrievable when supplied."""
+        sm.add_finding(
+            severity="high",
+            title="Open port 8080",
+            description="Unauthenticated service exposed.",
+            evidence="nmap scan output",
+            mitre_ttp="T1046",
+            source_agent="pentester_recon",
+        )
+        with sm._get_conn() as conn:
+            row = conn.execute(
+                "SELECT source_agent FROM findings WHERE title = ?",
+                ("Open port 8080",),
+            ).fetchone()
+        assert row is not None
+        assert row["source_agent"] == "pentester_recon"
+
+    def test_add_finding_without_source_agent_stores_null(self, sm):
+        """Back-compat: omitting source_agent stores NULL, no crash."""
+        sm.add_finding(
+            severity="info",
+            title="Banner disclosure",
+            description="Server header reveals version.",
+            evidence="HTTP response header",
+            mitre_ttp="T1592",
+        )
+        with sm._get_conn() as conn:
+            row = conn.execute(
+                "SELECT source_agent FROM findings WHERE title = ?",
+                ("Banner disclosure",),
+            ).fetchone()
+        assert row is not None
+        assert row["source_agent"] is None
+
+    def test_findings_source_agent_migration_on_legacy_db(self, tmp_path):
+        """Idempotent ALTER migration adds source_agent to a legacy DB that
+        lacks it, and leaves existing rows intact (no data loss)."""
+        db_path = str(tmp_path / "legacy_source.db")
+
+        # --- Build a legacy DB without the source_agent column ---
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS engagement (
+                id TEXT PRIMARY KEY,
+                target TEXT,
+                scope TEXT,
+                started TEXT,
+                authorized INTEGER,
+                current_phase TEXT,
+                is_active INTEGER DEFAULT 1,
+                is_locked INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS findings (
+                id TEXT PRIMARY KEY,
+                engagement_id TEXT,
+                severity TEXT,
+                title TEXT,
+                description TEXT,
+                evidence TEXT,
+                mitre_ttp TEXT,
+                timestamp TEXT,
+                cvss_score REAL,
+                cvss_vector TEXT,
+                FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
+            );
+        """)
+        # Insert a legacy row (no source_agent column)
+        conn.execute(
+            "INSERT INTO engagement (id, target, scope, started, authorized, current_phase)"
+            " VALUES ('ENG-LEGACY2', '10.0.0.2', 'test', '2024-01-01', 1, 'recon')"
+        )
+        conn.execute(
+            "INSERT INTO findings"
+            " (id, engagement_id, severity, title, description, evidence, mitre_ttp, timestamp)"
+            " VALUES ('FIND-OLD2', 'ENG-LEGACY2', 'medium', 'Pre-existing Finding',"
+            "         'desc', 'ev', 'T1000', '2024-01-01')"
+        )
+        conn.commit()
+        conn.close()
+
+        # --- Run StateManager (triggers _init_db + migration) ---
+        manager = StateManager(db_path=db_path)
+
+        # source_agent column must now exist
+        with manager._get_conn() as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(findings)").fetchall()}
+        assert "source_agent" in cols
+
+        # Pre-existing row is intact and source_agent is NULL (not lost)
+        with manager._get_conn() as c:
+            row = c.execute(
+                "SELECT * FROM findings WHERE id = 'FIND-OLD2'"
+            ).fetchone()
+        assert row is not None
+        assert row["severity"] == "medium"
+        assert row["title"] == "Pre-existing Finding"
+        assert row["source_agent"] is None

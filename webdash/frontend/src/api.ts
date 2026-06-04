@@ -28,7 +28,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
 // --- types -------------------------------------------------------------------- //
 export interface Engagement { id: string; target: string; scope: string; started: string; is_locked: boolean; }
-export interface Finding { severity: string; title: string; mitre_ttp: string; cvss_score?: number | null; cvss_vector?: string | null; }
+export interface Finding { severity: string; title: string; mitre_ttp: string; cvss_score?: number | null; cvss_vector?: string | null; source_agent?: string | null; }
 export interface StateResp { engagement?: Engagement; findings?: Finding[]; blue_alerts?: unknown[]; [k: string]: unknown; }
 export interface AuditEvent { timestamp: string; source: string; target: string; status: string; reason: string; }
 export interface AuditResp { events: AuditEvent[]; count: number; chain_ok: boolean; chain_status: string; chain_msg: string; }

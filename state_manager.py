@@ -85,6 +85,7 @@ class StateManager:
                     timestamp TEXT,
                     cvss_score REAL,
                     cvss_vector TEXT,
+                    source_agent TEXT,
                     FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
                 );
 
@@ -170,6 +171,8 @@ class StateManager:
                 conn.execute("ALTER TABLE findings ADD COLUMN cvss_score REAL")
             if "cvss_vector" not in existing_cols:
                 conn.execute("ALTER TABLE findings ADD COLUMN cvss_vector TEXT")
+            if "source_agent" not in existing_cols:
+                conn.execute("ALTER TABLE findings ADD COLUMN source_agent TEXT")
             conn.commit()
 
     def _get_last_active_id(self) -> Optional[str]:
@@ -414,14 +417,15 @@ class StateManager:
         engagement_id: str = None,
         cvss_score: float | None = None,
         cvss_vector: str | None = None,
+        source_agent: str | None = None,
     ) -> None:
         eid = engagement_id or self.active_engagement_id
         with self._get_conn() as conn:
             f_id = f"FIND-{int(time.time())}-{uuid.uuid4().hex[:4].upper()}"
             conn.execute("""
-                INSERT INTO findings (id, engagement_id, severity, title, description, evidence, mitre_ttp, timestamp, cvss_score, cvss_vector)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (f_id, eid, severity, title, description, evidence, mitre_ttp, datetime.now(timezone.utc).isoformat(), cvss_score, cvss_vector))
+                INSERT INTO findings (id, engagement_id, severity, title, description, evidence, mitre_ttp, timestamp, cvss_score, cvss_vector, source_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f_id, eid, severity, title, description, evidence, mitre_ttp, datetime.now(timezone.utc).isoformat(), cvss_score, cvss_vector, source_agent))
             conn.commit()
 
     def add_blue_alert(self, alert_type: str, description: str, severity: str, source: str, engagement_id: str = None) -> None:
