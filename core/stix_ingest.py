@@ -281,6 +281,9 @@ def parse_ioc_list(content: str) -> dict:
     (type, value). Returns the same shape as parse_stix with ttps/actors/malware
     always empty. Raises ValueError if no valid IOCs are found.
     """
+    # Strip UTF-8 BOM (U+FEFF) that Excel/Windows exports prepend — str.strip() does
+    # NOT remove it, so without this the first line never matches as a valid IOC.
+    content = content.lstrip("﻿")
     lines = content.splitlines()
     iocs: list[dict] = []
     seen: set[tuple[str, str]] = set()
@@ -294,7 +297,9 @@ def parse_ioc_list(content: str) -> dict:
         # CSV: take first non-empty field
         if "," in stripped:
             first_field = stripped.split(",")[0].strip()
-            # Skip CSV header row (first line whose first field is a known header token)
+            # Skip CSV header row (first line whose first field is a known header token).
+            # A misclassified header row is also harmless: tokens like "ioc", "indicator",
+            # "value", "type" are not valid IOCs and get dropped by detect_ioc_type anyway.
             if not header_checked:
                 header_checked = True
                 if first_field.lower() in _CSV_HEADER_FIELDS:
