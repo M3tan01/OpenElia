@@ -26,6 +26,8 @@ function ApplyPanel({
 }) {
   const [domain, setDomain] = useState<Domain>("red");
   const [target, setTarget] = useState(defaultTarget);
+  // operator-overridable stealth; seeded from the profile's default. blue ignores it.
+  const [stealth, setStealth] = useState(profile.stealth_required);
   const [pending, setPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -46,7 +48,7 @@ function ApplyPanel({
         confirm: true,
       };
       if (domain !== "blue") {
-        body.stealth = profile.stealth_required;
+        body.stealth = stealth;
       }
       const r = await apiPost<RunResp>(`/api/run/${domain}`, body);
       setMsg({ ok: true, text: `run ${r.run_id} ${r.status}` });
@@ -80,6 +82,19 @@ function ApplyPanel({
             onChange={(e) => setTarget(e.target.value)}
           />
         </div>
+        {domain !== "blue" && (
+          <label className="flex items-center gap-1.5 font-mono text-[11px] text-dim">
+            stealth
+            <select
+              value={stealth ? "on" : "off"}
+              onChange={(e) => setStealth(e.target.value === "on")}
+              className="bg-void border border-line px-2 py-1 text-xs text-slate-200 font-mono focus:border-amber focus:outline-none"
+            >
+              <option value="on">on</option>
+              <option value="off">off</option>
+            </select>
+          </label>
+        )}
       </div>
       <div className="flex gap-2">
         <button
