@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiGet, Finding, StateResp } from "../api";
+import { apiGet, apiPost, Finding, ReportBriefResp, StateResp } from "../api";
 import { Badge, Panel } from "./Panel";
 
 const SEV_COLOR: Record<string, string> = {
@@ -196,6 +196,9 @@ export function FindingsView() {
   const [findings, setFindings] = useState<Finding[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [printErr, setPrintErr] = useState<boolean>(false);
+  const [briefMd, setBriefMd] = useState<string | null>(null);
+  const [briefGenerating, setBriefGenerating] = useState<boolean>(false);
+  const [briefErr, setBriefErr] = useState<string | null>(null);
 
   useEffect(() => {
     const load = () =>
@@ -212,6 +215,15 @@ export function FindingsView() {
 
   const btnClass =
     "font-display uppercase tracking-wider bg-amber/15 border border-amber text-amber text-[11px] px-2 py-1 hover:bg-amber/25 disabled:opacity-40";
+
+  function handleGenerateBrief() {
+    setBriefErr(null);
+    setBriefGenerating(true);
+    apiPost<ReportBriefResp>("/api/report/brief", { confirm: true, brain_tier: "local" })
+      .then((r) => { setBriefMd(r.markdown); })
+      .catch((e: unknown) => { setBriefErr(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { setBriefGenerating(false); });
+  }
 
   const exportButtons = (
     <div className="flex items-center gap-1">
@@ -253,6 +265,14 @@ export function FindingsView() {
       >
         ⎙ Print
       </button>
+      <button
+        className={btnClass}
+        disabled={disabled || briefGenerating}
+        title={disabled ? "no findings to brief" : briefGenerating ? "generating…" : "generate executive brief via Reporter agent"}
+        onClick={handleGenerateBrief}
+      >
+        {briefGenerating ? "generating…" : "⚡ Brief"}
+      </button>
     </div>
   );
 
@@ -290,6 +310,35 @@ export function FindingsView() {
           </div>
         ))}
       </div>
+      {briefErr && (
+        <div className="mt-3">
+          <Badge ok={false}>{briefErr}</Badge>
+        </div>
+      )}
+      {briefMd && (
+        <div className="mt-4 border border-line bg-surface/60 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-display uppercase tracking-wider text-amber text-[11px]">Findings Brief</span>
+            <div className="flex items-center gap-1">
+              <button
+                className={btnClass}
+                title="download brief as Markdown"
+                onClick={() => download(`openelia-findings-brief-${stamp()}.md`, briefMd, "text/markdown")}
+              >
+                ↓ .md
+              </button>
+              <button
+                className={btnClass}
+                title="dismiss brief"
+                onClick={() => { setBriefMd(null); setBriefErr(null); }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <pre className="whitespace-pre-wrap font-mono text-xs text-slate-200">{briefMd}</pre>
+        </div>
+      )}
     </Panel>
   );
 }

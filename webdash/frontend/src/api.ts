@@ -66,6 +66,7 @@ export type AdversaryResp = {
 };
 
 export type RunResp = { run_id: string; status: string };
+export type ReportBriefResp = { markdown: string };
 
 export type PlaybookPhase = { name: string; tools: string[]; post_analysis: string | null };
 export type PlaybookVar = { required: boolean; description: string };

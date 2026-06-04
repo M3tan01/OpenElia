@@ -120,3 +120,54 @@ class TestReporterAgentRun:
              patch.object(reporter, "_get_standard_tools", return_value=[]):
             with pytest.raises(RuntimeError, match="LLM down"):
                 await reporter.run()
+
+
+class TestReporterAgentBrief:
+    """Tests for the ephemeral brief() method — no artifact saved, no CoC block."""
+
+    async def test_brief_returns_markdown_from_llm(self, reporter, mock_artifact_manager):
+        """brief() returns the markdown string from _call_with_tools."""
+        with patch.object(reporter, "_call_with_tools", new=AsyncMock(return_value="# Brief\nTop risks here.")), \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"):
+            result = await reporter.brief([{"title": "SQLi", "severity": "critical", "mitre_ttp": "T1190"}])
+        assert result == "# Brief\nTop risks here."
+
+    async def test_brief_does_not_save_artifact(self, reporter, mock_artifact_manager):
+        """brief() must NOT call store_artifact — it is ephemeral."""
+        with patch.object(reporter, "_call_with_tools", new=AsyncMock(return_value="# Brief")), \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"):
+            await reporter.brief([{"title": "RCE", "severity": "critical"}])
+        mock_artifact_manager.store_artifact.assert_not_called()
+
+    async def test_brief_with_none_reads_from_state(self, reporter, mock_state, mock_artifact_manager):
+        """brief(findings=None) reads findings from state_manager."""
+        with patch.object(reporter, "_call_with_tools", new=AsyncMock(return_value="# Brief from state")), \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"):
+            result = await reporter.brief(None)
+        # state has 1 finding ("SQLi") — LLM still called, not short-circuited
+        assert result == "# Brief from state"
+        mock_state.read.assert_called()
+
+    async def test_brief_with_empty_findings_returns_no_findings_string(self, reporter):
+        """brief([]) short-circuits with a 'no findings' message without calling LLM."""
+        with patch.object(reporter, "_call_with_tools", new=AsyncMock()) as mock_llm, \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"):
+            result = await reporter.brief([])
+        assert "no findings" in result.lower()
+        mock_llm.assert_not_awaited()
+
+    async def test_brief_calls_get_mitre_heatmap(self, reporter, mock_graph_manager):
+        """brief() passes findings to graph_manager.get_mitre_heatmap."""
+        findings = [{"title": "SQLi", "severity": "critical", "mitre_ttp": "T1190"}]
+        with patch.object(reporter, "_call_with_tools", new=AsyncMock(return_value="# Brief")), \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"):
+            await reporter.brief(findings)
+        mock_graph_manager.get_mitre_heatmap.assert_called_once_with(findings)
+
+    async def test_brief_passes_empty_tools_list(self, reporter):
+        """brief() calls _call_with_tools with tools=[] (no tool loop)."""
+        with patch.object(reporter, "_call_with_tools", new=AsyncMock(return_value="# Brief")) as mock_cwt, \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"):
+            await reporter.brief([{"title": "X", "severity": "low"}])
+        # third positional arg (index 2) is tools — should be empty list
+        assert mock_cwt.call_args[0][2] == []

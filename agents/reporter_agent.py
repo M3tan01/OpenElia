@@ -17,6 +17,17 @@ from state_manager import StateManager
 from artifact_manager import ArtifactManager
 from graph_manager import GraphManager
 
+_BRIEF_PROMPT = """You are the OpenElia Reporter Agent generating a concise executive brief.
+Produce a SHORT Markdown document with exactly four sections:
+
+1. **Summary** — One paragraph covering engagement scope, total findings, and overall risk posture.
+2. **Top Risks** — Bullet list of the highest-severity findings ordered by CVSS score (descending). Include title, severity, and CVSS where available.
+3. **ATT&CK Coverage Highlights** — Two to five bullet points naming the ATT&CK tactics/techniques with the most activity or highest gap risk.
+4. **Recommended Actions** — Numbered prioritized remediation steps (most urgent first).
+
+Keep the entire brief under 400 words. Output Markdown only — no preamble, no chain-of-custody block.
+"""
+
 _REPORT_PROMPT = """You are the OpenElia Reporter Agent.
 Your mission is to synthesize the results of a security engagement into a high-signal report.
 
@@ -39,6 +50,30 @@ class ReporterAgent(BaseAgent):
         super().__init__(state_manager, brain_tier=brain_tier)
         self.artifact_manager = ArtifactManager()
         self.graph_manager = GraphManager()
+
+    async def brief(self, findings: list[dict] | None = None) -> str:
+        """Concise exec brief over the given findings (or current engagement findings
+        if None): top risks, ATT&CK coverage, recommended actions. Returns Markdown.
+        Does NOT save an artifact (unlike run())."""
+        if findings is None:
+            findings = self.state.read().get("findings", [])
+
+        if not findings:
+            return "_No findings to summarize._"
+
+        heatmap = self.graph_manager.get_mitre_heatmap(findings)
+        context = {
+            "findings_count": len(findings),
+            "findings": findings[:30],
+            "mitre_coverage": heatmap,
+        }
+
+        system = self._build_system_prompt(_BRIEF_PROMPT)
+        messages = [
+            {"role": "user", "content": f"Findings context: {json.dumps(context)}"}
+        ]
+        md = await self._call_with_tools(system, messages, [])
+        return md
 
     async def run(self, task: str = "Generate full engagement report") -> str:
         print(f"[{self.AGENT_NAME}] Generating strategic report...")

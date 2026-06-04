@@ -380,6 +380,26 @@ def create_adversary(req: AdversaryCreate) -> dict:
     return {"name": profile.name, "stem": stem, "saved": f"{adv_dir}/{stem}.json"}
 
 
+class ReportBrief(BaseModel):
+    brain_tier: Literal["local", "expensive"] = "local"
+    confirm: bool = False
+
+
+@router.post("/report/brief")
+async def report_brief(req: ReportBrief, data: DashboardData = Depends(get_data)) -> dict:
+    """Generate a concise LLM executive brief over current engagement findings.
+    Token + confirm gated. Read-only generation — no artifact saved."""
+    require_confirm(req.confirm)
+    from state_manager import StateManager
+    from agents.reporter_agent import ReporterAgent
+
+    sm = StateManager(db_path=str(data.db_path))
+    state = sm.read()
+    findings = state.get("findings", []) if state else []
+    md = await ReporterAgent(sm, brain_tier=req.brain_tier).brief(findings)
+    return {"markdown": md}
+
+
 class AdversaryDelete(BaseModel):
     stem: str
     confirm: bool = False

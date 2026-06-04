@@ -216,3 +216,31 @@ def test_run_blue_no_agent_unchanged(client, state_dir, auth, mock_invoke):
     assert rec["status"] == "done"
     # agent param should be None
     assert mock_invoke.call_args.kwargs["agent"] is None
+
+
+# ---------------------------------------------------------------------------
+# POST /api/report/brief endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_report_brief_returns_markdown(client, state_dir, auth, monkeypatch):
+    """POST /api/report/brief with confirm=True returns {markdown: ...}."""
+    from unittest.mock import AsyncMock, patch
+
+    with patch("agents.reporter_agent.ReporterAgent.brief", new=AsyncMock(return_value="# Brief\nTop risks.")):
+        resp = client.post("/api/report/brief", headers=auth, json={"confirm": True})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "markdown" in body
+    assert body["markdown"] == "# Brief\nTop risks."
+
+
+def test_report_brief_missing_confirm_returns_400(client, state_dir, auth):
+    """POST /api/report/brief without confirm raises 400."""
+    resp = client.post("/api/report/brief", headers=auth, json={})
+    assert resp.status_code == 400
+
+
+def test_report_brief_no_token_returns_401(client, state_dir):
+    """POST /api/report/brief without auth token returns 401."""
+    resp = client.post("/api/report/brief", json={"confirm": True})
+    assert resp.status_code == 401
