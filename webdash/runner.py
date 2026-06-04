@@ -45,6 +45,7 @@ class RunManager:
         brain_tier: str = "local",
         apt_profile: str | None = None,
         state_dir: str = "state",
+        agent: str | None = None,
     ) -> str:
         if self.active():
             raise RuntimeError("a run is already active")
@@ -63,17 +64,17 @@ class RunManager:
         }
         self._active = run_id
         t = asyncio.create_task(
-            self._execute(run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir)
+            self._execute(run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent)
         )
         self._tasks.add(t)
         t.add_done_callback(self._tasks.discard)
         return run_id
 
-    async def _execute(self, run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir):
+    async def _execute(self, run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None):
         rec = self._runs[run_id]
         try:
             rec["result"] = await self._invoke(
-                domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir
+                domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent
             )
             rec["status"] = "done"
         except (Exception, SystemExit) as exc:  # capture errors + kill-switch SystemExit; let CancelledError propagate
@@ -86,7 +87,7 @@ class RunManager:
             if self._active == run_id:
                 self._active = None
 
-    async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir) -> dict:
+    async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None) -> dict:
         """Actual engine call. Isolated for mocking in tests."""
         from orchestrator import Orchestrator
         from state_manager import StateManager
@@ -103,6 +104,7 @@ class RunManager:
             brain_tier=brain_tier,
             apt_profile=apt_profile,
             force_domain=domain,
+            force_agent=agent,
         )
 
 

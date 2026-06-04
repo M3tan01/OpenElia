@@ -263,3 +263,99 @@ async def test_rbac_denial_skips_enqueue(tmp_path):
         await orch.route("attack everything", targets=["10.0.0.1"])
 
     assert len(enqueued) == 0
+
+
+# ---------------------------------------------------------------------------
+# force_agent tests
+# ---------------------------------------------------------------------------
+
+async def test_force_agent_blue_single_agent(tmp_path):
+    """force_agent on a blue route enqueues exactly one matching AgentTask."""
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("internal", "enterprise")
+
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+
+    enqueued: list[AgentTask] = []
+
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "blue", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock(side_effect=lambda task: enqueued.append(task))
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("hunt for lateral movement", force_agent="defender_hunt")
+
+    assert len(enqueued) == 1
+    assert enqueued[0].agent_name == "defender_hunt"
+    assert enqueued[0].domain == Domain.BLUE
+
+
+async def test_force_agent_blue_no_force_enqueues_all(tmp_path):
+    """Without force_agent, all 4 blue agents are enqueued (regression guard)."""
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("internal", "enterprise")
+
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+
+    enqueued: list[AgentTask] = []
+
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "blue", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock(side_effect=lambda task: enqueued.append(task))
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("analyze logs")
+
+    assert len(enqueued) == 4
+    assert {t.agent_name for t in enqueued} == {"defender_mon", "defender_ana", "defender_hunt", "defender_res"}
+
+
+async def test_force_agent_reporter_domain_skips_reporter(tmp_path):
+    """force_agent set to something other than reporter_agent skips the reporter task."""
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("internal", "enterprise")
+
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+
+    enqueued: list[AgentTask] = []
+
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "reporter", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock(side_effect=lambda task: enqueued.append(task))
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("generate summary", force_agent="defender_hunt")
+
+    assert len(enqueued) == 0
+
+
+async def test_force_agent_reporter_domain_allows_reporter(tmp_path):
+    """force_agent='reporter_agent' on a reporter domain enqueues the reporter."""
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("internal", "enterprise")
+
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+
+    enqueued: list[AgentTask] = []
+
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "reporter", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock(side_effect=lambda task: enqueued.append(task))
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("generate summary", force_agent="reporter_agent")
+
+    assert len(enqueued) == 1
+    assert enqueued[0].agent_name == "reporter_agent"

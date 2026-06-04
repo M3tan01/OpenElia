@@ -14,7 +14,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from webdash.data import DashboardData, get_data
+from webdash.data import AGENT_REGISTRY, DashboardData, get_data
 from webdash.guards import require_confirm, require_unlocked, scope_gate
 from webdash.runner import RunManager, get_run_manager
 from webdash.security import require_token
@@ -29,6 +29,7 @@ class RedRun(BaseModel):
     brain_tier: Literal["local", "expensive"] = "local"
     proxy_port: int | None = None
     apt_profile: str | None = None
+    agent: str | None = None
     confirm: bool = False
 
 
@@ -37,6 +38,7 @@ class BlueRun(BaseModel):
     target: str | None = None
     brain_tier: Literal["local", "expensive"] = "local"
     apt_profile: str | None = None
+    agent: str | None = None
     confirm: bool = False
 
 
@@ -47,7 +49,28 @@ class PurpleRun(BaseModel):
     brain_tier: Literal["local", "expensive"] = "local"
     proxy_port: int | None = None
     apt_profile: str | None = None
+    agent: str | None = None
     confirm: bool = False
+
+
+def _validate_agent(domain: str, agent: str | None) -> None:
+    """Raise HTTP 400 if agent is set but does not belong to domain.
+
+    purple accepts agents from both red and blue sets.
+    """
+    if agent is None:
+        return
+    if domain == "red":
+        allowed = set(AGENT_REGISTRY["red"])
+    elif domain == "blue":
+        allowed = set(AGENT_REGISTRY["blue"])
+    else:  # purple
+        allowed = set(AGENT_REGISTRY["red"]) | set(AGENT_REGISTRY["blue"])
+    if agent not in allowed:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown agent '{agent}' for domain '{domain}'",
+        )
 
 
 class ForgeRun(BaseModel):
@@ -212,9 +235,11 @@ async def run_red(req: RedRun, data: DashboardData = Depends(get_data), rm: RunM
     require_confirm(req.confirm)
     require_unlocked(str(data.db_path))
     scope_gate(req.target, req.task)
+    _validate_agent("red", req.agent)
     return await _launch(
         rm, domain="red", task=req.task, targets=[req.target], stealth=req.stealth,
-        proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile, state_dir=str(data.dir),
+        proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile,
+        state_dir=str(data.dir), agent=req.agent,
     )
 
 
@@ -222,9 +247,11 @@ async def run_red(req: RedRun, data: DashboardData = Depends(get_data), rm: RunM
 async def run_blue(req: BlueRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
     require_confirm(req.confirm)
     require_unlocked(str(data.db_path))  # defensive ops still respect the kill-switch
+    _validate_agent("blue", req.agent)
     return await _launch(
         rm, domain="blue", task=req.task, targets=[req.target or "unknown"],
         brain_tier=req.brain_tier, apt_profile=req.apt_profile, state_dir=str(data.dir),
+        agent=req.agent,
     )
 
 
@@ -233,9 +260,11 @@ async def run_purple(req: PurpleRun, data: DashboardData = Depends(get_data), rm
     require_confirm(req.confirm)
     require_unlocked(str(data.db_path))
     scope_gate(req.target, req.task)
+    _validate_agent("purple", req.agent)
     return await _launch(
         rm, domain="purple", task=req.task, targets=[req.target], stealth=req.stealth,
-        proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile, state_dir=str(data.dir),
+        proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile,
+        state_dir=str(data.dir), agent=req.agent,
     )
 
 

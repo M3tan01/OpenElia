@@ -165,3 +165,59 @@ def test_ioc_parse_missing_token_returns_401(client, state_dir):
     content = "10.0.0.1\nevil.example.org"
     resp = client.post("/api/ioc/parse", json={"content": content})
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# force_agent / agent= tests
+# ---------------------------------------------------------------------------
+
+def test_run_blue_with_valid_agent_starts(client, state_dir, roe, auth, mock_invoke):
+    """POST /api/run/blue with a valid blue agent starts the run and forwards agent."""
+    resp = client.post(
+        "/api/run/blue",
+        headers=auth,
+        json={"task": "hunt", "agent": "defender_hunt", "confirm": True},
+    )
+    assert resp.status_code == 200
+    run_id = resp.json()["run_id"]
+    rec = _wait_done(client, auth, run_id)
+    assert rec["status"] == "done"
+    # Verify _invoke was called with agent="defender_hunt"
+    call_kwargs = mock_invoke.call_args
+    args = call_kwargs.args if call_kwargs.args else ()
+    # _invoke signature: domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent
+    assert args[-1] == "defender_hunt"
+
+
+def test_run_blue_wrong_domain_agent_returns_400(client, state_dir, roe, auth):
+    """POST /api/run/blue with a red agent name returns 400."""
+    resp = client.post(
+        "/api/run/blue",
+        headers=auth,
+        json={"task": "hunt", "agent": "pentester_recon", "confirm": True},
+    )
+    assert resp.status_code == 400
+    assert "pentester_recon" in resp.json()["detail"]
+
+
+def test_run_red_bogus_agent_returns_400(client, state_dir, roe, auth):
+    """POST /api/run/red with an unknown agent name returns 400."""
+    resp = client.post(
+        "/api/run/red",
+        headers=auth,
+        json={"target": "10.0.0.5", "agent": "bogus", "confirm": True},
+    )
+    assert resp.status_code == 400
+    assert "bogus" in resp.json()["detail"]
+
+
+def test_run_blue_no_agent_unchanged(client, state_dir, auth, mock_invoke):
+    """Existing behavior: no agent field → run starts normally."""
+    resp = client.post("/api/run/blue", headers=auth, json={"task": "triage logs", "confirm": True})
+    assert resp.status_code == 200
+    rec = _wait_done(client, auth, resp.json()["run_id"])
+    assert rec["status"] == "done"
+    # agent param should be None
+    call_kwargs = mock_invoke.call_args
+    args = call_kwargs.args if call_kwargs.args else ()
+    assert args[-1] is None

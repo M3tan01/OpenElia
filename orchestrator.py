@@ -80,6 +80,7 @@ class Orchestrator:
         brain_tier: str = "local",
         apt_profile: str = None,
         force_domain: str | None = None,
+        force_agent: str | None = None,
     ) -> dict:
         """
         Classify the task domain, then dispatch via AsyncWorkerPool.
@@ -90,6 +91,10 @@ class Orchestrator:
                           directly. Used by the purple team feedback loop to drive
                           alternating red/blue/reporter phases without paying
                           classification cost on every iteration.
+            force_agent:  When set, only the named agent is enqueued within the
+                          resolved domain. All other agents in that domain's tier
+                          set are skipped. Pure routing hint — no instance state
+                          is added to the Orchestrator.
         """
         target_list = targets or ["unknown"]
         proxy_info = f" [PROXY:{proxy_port}]" if proxy_port else ""
@@ -131,6 +136,7 @@ class Orchestrator:
             proxy_port=proxy_port,
             brain_tier=brain_tier,
             apt_profile=apt_profile,
+            force_agent=force_agent,
         )
 
         results = await self._pool.run_until_complete(self._dispatch_task)
@@ -150,8 +156,15 @@ class Orchestrator:
         proxy_port: int | None = None,
         brain_tier: str = "local",
         apt_profile: str = None,
+        force_agent: str | None = None,
     ) -> None:
-        """Build AgentTask objects and submit them to the pool."""
+        """Build AgentTask objects and submit them to the pool.
+
+        Args:
+            force_agent: When set, only the named agent is submitted. Agents that
+                         do not match are silently skipped. Unset → full tier set
+                         (unchanged behavior).
+        """
 
         if domain in ("red", "purple"):
             from core import prioritizer
@@ -172,6 +185,8 @@ class Orchestrator:
                     graph_signal=graph_signal,
                 )
                 for tier, agent_name in self._RED_AGENTS:
+                    if force_agent and agent_name != force_agent:
+                        continue
                     agent_task = AgentTask(
                         domain=Domain.RED,
                         tier=tier,
@@ -187,6 +202,8 @@ class Orchestrator:
 
         if domain in ("blue", "purple"):
             for tier, agent_name in self._BLUE_AGENTS:
+                if force_agent and agent_name != force_agent:
+                    continue
                 agent_task = AgentTask(
                     domain=Domain.BLUE,
                     tier=tier,
@@ -200,17 +217,18 @@ class Orchestrator:
                 await self._pool.submit(agent_task)
 
         if domain == "reporter":
-            agent_task = AgentTask(
-                domain=Domain.REPORTER,
-                tier=AgentTier.EXECUTION,
-                agent_name="reporter_agent",
-                payload={"task": task},
-                brain_tier=brain_tier,
-                stealth=stealth,
-                proxy_port=proxy_port,
-                apt_profile=apt_profile,
-            )
-            await self._pool.submit(agent_task)
+            if not (force_agent and force_agent != "reporter_agent"):
+                agent_task = AgentTask(
+                    domain=Domain.REPORTER,
+                    tier=AgentTier.EXECUTION,
+                    agent_name="reporter_agent",
+                    payload={"task": task},
+                    brain_tier=brain_tier,
+                    stealth=stealth,
+                    proxy_port=proxy_port,
+                    apt_profile=apt_profile,
+                )
+                await self._pool.submit(agent_task)
 
     # ---------------------------------------------------------------------------
     # Pool handler — hooks + _run_agent dispatch
