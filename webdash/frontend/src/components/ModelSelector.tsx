@@ -9,6 +9,9 @@ export function ModelSelector() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [localModel, setLocalModel] = useState("");
+  const [localAvail, setLocalAvail] = useState<string[]>([]);
+  const [scanned, setScanned] = useState(false);   // true once a scan completes (success or empty)
+  const [scanning, setScanning] = useState(false);
   const [cloudProvider, setCloudProvider] = useState("openai");
   const [cloudModel, setCloudModel] = useState("");
   const [hybridAgent, setHybridAgent] = useState("");
@@ -16,7 +19,23 @@ export function ModelSelector() {
   const [authKey, setAuthKey] = useState("");
 
   const load = () => apiGet<ModelsResp>("/api/models").then(setData).catch(() => {});
-  useEffect(() => { load(); }, []);
+  // detected Ollama models — empty when the daemon is unreachable (→ text fallback + install hint)
+  // markScanned=true only on an explicit ⟳ click, so the install hint shows after refresh, not on first load
+  const loadLocal = (markScanned = false) => {
+    if (markScanned) setScanning(true);
+    return apiGet<{ models: string[] }>("/api/models/local/available")
+      .then((r) => setLocalAvail(r.models))
+      .catch(() => setLocalAvail([]))
+      .finally(() => { if (markScanned) { setScanned(true); setScanning(false); } });
+  };
+  useEffect(() => { load(); loadLocal(); }, []);
+
+  // once models are detected, preselect the active local model (or the first one)
+  useEffect(() => {
+    if (localModel || localAvail.length === 0) return;
+    const current = (data?.config as Record<string, any> | undefined)?.local_model;
+    setLocalModel(current && localAvail.includes(current) ? current : localAvail[0]);
+  }, [localAvail, data, localModel]);
 
   async function call(path: string, body: Record<string, unknown>, ok: string) {
     setMsg(null);
@@ -44,9 +63,22 @@ export function ModelSelector() {
         </div>
 
         <div className="flex gap-2 items-center">
-          <input className={`${input} flex-1`} placeholder={`local model (${cfg.local_model ?? "ollama"})`} value={localModel} onChange={(e) => setLocalModel(e.target.value)} />
+          {localAvail.length > 0 ? (
+            <select className={`${input} flex-1`} value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
+              {localAvail.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input className={`${input} flex-1`} placeholder={`local model (${cfg.local_model ?? "ollama not detected"})`} value={localModel} onChange={(e) => setLocalModel(e.target.value)} />
+          )}
+          <button className={btn} title="re-scan Ollama" disabled={scanning} onClick={() => loadLocal(true)}>{scanning ? "…" : "⟳"}</button>
           <button className={btn} disabled={!localModel} onClick={() => call("/api/models/local", { model: localModel }, "local model set")}>Set local</button>
         </div>
+
+        {scanned && localAvail.length === 0 && (
+          <div className="text-[11px] text-amber/80 border border-amber/30 bg-amber/5 px-2 py-1.5 leading-relaxed">
+            no local models detected. install <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="underline">Ollama</a>, then pull one — e.g. <code className="text-amber">ollama pull llama3.1:8b</code> — and hit ⟳ to re-scan.
+          </div>
+        )}
 
         <div className="flex gap-2 items-center">
           <select className={input} value={cloudProvider} onChange={(e) => setCloudProvider(e.target.value)}>

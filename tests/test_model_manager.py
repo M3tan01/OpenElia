@@ -206,6 +206,70 @@ class TestGetClientConfig:
 
 
 # ---------------------------------------------------------------------------
+# list_local_models (Ollama tag detection)
+# ---------------------------------------------------------------------------
+
+class TestListLocalModels:
+    def _patch_urlopen(self, payload_bytes):
+        """Context manager that makes urllib.request.urlopen return payload_bytes."""
+        resp = MagicMock()
+        resp.read.return_value = payload_bytes
+        resp.__enter__.return_value = resp
+        resp.__exit__.return_value = False
+        return patch("urllib.request.urlopen", return_value=resp)
+
+    def test_parses_and_sorts_model_names(self):
+        from model_manager import ModelManager
+        payload = json.dumps({"models": [
+            {"name": "qwen2.5:14b"}, {"name": "llama3.1:8b"},
+        ]}).encode()
+        with patch("secret_store.SecretStore.get_secret", return_value=None), \
+             self._patch_urlopen(payload):
+            assert ModelManager.list_local_models() == ["llama3.1:8b", "qwen2.5:14b"]
+
+    def test_dedupes_names(self):
+        from model_manager import ModelManager
+        payload = json.dumps({"models": [
+            {"name": "llama3.1:8b"}, {"name": "llama3.1:8b"},
+        ]}).encode()
+        with patch("secret_store.SecretStore.get_secret", return_value=None), \
+             self._patch_urlopen(payload):
+            assert ModelManager.list_local_models() == ["llama3.1:8b"]
+
+    def test_returns_empty_on_connection_error(self):
+        import urllib.error
+        from model_manager import ModelManager
+        with patch("secret_store.SecretStore.get_secret", return_value=None), \
+             patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
+            assert ModelManager.list_local_models() == []
+
+    def test_returns_empty_on_bad_json(self):
+        from model_manager import ModelManager
+        with patch("secret_store.SecretStore.get_secret", return_value=None), \
+             self._patch_urlopen(b"not json"):
+            assert ModelManager.list_local_models() == []
+
+    def test_refuses_non_http_scheme(self):
+        from model_manager import ModelManager
+        # a file:// OLLAMA_BASE_URL must never reach urlopen
+        secrets = {"OLLAMA_BASE_URL": "file:///etc/passwd"}
+        with patch("secret_store.SecretStore.get_secret", side_effect=lambda k: secrets.get(k)), \
+             patch("urllib.request.urlopen") as uo:
+            assert ModelManager.list_local_models() == []
+            uo.assert_not_called()
+
+    def test_derives_tags_url_from_v1_base(self):
+        from model_manager import ModelManager
+        secrets = {"OLLAMA_BASE_URL": "http://gpu-server:11434/v1/"}
+        with patch("secret_store.SecretStore.get_secret", side_effect=lambda k: secrets.get(k)), \
+             self._patch_urlopen(json.dumps({"models": []}).encode()) as uo:
+            ModelManager.list_local_models()
+            uo.assert_called_once()
+            called_url = uo.call_args[0][0]
+            assert called_url == "http://gpu-server:11434/api/tags"
+
+
+# ---------------------------------------------------------------------------
 # LLMClient
 # ---------------------------------------------------------------------------
 

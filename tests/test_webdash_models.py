@@ -33,6 +33,30 @@ def test_set_local_ok(client, auth, mock_mm):
     assert mock_mm["local"] == "qwen2.5:14b"
 
 
+def test_local_available_lists_detected_models(client, auth, monkeypatch):
+    from model_manager import ModelManager
+
+    monkeypatch.setattr(
+        ModelManager, "list_local_models", classmethod(lambda cls: ["llama3.1:8b", "qwen2.5:14b"])
+    )
+    resp = client.get("/api/models/local/available", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json() == {"models": ["llama3.1:8b", "qwen2.5:14b"]}
+
+
+def test_local_available_empty_when_ollama_down(client, auth, monkeypatch):
+    from model_manager import ModelManager
+
+    monkeypatch.setattr(ModelManager, "list_local_models", classmethod(lambda cls: []))
+    resp = client.get("/api/models/local/available", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json() == {"models": []}
+
+
+def test_local_available_requires_token(client):
+    assert client.get("/api/models/local/available").status_code == 401
+
+
 def test_set_cloud_bad_provider(client, auth, mock_mm):
     resp = client.post("/api/models/cloud", headers=auth, json={"provider": "bogus", "model": "x", "confirm": True})
     assert resp.status_code == 400
