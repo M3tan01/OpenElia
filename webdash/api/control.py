@@ -328,6 +328,34 @@ def create_adversary(req: AdversaryCreate) -> dict:
     return {"name": profile.name, "stem": stem, "saved": f"{adv_dir}/{stem}.json"}
 
 
+class AdversaryDelete(BaseModel):
+    stem: str
+    confirm: bool = False
+
+
+@router.post("/adversaries/delete")
+def delete_adversary(req: AdversaryDelete) -> dict:
+    """Delete a custom/forged adversary profile by file stem. Token + confirm
+    gated; the stem is validated and realpath-checked to stay inside the
+    adversaries dir (no traversal)."""
+    require_confirm(req.confirm)
+
+    from adversary_manager import AdversaryManager
+
+    adv_dir = os.getenv("OPENELIA_ADVERSARIES_DIR", "adversaries")
+    mgr = AdversaryManager(adversaries_dir=adv_dir)
+    safe = req.stem.lower()
+    if not mgr._APT_NAME_RE.fullmatch(safe):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="invalid profile name")
+    path = os.path.realpath(os.path.join(mgr.adversaries_dir, f"{safe}.json"))
+    if not path.startswith(mgr.adversaries_dir + os.sep):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="path traversal detected")
+    if not os.path.exists(path):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"profile '{safe}' not found")
+    os.remove(path)
+    return {"deleted": safe}
+
+
 @router.get("/run/{run_id}/status")
 def run_status(run_id: str, rm: RunManager = Depends(get_run_manager)) -> dict:
     rec = rm.get(run_id)

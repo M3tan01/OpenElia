@@ -259,10 +259,13 @@ def test_adversaries_returns_whitelisted_profile(client, auth, tmp_path, monkeyp
     assert len(body) == 1
     profile = body[0]
 
-    # All returned keys must be in the whitelist
-    assert set(profile.keys()) <= _ADVERSARY_WHITELIST, (
-        f"Non-whitelisted keys leaked: {set(profile.keys()) - _ADVERSARY_WHITELIST}"
+    # All returned keys must be whitelisted profile fields, plus the data-layer
+    # 'stem' (file identifier the dashboard uses to delete a profile).
+    allowed = _ADVERSARY_WHITELIST | {"stem"}
+    assert set(profile.keys()) <= allowed, (
+        f"Non-whitelisted keys leaked: {set(profile.keys()) - allowed}"
     )
+    assert profile["stem"]  # file stem present for delete
     # Core whitelisted fields are present
     assert profile["name"] == "APT-TEST"
     assert "T1059" in profile["preferred_ttps"]
@@ -309,9 +312,10 @@ def test_adversaries_partial_profile_backfills_missing_keys(client, auth, tmp_pa
     # Missing array keys must be backfilled as empty lists
     assert profile["tools"] == [], f"Expected tools=[], got {profile['tools']!r}"
     assert profile["preferred_ttps"] == [], f"Expected preferred_ttps=[], got {profile['preferred_ttps']!r}"
-    # All seven whitelisted keys must be present
-    assert set(profile.keys()) == _ADVERSARY_WHITELIST, (
-        f"Key mismatch: {set(profile.keys())} != {_ADVERSARY_WHITELIST}"
+    # All seven whitelisted keys must be present, plus the data-layer 'stem'
+    expected = _ADVERSARY_WHITELIST | {"stem"}
+    assert set(profile.keys()) == expected, (
+        f"Key mismatch: {set(profile.keys())} != {expected}"
     )
     # Non-whitelisted key must not appear
     assert "secret_handler" not in profile
