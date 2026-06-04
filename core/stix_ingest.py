@@ -10,6 +10,7 @@ the offline maintainer script scripts/extract_actor_ttps.py).
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 
@@ -29,13 +30,113 @@ _IOC_TYPE = {
     "mac-addr": "mac",
 }
 
+# ---------------------------------------------------------------------------
+# Refang / validation helpers
+# ---------------------------------------------------------------------------
+
+# Substitution rules applied in order (most-specific first).
+_REFANG_SUBS: list[tuple[re.Pattern, str]] = [
+    # scheme-level: hxxp / hxxps (case-insensitive)
+    (re.compile(r'hxxps?', re.IGNORECASE), lambda m: m.group().lower().replace('hxxps', 'https').replace('hxxp', 'http')),
+    # [://] → ://
+    (re.compile(r'\[://\]'), '://'),
+    # [:] → :
+    (re.compile(r'\[:\]'), ':'),
+    # [.] (.)  (dot)  <space>dot<space>  →  .
+    (re.compile(r'\[\.\]|\(\.\)|\(dot\)| dot ', re.IGNORECASE), '.'),
+    # [@] (at) <space>at<space>  →  @
+    (re.compile(r'\[@\]|\(at\)| at ', re.IGNORECASE), '@'),
+    # strip stray surrounding brackets used for fanging: [text] → text
+    # only when the bracket wraps an alnum-only string (avoids stomping [://])
+    (re.compile(r'\[([a-zA-Z0-9]+)\]'), r'\1'),
+]
+
+
+def refang(value: str) -> str:
+    """Normalize defanged IOC notation back to its canonical form.
+
+    Handles: hxxp/hxxps, [.] (.) (dot) ' dot ', [//] [:] [@] (at) ' at '.
+    Pure stdlib (re only). Returns the refanged string unchanged when no
+    defanging notation is present.
+    """
+    for pattern, repl in _REFANG_SUBS:
+        if callable(repl):
+            value = pattern.sub(repl, value)
+        else:
+            value = pattern.sub(repl, value)
+    return value
+
+
+# Pre-compiled validators ------------------------------------------------
+
+_HEX_RE = re.compile(r'^[0-9a-fA-F]+$')
+_DOMAIN_LABEL_RE = re.compile(r'^(?!-)[a-zA-Z0-9-]{1,63}(?<!-)$')
+_MAC_RE = re.compile(r'^[0-9a-fA-F]{2}([:\-])[0-9a-fA-F]{2}(\1[0-9a-fA-F]{2}){4}$')
+
+
+def is_valid_ioc(ioc_type: str, value: str) -> bool:
+    """Return True when *value* is a well-formed IOC of *ioc_type*.
+
+    Types with active validation: ip, hash, url, domain, email, mac.
+    Any other type (registry, unknown passthrough) always returns True.
+    """
+    if ioc_type == "ip":
+        try:
+            ipaddress.ip_address(value)
+            return True
+        except ValueError:
+            return False
+
+    if ioc_type == "hash":
+        if len(value) not in (32, 40, 64):
+            return False
+        return bool(_HEX_RE.match(value))
+
+    if ioc_type == "url":
+        if not (value.startswith("http://") or value.startswith("https://")):
+            return False
+        # host is the part between :// and the first / (or end of string)
+        after_scheme = value.split("://", 1)[1]
+        host = after_scheme.split("/")[0]
+        return len(host) > 0
+
+    if ioc_type == "domain":
+        labels = value.rstrip(".").split(".")
+        if len(labels) < 2:
+            return False
+        return all(_DOMAIN_LABEL_RE.match(label) for label in labels)
+
+    if ioc_type == "email":
+        parts = value.split("@")
+        if len(parts) != 2:
+            return False
+        local, domain = parts
+        if not local:
+            return False
+        domain_labels = domain.rstrip(".").split(".")
+        if len(domain_labels) < 2:
+            return False
+        return all(_DOMAIN_LABEL_RE.match(label) for label in domain_labels)
+
+    if ioc_type == "mac":
+        return bool(_MAC_RE.match(value))
+
+    # registry, unknown passthrough types — keep as-is
+    return True
+
 
 def _iocs_from_pattern(pattern: str) -> list[dict]:
-    """Extract normalized IOCs from a STIX indicator `pattern` string."""
+    """Extract normalized IOCs from a STIX indicator `pattern` string.
+
+    Each extracted value is refanged, then validated by type. Invalid IOCs
+    are silently dropped.
+    """
     out: list[dict] = []
     for obj_type, _path, value in _TOKEN_RE.findall(pattern or ""):
         ioc_type = _IOC_TYPE.get(obj_type.lower(), obj_type.lower())
-        out.append({"type": ioc_type, "value": value})
+        value = refang(value)
+        if is_valid_ioc(ioc_type, value):
+            out.append({"type": ioc_type, "value": value})
     return out
 
 
