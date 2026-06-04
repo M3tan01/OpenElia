@@ -47,12 +47,33 @@ same-origin. Without a build the API works but `/` has no UI.
 |---|---|
 | `api/monitor.py` (read, token) | `/state /audit /tasks /graph /heatmap /cost /chain/verify /roe /engagements /adversaries /actors /system` |
 | `api/control.py` (control-gated) | `/run/red\|blue\|purple`, `/forge`, `/lock`, `/unlock`, `/run/{id}/status` |
+| `api/control.py` (token, read-only parse) | `/stix/parse`, `/ioc/parse` — parse CTI into a hunt brief (no run; 8 MB cap) |
 | `api/models.py` | GET `/models`; POST `/models/local\|cloud\|hybrid\|auth` |
 | `stream.py` | WebSocket `/api/stream` — snapshot + live audit/task tail |
 | `security.py` / `guards.py` | token auth / confirm + scope + unlocked guards |
 | `runner.py` | `Orchestrator.route()` as a tracked background run (single active) |
 | `data.py` | read adapters over StateManager / GraphManager / CostTracker / audit_chain |
 | `frontend/` | Vite+React+Tailwind C2 console (panels + ControlBar + ModelSelector) |
+
+## Threat Hunt (STIX / IOC list)
+
+The **Threat Hunt** view turns CTI into a defensive hunt. Two read-only parse endpoints
+(token-gated, no `confirm`, 8 MB cap) feed the same `StixBrief` shape:
+
+- `POST /api/stix/parse` — a STIX 2.x bundle → IOCs (from indicator patterns), ATT&CK
+  TTPs (attack-pattern refs), actor/malware context.
+- `POST /api/ioc/parse` — a plain newline / simple-CSV IOC list → IOCs only
+  (`detect_ioc_type` auto-types each line; CSV header + `#` comments + BOM stripped).
+
+`core/stix_ingest.py` is stdlib-only (no `stix2` at runtime). All IOCs are **refanged**
+(`hxxp`→`http`, `[.]`→`.`, `[at]`/`[dot]`, …) and **validated** by type on parse; IPs are
+canonicalized so dedup is correct. Both parsers share one brief via `_make_brief`.
+
+Frontend (`StixHuntView.tsx`): drag-drop / click / paste, auto-format routing, parsed-brief
+**export** (JSON), IOC **search** + per-type **filter chips**, **defang display** with
+**copy** (copies the real value) / **copy-all (N)**, and a `local`/`expensive` **brain-tier**
+toggle. Launching a hunt posts the composed task to the control-gated `/api/run/blue`
+(defensive — stealth N/A).
 
 ## Config / env
 
