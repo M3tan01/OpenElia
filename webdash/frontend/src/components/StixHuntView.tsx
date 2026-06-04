@@ -34,12 +34,15 @@ export function StixHuntView() {
   const [running, setRunning] = useState(false);
   const [run, setRun] = useState<RunResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
+  const [dragDepth, setDragDepth] = useState(0);
+  const isDragOver = dragDepth > 0;
   const [pasteText, setPasteText] = useState("");
 
   // ── core parse funnel ──────────────────────────────────────────────────────
 
   async function parseContent(content: string, name: string | null) {
+    if (parsing) return;
+    if (!content.trim()) { setErr("empty input"); return; }
     setErr(null); setBrief(null); setRun(null); setParsing(true);
     try {
       const fmt = detectFormat(name, content);
@@ -55,6 +58,7 @@ export function StixHuntView() {
   // ── file input ─────────────────────────────────────────────────────────────
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (parsing) return;
     const f = e.target.files?.[0];
     if (!f) return;
     setFileName(f.name);
@@ -65,21 +69,21 @@ export function StixHuntView() {
 
   function onDragEnter(e: React.DragEvent) {
     e.preventDefault();
-    setIsDragOver(true);
+    setDragDepth(d => d + 1);
   }
 
   function onDragOver(e: React.DragEvent) {
     e.preventDefault();
-    setIsDragOver(true);
   }
 
   function onDragLeave() {
-    setIsDragOver(false);
+    setDragDepth(d => Math.max(0, d - 1));
   }
 
   async function onDrop(e: React.DragEvent) {
     e.preventDefault();
-    setIsDragOver(false);
+    setDragDepth(0);
+    if (parsing) return;
     const f = e.dataTransfer.files[0];
     if (!f) return;
     setFileName(f.name);
@@ -126,6 +130,7 @@ export function StixHuntView() {
           <button
             type="button"
             onClick={() => exportBrief(brief)}
+            title="export hunt brief as JSON"
             className="font-display uppercase tracking-widest bg-amber/15 border border-amber text-amber glow text-xs px-3 py-0.5 hover:bg-amber/25"
           >
             ↓ export
@@ -156,6 +161,7 @@ export function StixHuntView() {
               type="file"
               accept=".json,.txt,.csv,application/json,text/plain,text/csv"
               onChange={onFile}
+              disabled={parsing}
               className="hidden"
             />
             <span className="font-mono text-xs text-dim">
@@ -175,6 +181,7 @@ export function StixHuntView() {
               onChange={(e) => setPasteText(e.target.value)}
               placeholder={`{"type":"bundle","objects":[…]}  or  1.2.3.4\nevil.example.com\ndeadbeef…`}
               rows={4}
+              aria-label="Paste STIX JSON or IOC list"
               className="w-full bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none resize-y"
             />
             <button
