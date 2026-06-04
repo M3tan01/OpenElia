@@ -82,7 +82,7 @@ export function FindingsView() {
             <div className="flex items-center gap-3 mt-0.5 font-mono text-[11px] text-dim">
               {f.mitre_ttp && <span className="text-amber/70">{f.mitre_ttp}</span>}
               {f.cvss_vector && <span className="truncate">{f.cvss_vector}</span>}
-              <span className="text-phos/80 font-mono text-[10px]">{f.source_agent || "—"}</span>
+              <span className="text-phos/80 font-mono text-[10px]" title="source agent">{f.source_agent || "—"}</span>
             </div>
           </div>
         ))}

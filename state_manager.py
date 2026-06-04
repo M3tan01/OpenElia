@@ -161,18 +161,26 @@ class StateManager:
             """)
             conn.commit()
 
-            # Idempotent migration: add cvss columns to findings if absent
-            # (handles existing DBs created before this column was added)
+            # Idempotent migration: add later columns to findings if absent
+            # (handles existing DBs created before these columns were added).
+            # StateManager is constructed per-request, so two fresh managers can
+            # race on the same legacy DB: both read the pre-migration schema, both
+            # ALTER, and the loser raises "duplicate column name". The PRAGMA guard
+            # handles the common case; the try/except makes the race harmless.
             existing_cols = {
                 row[1]
                 for row in conn.execute("PRAGMA table_info(findings)").fetchall()
             }
-            if "cvss_score" not in existing_cols:
-                conn.execute("ALTER TABLE findings ADD COLUMN cvss_score REAL")
-            if "cvss_vector" not in existing_cols:
-                conn.execute("ALTER TABLE findings ADD COLUMN cvss_vector TEXT")
-            if "source_agent" not in existing_cols:
-                conn.execute("ALTER TABLE findings ADD COLUMN source_agent TEXT")
+            for col, ddl in (
+                ("cvss_score", "ALTER TABLE findings ADD COLUMN cvss_score REAL"),
+                ("cvss_vector", "ALTER TABLE findings ADD COLUMN cvss_vector TEXT"),
+                ("source_agent", "ALTER TABLE findings ADD COLUMN source_agent TEXT"),
+            ):
+                if col not in existing_cols:
+                    try:
+                        conn.execute(ddl)
+                    except sqlite3.OperationalError:
+                        pass  # column added by a concurrent initializer — fine
             conn.commit()
 
     def _get_last_active_id(self) -> Optional[str]:
