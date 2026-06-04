@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { apiPost, RunResp, StixBrief } from "../api";
 import { Badge, Panel } from "./Panel";
 
@@ -24,6 +24,16 @@ function exportBrief(brief: StixBrief) {
   URL.revokeObjectURL(url);
 }
 
+/** Defang a value for safe display only — never pass defanged values to SIEM/clipboard. */
+function defang(value: string): string {
+  return value
+    .replace(/https/g, "hxxps")
+    .replace(/http/g, "hxxp")
+    .replace(/\./g, "[.]")
+    .replace(/:\/\//g, "[://]")
+    .replace(/@/g, "[@]");
+}
+
 // ── component ────────────────────────────────────────────────────────────────
 
 export function StixHuntView() {
@@ -38,12 +48,22 @@ export function StixHuntView() {
   const isDragOver = dragDepth > 0;
   const [pasteText, setPasteText] = useState("");
 
+  // IOC filter state
+  const [iocQuery, setIocQuery] = useState("");
+  const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set());
+
+  // brain tier
+  const [brainTier, setBrainTier] = useState<"local" | "expensive">("local");
+
   // ── core parse funnel ──────────────────────────────────────────────────────
 
   async function parseContent(content: string, name: string | null) {
     if (parsing) return;
     if (!content.trim()) { setErr("empty input"); return; }
     setErr(null); setBrief(null); setRun(null); setParsing(true);
+    // reset filters when loading new bundle
+    setIocQuery("");
+    setActiveTypes(new Set());
     try {
       const fmt = detectFormat(name, content);
       const endpoint = fmt === "stix" ? "/api/stix/parse" : "/api/ioc/parse";
@@ -108,7 +128,7 @@ export function StixHuntView() {
       const r = await apiPost<RunResp>("/api/run/blue", {
         task: brief.hunt_task,
         target: target.trim() || null,
-        brain_tier: "local",
+        brain_tier: brainTier,
         confirm: true,
       });
       setRun(r);
@@ -118,6 +138,44 @@ export function StixHuntView() {
   }
 
   const c = brief?.counts ?? {};
+
+  // ── IOC filter derived values ──────────────────────────────────────────────
+
+  const allIocs = brief?.iocs ?? [];
+
+  // unique type → count map
+  const typeCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ioc of allIocs) {
+      map.set(ioc.type, (map.get(ioc.type) ?? 0) + 1);
+    }
+    return map;
+  }, [allIocs]);
+
+  const uniqueTypes = useMemo(() => Array.from(typeCounts.keys()).sort(), [typeCounts]);
+
+  function toggleType(t: string) {
+    setActiveTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  }
+
+  const filteredIocs = useMemo(() => {
+    const q = iocQuery.toLowerCase();
+    return allIocs.filter(ioc => {
+      const typeOk = activeTypes.size === 0 || activeTypes.has(ioc.type);
+      const searchOk = !q || ioc.value.toLowerCase().includes(q) || ioc.type.toLowerCase().includes(q);
+      return typeOk && searchOk;
+    });
+  }, [allIocs, iocQuery, activeTypes]);
+
+  function copyAll() {
+    const text = filteredIocs.map(ioc => ioc.value).join("\n");
+    navigator.clipboard.writeText(text).catch(() => {/* ignore */});
+  }
 
   // ── render ────────────────────────────────────────────────────────────────
 
@@ -223,24 +281,94 @@ export function StixHuntView() {
         </div>
 
         {/* right: IOC preview */}
-        <div className="border border-line bg-surface/50 p-3 overflow-auto scroll-thin">
-          <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70 mb-2">
+        <div className="border border-line bg-surface/50 p-3 overflow-auto scroll-thin flex flex-col gap-2">
+          <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
             Indicators
           </div>
+
+          {/* search + copy-all header — only shown when brief loaded */}
+          {brief && (
+            <div className="space-y-1.5">
+              {/* search box + copy all */}
+              <div className="flex items-center gap-2">
+                <input
+                  value={iocQuery}
+                  onChange={e => setIocQuery(e.target.value)}
+                  placeholder="filter IOCs…"
+                  className="flex-1 bg-void border border-line px-2 py-0.5 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={copyAll}
+                  disabled={filteredIocs.length === 0}
+                  title="copy all filtered IOC values (real, not defanged)"
+                  className="font-mono text-xs border border-line text-dim px-2 py-0.5 hover:border-amber/50 hover:text-slate-200 disabled:opacity-40 shrink-0"
+                >
+                  copy all ({filteredIocs.length})
+                </button>
+              </div>
+
+              {/* type-filter chips */}
+              {uniqueTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTypes(new Set())}
+                    className={`font-mono text-[10px] px-1.5 py-0.5 border ${
+                      activeTypes.size === 0
+                        ? "border-amber text-amber bg-amber/10"
+                        : "border-line text-dim hover:border-amber/50"
+                    }`}
+                  >
+                    all
+                  </button>
+                  {uniqueTypes.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleType(t)}
+                      className={`font-mono text-[10px] px-1.5 py-0.5 border ${
+                        activeTypes.has(t)
+                          ? "border-amber text-amber bg-amber/10"
+                          : "border-line text-dim hover:border-amber/50"
+                      }`}
+                    >
+                      {t} {typeCounts.get(t)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* empty states */}
           {!brief && <div className="text-dim text-xs italic">upload a bundle to preview IOCs</div>}
-          {brief?.iocs.length === 0 && <div className="text-dim text-xs italic">no IOCs found</div>}
+          {brief && allIocs.length === 0 && <div className="text-dim text-xs italic">no IOCs found</div>}
+          {brief && allIocs.length > 0 && filteredIocs.length === 0 && (
+            <div className="text-dim text-xs italic">no IOCs match filter</div>
+          )}
+
+          {/* IOC list */}
           <div className="space-y-0.5">
-            {(brief?.iocs ?? []).map((ioc, i) => (
+            {filteredIocs.map((ioc, i) => (
               <div key={i} className="flex items-center gap-2 font-mono text-[11px]">
                 <span className="text-phos/80 uppercase w-14 shrink-0">{ioc.type}</span>
-                <span className="text-slate-300 truncate">{ioc.value}</span>
+                <span className="text-slate-300 truncate flex-1">{defang(ioc.value)}</span>
+                <button
+                  type="button"
+                  title="copy value"
+                  onClick={() => navigator.clipboard.writeText(ioc.value).catch(() => {/* ignore */})}
+                  className="text-dim hover:text-slate-200 shrink-0 leading-none"
+                >
+                  ⧉
+                </button>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* footer: target + run */}
+      {/* footer: target + brain tier + run */}
       <div className="mt-3 border-t border-line pt-2 flex items-center justify-between gap-3">
         <input
           value={target}
@@ -249,6 +377,15 @@ export function StixHuntView() {
           className="flex-1 bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
         />
         {run && <span className="text-[11px] font-mono text-phos shrink-0">launched: {run.run_id}</span>}
+        <select
+          value={brainTier}
+          onChange={e => setBrainTier(e.target.value as "local" | "expensive")}
+          className="bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none shrink-0"
+          title="brain tier for hunt run"
+        >
+          <option value="local">local</option>
+          <option value="expensive">expensive</option>
+        </select>
         <button
           type="button"
           onClick={runHunt}
