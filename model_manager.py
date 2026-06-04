@@ -114,6 +114,35 @@ class ModelManager:
         cls._save(cfg)
 
     @classmethod
+    def list_local_models(cls) -> list[str]:
+        """Names of models installed in the local Ollama daemon.
+
+        Hits the Ollama ``/api/tags`` endpoint (derived from OLLAMA_BASE_URL,
+        default localhost:11434). Returns a sorted, de-duped list of model
+        names. Never raises — Ollama down / unreachable / bad payload → [].
+        """
+        import json
+        import urllib.error
+        import urllib.request
+
+        from secret_store import SecretStore
+
+        base = SecretStore.get_secret("OLLAMA_BASE_URL") or "http://localhost:11434/v1/"
+        # tags live at the daemon root, not under the OpenAI-compat /v1 path
+        root = base.split("/v1", 1)[0].rstrip("/")
+        if not root.startswith(("http://", "https://")):
+            return []  # refuse non-HTTP schemes (file://, etc.)
+        url = f"{root}/api/tags"
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:  # nosec B310 - scheme guarded above; local Ollama
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError):
+            return []
+        models = payload.get("models", []) if isinstance(payload, dict) else []
+        names = [m.get("name") for m in models if isinstance(m, dict) and m.get("name")]
+        return sorted(set(names))
+
+    @classmethod
     def set_cloud_model(cls, provider: str, model_name: str) -> None:
         provider = provider.lower()
         cfg = cls._load()

@@ -56,6 +56,14 @@ def get_models(data: DashboardData = Depends(get_data)) -> dict:
     return data.models()
 
 
+@router.get("/models/local/available")
+def get_local_available() -> dict:
+    """Models installed in the local Ollama daemon. Empty if Ollama is down."""
+    from model_manager import ModelManager
+
+    return {"models": ModelManager.list_local_models()}
+
+
 @router.post("/models/local")
 def set_local(req: LocalModel) -> dict:
     require_confirm(req.confirm)
