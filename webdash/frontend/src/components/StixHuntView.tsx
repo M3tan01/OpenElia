@@ -2,6 +2,30 @@ import { useState } from "react";
 import { apiPost, RunResp, StixBrief } from "../api";
 import { Badge, Panel } from "./Panel";
 
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+function detectFormat(name: string | null, text: string): "stix" | "ioc" {
+  if (name) {
+    if (name.endsWith(".json")) return "stix";
+    if (name.endsWith(".txt") || name.endsWith(".csv")) return "ioc";
+  }
+  const trimmed = text.trimStart();
+  return trimmed.startsWith("{") || trimmed.startsWith("[") ? "stix" : "ioc";
+}
+
+function exportBrief(brief: StixBrief) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const blob = new Blob([JSON.stringify(brief, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `openelia-hunt-brief-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── component ────────────────────────────────────────────────────────────────
+
 export function StixHuntView() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [brief, setBrief] = useState<StixBrief | null>(null);
@@ -10,18 +34,68 @@ export function StixHuntView() {
   const [running, setRunning] = useState(false);
   const [run, setRun] = useState<RunResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+
+  // ── core parse funnel ──────────────────────────────────────────────────────
+
+  async function parseContent(content: string, name: string | null) {
+    setErr(null); setBrief(null); setRun(null); setParsing(true);
+    try {
+      const fmt = detectFormat(name, content);
+      const endpoint = fmt === "stix" ? "/api/stix/parse" : "/api/ioc/parse";
+      setBrief(await apiPost<StixBrief>(endpoint, { content }));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  // ── file input ─────────────────────────────────────────────────────────────
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFileName(f.name); setErr(null); setBrief(null); setRun(null); setParsing(true);
-    try {
-      const content = await f.text();
-      setBrief(await apiPost<StixBrief>("/api/stix/parse", { content }));
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally { setParsing(false); }
+    setFileName(f.name);
+    await parseContent(await f.text(), f.name);
   }
+
+  // ── drag-and-drop ──────────────────────────────────────────────────────────
+
+  function onDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(true);
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(true);
+  }
+
+  function onDragLeave() {
+    setIsDragOver(false);
+  }
+
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    setFileName(f.name);
+    await parseContent(await f.text(), f.name);
+  }
+
+  // ── paste path ─────────────────────────────────────────────────────────────
+
+  async function onParsePasted() {
+    const text = pasteText.trim();
+    if (!text) return;
+    setFileName(null);
+    await parseContent(text, null);
+  }
+
+  // ── run hunt ──────────────────────────────────────────────────────────────
 
   async function runHunt() {
     if (!brief || running) return;
@@ -41,20 +115,78 @@ export function StixHuntView() {
 
   const c = brief?.counts ?? {};
 
+  // ── render ────────────────────────────────────────────────────────────────
+
   return (
-    <Panel title="Threat Hunt (STIX)" className="h-full">
+    <Panel
+      title="Threat Hunt (STIX)"
+      className="h-full"
+      right={
+        brief ? (
+          <button
+            type="button"
+            onClick={() => exportBrief(brief)}
+            className="font-display uppercase tracking-widest bg-amber/15 border border-amber text-amber glow text-xs px-3 py-0.5 hover:bg-amber/25"
+          >
+            ↓ export
+          </button>
+        ) : undefined
+      }
+    >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
         {/* left: upload + summary */}
         <div className="space-y-3 overflow-auto scroll-thin">
           <div className="font-display text-[10px] uppercase tracking-[0.2em] text-amber/70">
             STIX Bundle
           </div>
-          <label className="block border border-dashed border-line hover:border-amber/50 px-3 py-4 text-center cursor-pointer">
-            <input type="file" accept=".json,application/json" onChange={onFile} className="hidden" />
+
+          {/* drop zone */}
+          <label
+            className={`block border border-dashed px-3 py-4 text-center cursor-pointer transition-colors ${
+              isDragOver
+                ? "border-amber bg-amber/5"
+                : "border-line hover:border-amber/50"
+            }`}
+            onDragEnter={onDragEnter}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+          >
+            <input
+              type="file"
+              accept=".json,.txt,.csv,application/json,text/plain,text/csv"
+              onChange={onFile}
+              className="hidden"
+            />
             <span className="font-mono text-xs text-dim">
-              {fileName ? fileName : "click to choose a STIX 2.x .json bundle"}
+              {fileName
+                ? fileName
+                : "click or drag a STIX 2.x bundle / IOC list (.json · .txt · .csv)"}
             </span>
           </label>
+
+          {/* paste area */}
+          <div className="space-y-1">
+            <div className="font-display text-[9px] uppercase tracking-wider text-dim">
+              or paste STIX JSON / IOC list
+            </div>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={`{"type":"bundle","objects":[…]}  or  1.2.3.4\nevil.example.com\ndeadbeef…`}
+              rows={4}
+              className="w-full bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none resize-y"
+            />
+            <button
+              type="button"
+              onClick={onParsePasted}
+              disabled={!pasteText.trim() || parsing}
+              className="font-display uppercase tracking-widest bg-amber/15 border border-amber text-amber glow text-xs px-3 py-1 disabled:opacity-40 hover:bg-amber/25"
+            >
+              {parsing ? "···" : "Parse pasted"}
+            </button>
+          </div>
+
           {parsing && <div className="text-dim text-xs italic">parsing…</div>}
           {err && <Badge ok={false}>{err}</Badge>}
 
@@ -89,7 +221,7 @@ export function StixHuntView() {
             Indicators
           </div>
           {!brief && <div className="text-dim text-xs italic">upload a bundle to preview IOCs</div>}
-          {brief?.iocs.length === 0 && <div className="text-dim text-xs italic">no IOCs in bundle</div>}
+          {brief?.iocs.length === 0 && <div className="text-dim text-xs italic">no IOCs found</div>}
           <div className="space-y-0.5">
             {(brief?.iocs ?? []).map((ioc, i) => (
               <div key={i} className="flex items-center gap-2 font-mono text-[11px]">
