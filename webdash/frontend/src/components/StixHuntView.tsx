@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { apiPost, RunResp, StixBrief } from "../api";
+import { useState, useMemo, useEffect } from "react";
+import { apiGet, apiPost, ModelsResp, RunResp, StixBrief } from "../api";
 import { Badge, Panel } from "./Panel";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -54,6 +54,24 @@ export function StixHuntView() {
 
   // brain tier
   const [brainTier, setBrainTier] = useState<"local" | "expensive">("local");
+
+  // hunting agent
+  const [huntAgent, setHuntAgent] = useState("defender_hunt");
+  const [blueAgents, setBlueAgents] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiGet<ModelsResp>("/api/models")
+      .then(resp => {
+        const list = resp.agents?.["blue"] ?? [];
+        setBlueAgents(list);
+        if (list.length > 0 && !list.includes("defender_hunt")) {
+          setHuntAgent(list[0]);
+        }
+      })
+      .catch(() => {
+        // degrade gracefully: keep default huntAgent, leave blueAgents empty
+      });
+  }, []);
 
   // ── core parse funnel ──────────────────────────────────────────────────────
 
@@ -129,6 +147,7 @@ export function StixHuntView() {
         task: brief.hunt_task,
         target: target.trim() || null,
         brain_tier: brainTier,
+        agent: huntAgent,
         confirm: true,
       });
       setRun(r);
@@ -384,6 +403,18 @@ export function StixHuntView() {
           className="flex-1 bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none"
         />
         {run && <span className="text-[11px] font-mono text-phos shrink-0">launched: {run.run_id}</span>}
+        <select
+          value={huntAgent}
+          onChange={e => setHuntAgent(e.target.value)}
+          className="bg-void border border-line px-2 py-1 text-xs font-mono text-slate-200 focus:border-amber focus:outline-none shrink-0"
+          title="hunting agent"
+          disabled={blueAgents.length === 0}
+        >
+          {blueAgents.length > 0
+            ? blueAgents.map(a => <option key={a} value={a}>{a}</option>)
+            : <option value={huntAgent}>{huntAgent}</option>
+          }
+        </select>
         <select
           value={brainTier}
           onChange={e => setBrainTier(e.target.value as "local" | "expensive")}
