@@ -45,8 +45,8 @@ same-origin. Without a build the API works but `/` has no UI.
 
 | Component | Endpoints |
 |---|---|
-| `api/monitor.py` (read, token) | `/state /audit /tasks /graph /heatmap /cost /chain/verify /roe /engagements /adversaries /actors /system` |
-| `api/control.py` (control-gated) | `/run/red\|blue\|purple`, `/forge`, `/lock`, `/unlock`, `/run/{id}/status` |
+| `api/monitor.py` (read, token) | `/state /audit /tasks /graph /heatmap /cost /chain/verify /roe /engagements /adversaries /actors /agents /system` |
+| `api/control.py` (control-gated) | `/run/red\|blue\|purple`, `/forge`, `/lock`, `/unlock`, `/run/{id}/status`, `/report/brief` |
 | `api/control.py` (token, read-only parse) | `/stix/parse`, `/ioc/parse` — parse CTI into a hunt brief (no run; 8 MB cap) |
 | `api/models.py` | GET `/models`; POST `/models/local\|cloud\|hybrid\|auth` |
 | `stream.py` | WebSocket `/api/stream` — snapshot + live audit/task tail |
@@ -74,6 +74,32 @@ Frontend (`StixHuntView.tsx`): drag-drop / click / paste, auto-format routing, p
 **copy** (copies the real value) / **copy-all (N)**, and a `local`/`expensive` **brain-tier**
 toggle. Launching a hunt posts the composed task to the control-gated `/api/run/blue`
 (defensive — stealth N/A).
+
+## Agents view
+
+The **Agents** view (`AgentsView.tsx`, sidebar id `agents-roster`) lists every agent from
+`GET /api/agents` (the enriched roster: `name, domain, description, supports_stealth`,
+built by `agent_roster()` from `AGENT_REGISTRY` + `AGENT_META`). Each agent card has an
+instruction box, target, a **mode** selector (passive / active / stealth — stealth only for
+red agents, each mode prepends a directive shown inline), and a brain-tier toggle.
+
+Run dispatches to the agent's **domain** endpoint — `red → /api/run/red`, `blue →
+/api/run/blue` — with the chosen agent sent as `agent`. The orchestrator's `force_agent`
+(a pure routing hint, no state) then enqueues just that one agent instead of the full
+domain tier set; `control.py` validates `agent` against the domain's registry (400 on
+mismatch). The reporter has no run endpoint — its card is disabled (reporting is driven
+from Findings). The Threat Hunt view reuses the same mechanism via a blue-agent dropdown.
+
+## Findings: attribution, export, brief
+
+- **Attribution** — findings record the discovering agent (`source_agent`, persisted via an
+  idempotent, race-safe column migration; `base_agent` log_finding passes `AGENT_NAME`),
+  surfaced as a label and in every export.
+- **Export** — JSON, CSV, Markdown (client-side), plus **Print / Save as PDF** (native
+  browser print of a styled table). All disabled when there are no findings.
+- **Reporter brief** — `POST /api/report/brief` (token + `confirm` + `require_unlocked`)
+  runs `ReporterAgent.brief()` (one LLM completion, no artifact saved) over current findings
+  and returns Markdown, rendered inline in the Findings view with a download-`.md` option.
 
 ## Config / env
 
