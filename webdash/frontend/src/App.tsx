@@ -10,6 +10,7 @@ import { C2ConsoleView } from "./components/C2ConsoleView";
 import { CleanupView } from "./components/CleanupView";
 import { CostMitre } from "./components/CostMitre";
 import { EngagementsView } from "./components/EngagementsView";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FindingsView } from "./components/FindingsView";
 import { HamburgerToggle } from "./components/HamburgerToggle";
 import { ModelSelector } from "./components/ModelSelector";
@@ -100,25 +101,27 @@ export default function App() {
           <Sidebar activeView={activeView} onSelect={setActiveView} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
-          {(() => {
-            switch (activeView) {
-              case "agents":        return <Solo><AgentActivity liveTasks={stream.tasks} /></Solo>;
-              case "agents-roster": return <Solo><AgentsView /></Solo>;
-              case "graph":  return <Solo><AttackGraph /></Solo>;
-              case "audit":  return <Solo><AuditTimeline liveAudit={stream.audit} /></Solo>;
-              case "cost":   return <Solo><CostMitre /></Solo>;
-              case "models": return <Solo><ModelSelector /></Solo>;
-              case "roe":          return <Solo><RoEView /></Solo>;
-              case "engagements": return <Solo><EngagementsView /></Solo>;
-              case "playbooks":    return <Solo><PlaybooksView /></Solo>;
-              case "findings":     return <Solo><FindingsView /></Solo>;
-              case "cleanup":      return <Solo><CleanupView /></Solo>;
-              case "stix":         return <Solo><StixHuntView /></Solo>;
-              case "apt":          return <Solo><APTProfilesView /></Solo>;
-              case "forge":        return <Solo><AdversaryForgeView /></Solo>;
-              default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
-            }
-          })()}
+          <ErrorBoundary resetKey={activeView}>
+            {(() => {
+              switch (activeView) {
+                case "agents":        return <Solo><AgentActivity liveTasks={stream.tasks} /></Solo>;
+                case "agents-roster": return <Solo><AgentsView /></Solo>;
+                case "graph":  return <Solo><AttackGraph /></Solo>;
+                case "audit":  return <Solo><AuditTimeline liveAudit={stream.audit} /></Solo>;
+                case "cost":   return <Solo><CostMitre /></Solo>;
+                case "models": return <Solo><ModelSelector /></Solo>;
+                case "roe":          return <Solo><RoEView /></Solo>;
+                case "engagements": return <Solo><EngagementsView /></Solo>;
+                case "playbooks":    return <Solo><PlaybooksView /></Solo>;
+                case "findings":     return <Solo><FindingsView /></Solo>;
+                case "cleanup":      return <Solo><CleanupView /></Solo>;
+                case "stix":         return <Solo><StixHuntView /></Solo>;
+                case "apt":          return <Solo><APTProfilesView /></Solo>;
+                case "forge":        return <Solo><AdversaryForgeView /></Solo>;
+                default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
+              }
+            })()}
+          </ErrorBoundary>
         </div>
       </div>
     </div>
