@@ -43,7 +43,7 @@ You will receive JSON data containing findings, alerts, and the forensic timelin
 """
 
 class ReporterAgent(BaseAgent):
-    AGENT_NAME = "reporter"
+    AGENT_NAME = "reporter_agent"
     MODEL = _DEFAULT_MODEL
 
     def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
