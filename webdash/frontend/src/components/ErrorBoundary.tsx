@@ -43,12 +43,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <div className="font-mono text-xs text-dim leading-relaxed break-all">
               {this.state.error.message || "Unknown error"}
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className="font-mono text-[11px] uppercase tracking-widest px-3 py-2 border border-amber/50 text-amber hover:bg-amber/10 transition-colors"
-            >
-              Reload
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => this.setState({ error: null })}
+                className="font-mono text-[11px] uppercase tracking-widest px-3 py-2 border border-amber/50 text-amber hover:bg-amber/10 transition-colors"
+              >
+                Try again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="font-mono text-[11px] uppercase tracking-widest px-3 py-2 border border-line text-dim hover:text-amber/80 transition-colors"
+              >
+                Reload
+              </button>
+            </div>
           </div>
         </main>
       );

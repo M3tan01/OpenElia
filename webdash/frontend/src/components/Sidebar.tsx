@@ -111,7 +111,7 @@ export function Sidebar({ activeView, onSelect }: {
         <div className="font-mono text-[11px] space-y-1">
           <div className="flex items-center gap-1.5">
             <span className="text-dim">API:</span>
-            <span className={system && !systemErr ? "text-phos glow" : systemLoading && !system ? "text-dim" : "text-dim"}>
+            <span className={system && !systemErr ? "text-phos glow" : "text-dim"}>
               {system && !systemErr ? "ONLINE" : systemLoading && !system ? "…" : "OFFLINE"}
             </span>
           </div>

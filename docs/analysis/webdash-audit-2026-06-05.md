@@ -64,3 +64,25 @@ No `visibilitychange` handling. Every interval keeps hitting the API (and the `e
 2. **Customizable dashboard** (requested) — panel catalog; bundle M2/M3 shared-poll + pause-on-hidden since composition makes them bite harder.
 3. M1 per-panel error badges, M4 gateway label, L3 error boundary.
 4. L1/L2/L5 cleanups.
+
+---
+
+## Resolution status (updated 2026-06-05)
+
+Fixed in commits `04d9d72` (terminate + customizable dashboard) and the
+`usePoll` series (`4652c5c`, `0743e46`, `afc5a69`, `d37ca34`):
+
+| Item | Status | Where |
+|---|---|---|
+| H1 graceful terminate | ✅ fixed | `end_engagement()` + `POST /api/engagements/{id}/terminate` + Sessions Terminate button |
+| H2 Sessions/Agents never refresh | ✅ fixed | EngagementsView/AgentActivity/AgentsView now poll via `usePoll` (5s/8s/30s) |
+| M1 silent error swallowing | ✅ fixed | per-panel error badges across the 8 migrated panels; `.catch(()=>{})` removed |
+| M2 polling storm / dup fetches | ◑ partial | centralized via `usePoll`; App + FindingsView still both hit `/api/state` (no shared cache layer — deferred) |
+| M3 no pause on hidden tab | ✅ fixed | `usePoll` pauses on `document.hidden`, refetches on resume |
+| M4 hardcoded GATEWAY:RUNNING | ✅ fixed | Sidebar now shows reachability-based `API: ONLINE/OFFLINE` (backend `gateway` field left vestigial) |
+| L3 no error boundary | ✅ fixed | `ErrorBoundary` wraps the App view switch (`resetKey={activeView}`) |
+| L1 index keys | ▢ open | FindingsView / AuditTimeline still `key={i}` |
+| L2 `any` escapes | ▢ open | AttackGraph node, ControlBar catch |
+| L5 stale registry duplication | ▢ open | frontend still re-encodes tier/agent membership |
+
+Customizable dashboard (panel catalog, localStorage layout) shipped in `04d9d72`.
