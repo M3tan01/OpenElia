@@ -359,3 +359,17 @@ async def test_force_agent_reporter_domain_allows_reporter(tmp_path):
 
     assert len(enqueued) == 1
     assert enqueued[0].agent_name == "reporter_agent"
+
+
+def test_agent_registry_matches_orchestrator_tier_lists():
+    """Lock the agent-name contract: the names the dashboard validates against
+    (AGENT_REGISTRY in webdash.data) must equal the names the orchestrator
+    actually enqueues (its tier lists). Otherwise a UI-selectable force_agent
+    could validate yet enqueue nothing — a silent no-op."""
+    from orchestrator import Orchestrator
+    from webdash.data import AGENT_REGISTRY
+
+    orch_red = {name for _tier, name in Orchestrator._RED_AGENTS}
+    orch_blue = {name for _tier, name in Orchestrator._BLUE_AGENTS}
+    assert set(AGENT_REGISTRY["red"]) == orch_red
+    assert set(AGENT_REGISTRY["blue"]) == orch_blue
