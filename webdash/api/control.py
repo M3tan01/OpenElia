@@ -390,6 +390,10 @@ async def report_brief(req: ReportBrief, data: DashboardData = Depends(get_data)
     """Generate a concise LLM executive brief over current engagement findings.
     Token + confirm gated. Read-only generation — no artifact saved."""
     require_confirm(req.confirm)
+    # The brief routes through the agent tool loop, which calls _check_kill_switch
+    # (raises SystemExit — a BaseException that would NOT convert to a clean HTTP
+    # response). Reject up front with a clean 423 when the engine is locked.
+    require_unlocked(str(data.db_path))
     from state_manager import StateManager
     from agents.reporter_agent import ReporterAgent
 

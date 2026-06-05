@@ -72,8 +72,7 @@ class ReporterAgent(BaseAgent):
         messages = [
             {"role": "user", "content": f"Findings context: {json.dumps(context)}"}
         ]
-        md = await self._call_with_tools(system, messages, [])
-        return md
+        return await self._call_with_tools(system, messages, [])
 
     async def run(self, task: str = "Generate full engagement report") -> str:
         print(f"[{self.AGENT_NAME}] Generating strategic report...")

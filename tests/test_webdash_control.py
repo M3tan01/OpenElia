@@ -244,3 +244,13 @@ def test_report_brief_no_token_returns_401(client, state_dir):
     """POST /api/report/brief without auth token returns 401."""
     resp = client.post("/api/report/brief", json={"confirm": True})
     assert resp.status_code == 401
+
+
+def test_report_brief_blocked_when_locked(client, state_dir, auth):
+    """A locked engine returns a clean 423 instead of letting the agent tool loop
+    raise SystemExit (which would not convert to a clean HTTP response)."""
+    from state_manager import StateManager
+
+    StateManager(db_path=str(state_dir / "engagement.db")).set_locked(True)
+    resp = client.post("/api/report/brief", headers=auth, json={"confirm": True})
+    assert resp.status_code == 423
