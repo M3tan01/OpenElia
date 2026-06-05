@@ -319,8 +319,11 @@ class BaseAgent(ABC):
             if "NONE" in entities.upper():
                 return None
             
-            # Simple simulation of mcp-threat-intel query for the architect review
-            return f"Strategic intel lookup performed for: {entities}. Correlated with known CVEs and high-confidence IoCs."
+            # DEAD STUB — this was a simulation placeholder and never performed a real lookup.
+            # Real CVE intel is now routed through MCPGateway via pentester_vuln's
+            # lookup_cve_intel tool. Return None so the autonomous enrichment block in
+            # _run_tool_loop skips injection of fake intel text.
+            return None
         except Exception:
             return None
 
