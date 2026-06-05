@@ -46,7 +46,7 @@ export function Sidebar({ activeView, onSelect }: {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (g: string) => setCollapsed((c) => ({ ...c, [g]: !c[g] }));
 
-  const { data: system, error: systemErr } = usePoll<SystemResp>(
+  const { data: system, error: systemErr, loading: systemLoading } = usePoll<SystemResp>(
     () => apiGet<SystemResp>("/api/system"),
     10_000,
   );
@@ -110,9 +110,9 @@ export function Sidebar({ activeView, onSelect }: {
         {systemErr && <div className="mb-1"><Badge ok={false}>offline</Badge></div>}
         <div className="font-mono text-[11px] space-y-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-dim">GATEWAY:</span>
-            <span className={system?.gateway === "running" ? "text-phos glow" : "text-dim"}>
-              {system ? system.gateway.toUpperCase() : "—"}
+            <span className="text-dim">API:</span>
+            <span className={system && !systemErr ? "text-phos glow" : systemLoading && !system ? "text-dim" : "text-dim"}>
+              {system && !systemErr ? "ONLINE" : systemLoading && !system ? "…" : "OFFLINE"}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
