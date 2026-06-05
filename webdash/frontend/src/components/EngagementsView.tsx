@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { apiGet, apiPost, EngagementResp } from "../api";
 import { Badge, Panel } from "./Panel";
+import { usePoll } from "../usePoll";
 
 function LockTag() {
   return (
@@ -25,22 +26,12 @@ type TerminateResp = {
 };
 
 export function EngagementsView() {
-  const [data, setData] = useState<EngagementResp[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const { data, error: err, refresh } = usePoll<EngagementResp[]>(
+    () => apiGet<EngagementResp[]>("/api/engagements"),
+    5000,
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const load = useCallback(() => {
-    apiGet<EngagementResp[]>("/api/engagements")
-      .then((d) => { setData(d); setErr(null); })
-      .catch((e: Error) => setErr(e.message));
-  }, []);
-
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
-  }, [load]);
 
   async function terminate(eng: EngagementResp) {
     if (
@@ -63,7 +54,7 @@ export function EngagementsView() {
         ok: true,
         text: `terminated ${r.engagement_id} — rollback: ${c.executed} undone, ${c.refused} refused, ${c.failed} failed, ${c.pending} pending`,
       });
-      load();
+      refresh();
     } catch (e: unknown) {
       setNotice({ ok: false, text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -72,15 +63,10 @@ export function EngagementsView() {
   }
 
   return (
-    <Panel title="Sessions" className="h-full">
+    <Panel title="Sessions" className="h-full" right={err ? <Badge ok={false}>offline</Badge> : undefined}>
       {notice && (
         <div className="mb-3">
           <Badge ok={notice.ok}>{notice.text}</Badge>
-        </div>
-      )}
-      {err && (
-        <div className="mb-3">
-          <Badge ok={false}>{err}</Badge>
         </div>
       )}
       {!data && !err && (

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiGet, CostResp } from "../api";
-import { Panel } from "./Panel";
+import { Badge, Panel } from "./Panel";
+import { usePoll } from "../usePoll";
 
 interface HeatTactic { coverage_pct: number; }
 type Heatmap = Record<string, HeatTactic> | { error: string };
@@ -14,18 +14,8 @@ function heatColor(pct: number): string {
 }
 
 export function CostMitre() {
-  const [cost, setCost] = useState<CostResp | null>(null);
-  const [heat, setHeat] = useState<Heatmap | null>(null);
-
-  useEffect(() => {
-    const load = () => {
-      apiGet<CostResp>("/api/cost").then(setCost).catch(() => {});
-      apiGet<Heatmap>("/api/heatmap").then(setHeat).catch(() => {});
-    };
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, []);
+  const { data: cost, error: costErr } = usePoll<CostResp>(() => apiGet<CostResp>("/api/cost"), 5000);
+  const { data: heat, error: heatErr } = usePoll<Heatmap>(() => apiGet<Heatmap>("/api/heatmap"), 5000);
 
   const series = (cost?.series ?? []).map((s) => ({ name: s.session.slice(-4), cost: Number(s.total_cost.toFixed(4)) }));
   const tactics = heat && !("error" in heat) ? Object.entries(heat) : [];
@@ -33,7 +23,13 @@ export function CostMitre() {
   return (
     <Panel
       title="Cost & MITRE Coverage"
-      right={cost && <span className="text-[10px] text-slate-500">${cost.summary.total_historical_cost.toFixed(2)} / rem ${cost.summary.budget_remaining.toFixed(2)}</span>}
+      right={
+        <>
+          {costErr && <Badge ok={false}>cost</Badge>}
+          {heatErr && <Badge ok={false}>heatmap</Badge>}
+          {cost && <span className="text-[10px] text-slate-500">${cost.summary.total_historical_cost.toFixed(2)} / rem ${cost.summary.budget_remaining.toFixed(2)}</span>}
+        </>
+      }
     >
       <div className="h-28 mb-3">
         <ResponsiveContainer width="100%" height="100%">

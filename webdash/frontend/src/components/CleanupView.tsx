@@ -1,20 +1,12 @@
-import { useEffect, useState } from "react";
 import { apiGet, CleanupAction } from "../api";
 import { Badge, Panel } from "./Panel";
+import { usePoll } from "../usePoll";
 
 export function CleanupView() {
-  const [actions, setActions] = useState<CleanupAction[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    const load = () =>
-      apiGet<CleanupAction[]>("/api/cleanup")
-        .then(setActions)
-        .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
-    load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
-  }, []);
+  const { data: actions, error: err } = usePoll<CleanupAction[]>(
+    () => apiGet<CleanupAction[]>("/api/cleanup"),
+    5000,
+  );
 
   const note = (
     <span className="font-mono text-[10px] px-2 py-0.5 border border-amber/40 text-amber/60 uppercase tracking-wider">

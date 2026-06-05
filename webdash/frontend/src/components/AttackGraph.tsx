@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { apiGet, GraphResp } from "../api";
-import { Panel } from "./Panel";
+import { Badge, Panel } from "./Panel";
+import { usePoll } from "../usePoll";
 
 const NODE_COLOR: Record<string, string> = {
   host: "#ffb000", // amber — assets
@@ -11,16 +12,9 @@ const NODE_COLOR: Record<string, string> = {
 };
 
 export function AttackGraph() {
-  const [graph, setGraph] = useState<GraphResp | null>(null);
+  const { data: graph, error } = usePoll<GraphResp>(() => apiGet<GraphResp>("/api/graph"), 5000);
   const wrap = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 400, h: 300 });
-
-  useEffect(() => {
-    const load = () => apiGet<GraphResp>("/api/graph").then(setGraph).catch(() => {});
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     if (!wrap.current) return;
@@ -36,7 +30,12 @@ export function AttackGraph() {
   return (
     <Panel
       title="Attack Surface"
-      right={<span className="text-[10px] text-slate-500">{graph ? `${graph.summary.hosts}h / ${graph.summary.services}s / ${graph.summary.vulnerabilities}v` : ""}</span>}
+      right={
+        <>
+          {error && <Badge ok={false}>offline</Badge>}
+          <span className="text-[10px] text-slate-500">{graph ? `${graph.summary.hosts}h / ${graph.summary.services}s / ${graph.summary.vulnerabilities}v` : ""}</span>
+        </>
+      }
     >
       <div ref={wrap} className="w-full h-full min-h-[240px]">
         {graph && graph.nodes.length > 0 ? (

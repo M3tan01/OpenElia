@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { apiGet, SystemResp } from "../api";
+import { Badge } from "./Panel";
+import { usePoll } from "../usePoll";
 
 type NavView = { id: string; label: string };
 type NavGroup = { group: string; views: NavView[] };
@@ -44,15 +46,10 @@ export function Sidebar({ activeView, onSelect }: {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (g: string) => setCollapsed((c) => ({ ...c, [g]: !c[g] }));
 
-  const [system, setSystem] = useState<SystemResp | null>(null);
-  useEffect(() => {
-    apiGet<SystemResp>("/api/system").then(setSystem).catch(() => setSystem(null));
-    const id = setInterval(
-      () => apiGet<SystemResp>("/api/system").then(setSystem).catch(() => setSystem(null)),
-      10_000,
-    );
-    return () => clearInterval(id);
-  }, []);
+  const { data: system, error: systemErr } = usePoll<SystemResp>(
+    () => apiGet<SystemResp>("/api/system"),
+    10_000,
+  );
 
   return (
     <aside className="bg-surface/80 border-r border-line h-full w-52 flex flex-col backdrop-blur-[1px]">
@@ -110,6 +107,7 @@ export function Sidebar({ activeView, onSelect }: {
         <h3 className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-dim mb-1.5">
           SYSTEM
         </h3>
+        {systemErr && <div className="mb-1"><Badge ok={false}>offline</Badge></div>}
         <div className="font-mono text-[11px] space-y-1">
           <div className="flex items-center gap-1.5">
             <span className="text-dim">GATEWAY:</span>

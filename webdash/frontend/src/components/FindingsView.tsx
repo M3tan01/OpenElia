@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { apiGet, apiPost, Finding, ReportBriefResp, StateResp } from "../api";
+import { usePoll } from "../usePoll";
 import { Badge, Panel } from "./Panel";
 
 const SEV_COLOR: Record<string, string> = {
@@ -193,22 +194,15 @@ export function printFindings(
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function FindingsView() {
-  const [findings, setFindings] = useState<Finding[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const { data, error: err } = usePoll<StateResp>(
+    () => apiGet<StateResp>("/api/state"),
+    5000,
+  );
+  const findings: Finding[] | null = data ? (data.findings ?? []) : null;
   const [printErr, setPrintErr] = useState<boolean>(false);
   const [briefMd, setBriefMd] = useState<string | null>(null);
   const [briefGenerating, setBriefGenerating] = useState<boolean>(false);
   const [briefErr, setBriefErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    const load = () =>
-      apiGet<StateResp>("/api/state")
-        .then((s) => setFindings(s.findings ?? []))
-        .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
-    load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
-  }, []);
 
   const count = findings?.length ?? 0;
   const disabled = count === 0;

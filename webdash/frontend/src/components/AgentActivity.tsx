@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
 import { apiGet, TaskResult } from "../api";
 import { agentDisplayName } from "../agentNames";
-import { Panel } from "./Panel";
+import { Badge, Panel } from "./Panel";
+import { usePoll } from "../usePoll";
 
 const TIERS: Record<string, string[]> = {
   RECON: ["pentester_recon", "defender_mon"],
@@ -21,19 +21,18 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export function AgentActivity({ liveTasks }: { liveTasks: TaskResult[] }) {
-  const [tasks, setTasks] = useState<TaskResult[]>([]);
+  const { data: polledTasks, error } = usePoll<TaskResult[]>(
+    () => apiGet<TaskResult[]>("/api/tasks?limit=200"),
+    8000,
+  );
 
-  useEffect(() => {
-    apiGet<TaskResult[]>("/api/tasks?limit=200").then(setTasks).catch(() => {});
-  }, []);
-
-  // Merge initial fetch with live stream, dedup by task_id (live wins).
+  // Merge polled tasks with live stream, dedup by task_id (live wins).
   const merged = new Map<string, TaskResult>();
-  [...tasks, ...liveTasks].forEach((t) => merged.set(t.task_id, t));
+  [...(polledTasks ?? []), ...liveTasks].forEach((t) => merged.set(t.task_id, t));
   const all = [...merged.values()];
 
   return (
-    <Panel title="Agent Activity">
+    <Panel title="Agent Activity" right={error ? <Badge ok={false}>offline</Badge> : undefined}>
       {Object.keys(TIERS).map((tier) => {
         const rows = all
           .filter((t) => tierOf(t.agent_name) === tier)

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AgentInfo, AgentsResp, ReportBriefResp, RunResp, apiGet, apiPost } from "../api";
+import { usePoll } from "../usePoll";
 import { agentDisplayName } from "../agentNames";
 import { Badge, Panel } from "./Panel";
 
@@ -248,22 +249,15 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
 // ── main view ────────────────────────────────────────────────────────────────
 
 export function AgentsView() {
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const { data: agentsData, error: err, loading } = usePoll<AgentsResp>(
+    () => apiGet<AgentsResp>("/api/agents"),
+    30000,
+  );
+  const agents: AgentInfo[] = agentsData?.agents ?? [];
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const toggle = (domain: string) =>
     setCollapsed((c) => ({ ...c, [domain]: !c[domain] }));
-
-  useEffect(() => {
-    apiGet<AgentsResp>("/api/agents")
-      .then((r) => setAgents(r.agents))
-      .catch((e: unknown) =>
-        setErr(e instanceof Error ? e.message : String(e))
-      )
-      .finally(() => setLoading(false));
-  }, []);
 
   // group agents by domain in order: red → blue → reporter → others
   const grouped = DOMAIN_ORDER.reduce<Record<string, AgentInfo[]>>(
