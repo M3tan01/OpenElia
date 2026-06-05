@@ -42,6 +42,7 @@ class BaseAgent(ABC):
 
     def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
         self.state = state_manager
+        self.brain_tier = brain_tier  # persisted for agents that spawn PentesterOS (sterile exec)
         self.loader = JITLoader()
         self.artifact_manager = ArtifactManager()
         self.cost_tracker = CostTracker()
