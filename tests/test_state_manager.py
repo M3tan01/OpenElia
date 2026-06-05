@@ -61,7 +61,7 @@ class TestEngagementLifecycle:
 
 class TestPhaseValidation:
     def test_phase_order_constant(self):
-        assert PHASE_ORDER == ["recon", "vuln", "exploit", "lateral", "exfil"]
+        assert PHASE_ORDER == ["recon", "vuln", "exploit", "persist", "lateral", "exfil"]
 
     def test_write_agent_result_valid_phase(self, sm):
         sm.write_agent_result("recon", "nmap_output", {"hosts": ["10.0.0.5"]})

@@ -375,12 +375,12 @@ def test_roe_backfills_blacklisted_techniques_when_absent(tmp_path, monkeypatch,
 # --- /api/agents tests ------------------------------------------------------- #
 
 def test_agents_roster_lists_all(client, auth):
-    """GET /api/agents with auth → 200; 10 entries; spot-checks on domain, stealth."""
+    """GET /api/agents with auth → 200; 11 entries; spot-checks on domain, stealth."""
     resp = client.get("/api/agents", headers=auth)
     assert resp.status_code == 200
     body = resp.json()
     agents = body["agents"]
-    assert len(agents) == 10
+    assert len(agents) == 11
 
     # defender_hunt: blue, no stealth
     hunt = next(a for a in agents if a["name"] == "defender_hunt")

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-PHASE_ORDER = ["recon", "vuln", "exploit", "lateral", "exfil"]
+PHASE_ORDER = ["recon", "vuln", "exploit", "persist", "lateral", "exfil"]
 
 _JSON_MAX_BYTES = 5_000_000  # 5 MB hard cap per stored JSON blob
 

@@ -45,6 +45,7 @@ class Orchestrator:
         (AgentTier.RECON,     "pentester_recon"),
         (AgentTier.ANALYSIS,  "pentester_vuln"),
         (AgentTier.EXECUTION, "pentester_exploit"),
+        (AgentTier.EXECUTION, "pentester_persist"),
         (AgentTier.EXECUTION, "pentester_lat"),
         (AgentTier.EXECUTION, "pentester_ex"),
     ]
@@ -309,6 +310,17 @@ class Orchestrator:
             from agents.blue.defender_res import DefenderRes
             agent = DefenderRes(self.state, brain_tier=task.brain_tier)
             result = await agent.run(raw_task)
+            return {"output": result}
+
+        if name == "pentester_persist":
+            from agents.red.pentester_persist import PentesterPersist
+            agent = PentesterPersist(self.state, brain_tier=task.brain_tier)
+            result = await agent.run(
+                f"Target: {target}. {raw_task}",
+                stealth=task.stealth,
+                proxy_port=task.proxy_port,
+                apt_profile=task.apt_profile,
+            )
             return {"output": result}
 
         if name == "pentester_lat":

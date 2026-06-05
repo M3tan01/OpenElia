@@ -34,7 +34,7 @@ def _parse_ts(s: object) -> datetime | None:
 # Mirrors orchestrator._RED_AGENTS / _BLUE_AGENTS (+ reporter). Used by the
 # ModelSelector to offer per-agent overrides. Keep in sync with orchestrator.py.
 AGENT_REGISTRY: dict[str, list[str]] = {
-    "red": ["pentester_recon", "pentester_vuln", "pentester_exploit", "pentester_lat", "pentester_ex"],
+    "red": ["pentester_recon", "pentester_vuln", "pentester_exploit", "pentester_persist", "pentester_lat", "pentester_ex"],
     "blue": ["defender_mon", "defender_ana", "defender_hunt", "defender_res"],
     "reporter": ["reporter_agent"],
 }
@@ -44,6 +44,7 @@ AGENT_META: dict[str, str] = {
     "pentester_recon": "Reconnaissance — host/port/service discovery",
     "pentester_vuln": "Vulnerability analysis",
     "pentester_exploit": "Exploitation",
+    "pentester_persist": "Persistence — durable, reversible foothold",
     "pentester_lat": "Lateral movement",
     "pentester_ex": "Exfiltration / actions on objectives",
     "defender_mon": "Monitoring — telemetry & log collection",
