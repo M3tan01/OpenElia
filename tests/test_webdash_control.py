@@ -254,3 +254,70 @@ def test_report_brief_blocked_when_locked(client, state_dir, auth):
     StateManager(db_path=str(state_dir / "engagement.db")).set_locked(True)
     resp = client.post("/api/report/brief", headers=auth, json={"confirm": True})
     assert resp.status_code == 423
+
+
+# ---------------------------------------------------------------------------
+# Engagement termination — graceful end + scoped rollback
+# ---------------------------------------------------------------------------
+
+def test_terminate_requires_confirm(client, state_dir, auth):
+    """POST terminate without confirm raises 400."""
+    eid = client.get("/api/engagements", headers=auth).json()[0]["id"]
+    resp = client.post(f"/api/engagements/{eid}/terminate", headers=auth, json={})
+    assert resp.status_code == 400
+
+
+def test_terminate_no_token_returns_401(client, state_dir):
+    """POST terminate without auth token returns 401."""
+    resp = client.post("/api/engagements/ENG-X/terminate", json={"confirm": True})
+    assert resp.status_code == 401
+
+
+def test_terminate_unknown_id_returns_404(client, state_dir, auth):
+    resp = client.post("/api/engagements/ENG-NOPE/terminate", headers=auth, json={"confirm": True})
+    assert resp.status_code == 404
+
+
+def test_terminate_marks_inactive_and_preserves_history(client, state_dir, auth):
+    eng = client.get("/api/engagements", headers=auth).json()[0]
+    assert eng["is_active"] is True
+    eid = eng["id"]
+
+    resp = client.post(f"/api/engagements/{eid}/terminate", headers=auth, json={"confirm": True})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["terminated"] is True and body["engagement_id"] == eid
+    assert set(body["cleanup"]) == {"executed", "refused", "failed", "pending"}
+
+    # History preserved (row still present) but no longer active.
+    after = {e["id"]: e for e in client.get("/api/engagements", headers=auth).json()}
+    assert eid in after
+    assert after[eid]["is_active"] is False
+
+
+def test_terminate_processes_rollback_queue(client, state_dir, auth):
+    """Terminate invokes the rollback queue scoped to THIS engagement.
+
+    The endpoint builds a fresh StateManager, so the in-memory undo callable
+    (registered during the run) is absent — the persisted row is left 'pending'
+    for manual operator recovery and never auto-shelled (zero-trust). Same
+    contract as the kill-switch. Asserting pending==1 proves run_all ran against
+    the right engagement id.
+    """
+    from state_manager import StateManager
+
+    sm = StateManager(db_path=str(state_dir / "engagement.db"))
+    eid = sm.read()["engagement"]["id"]
+    sm.cleanup_registry.register(
+        engagement_id=eid,
+        description="test cron",
+        undo_command="crontab -r",
+        target="10.0.0.5",
+        source="pentester_persist",
+        undo=lambda: None,
+    )
+
+    resp = client.post(f"/api/engagements/{eid}/terminate", headers=auth, json={"confirm": True})
+    assert resp.status_code == 200
+    c = resp.json()["cleanup"]
+    assert c["pending"] == 1 and c["executed"] == 0

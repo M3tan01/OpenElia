@@ -348,6 +348,31 @@ class StateManager:
         if eid == self.active_engagement_id:
             self.active_engagement_id = self._get_last_active_id()
 
+    def end_engagement(self, engagement_id: str = None) -> dict:
+        """Gracefully end an engagement without destroying its data.
+
+        Marks the engagement inactive and transitions any still-open phases
+        (running/pending) to 'stopped' so the UI reflects that work was halted,
+        not completed. Completed/dormant phases are left untouched. History is
+        preserved (use clear() for hard delete). Rollback of offensive actions is
+        the CALLER's responsibility — fire cleanup_registry.run_all() before this
+        if undo of persistence/payloads is wanted. Returns the final read().
+        """
+        eid = engagement_id or self.active_engagement_id
+        if not eid:
+            return {}
+        with self._get_conn() as conn:
+            conn.execute("UPDATE engagement SET is_active = 0 WHERE id = ?", (eid,))
+            conn.execute(
+                "UPDATE phases SET status = 'stopped' "
+                "WHERE engagement_id = ? AND status IN ('running', 'pending')",
+                (eid,),
+            )
+            conn.commit()
+        if eid == self.active_engagement_id:
+            self.active_engagement_id = self._get_last_active_id()
+        return self.read(eid)
+
     # ------------------------------------------------------------------ #
     # Phase management
     # ------------------------------------------------------------------ #

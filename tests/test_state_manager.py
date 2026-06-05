@@ -361,3 +361,53 @@ class TestSourceAgentInFindings:
         assert row["severity"] == "medium"
         assert row["title"] == "Pre-existing Finding"
         assert row["source_agent"] is None
+
+
+# ---------------------------------------------------------------------------
+# Graceful termination — end_engagement
+# ---------------------------------------------------------------------------
+
+class TestEndEngagement:
+    def test_marks_inactive(self, sm):
+        eid = sm.active_engagement_id
+        sm.end_engagement(eid)
+        with sm._get_conn() as c:
+            row = c.execute("SELECT is_active FROM engagement WHERE id = ?", (eid,)).fetchone()
+        assert row["is_active"] == 0
+
+    def test_preserves_row_not_deleted(self, sm):
+        eid = sm.active_engagement_id
+        sm.end_engagement(eid)
+        with sm._get_conn() as c:
+            row = c.execute("SELECT id FROM engagement WHERE id = ?", (eid,)).fetchone()
+        assert row is not None  # history kept (clear() would delete)
+
+    def test_open_phases_become_stopped(self, sm):
+        eid = sm.active_engagement_id
+        # recon/vuln/exploit start 'pending'; mark one running to cover both paths.
+        sm.update_phase_status("recon", "running")
+        sm.end_engagement(eid)
+        # active pointer is cleared by end_engagement → query by explicit eid.
+        assert sm.get_phase_status("recon", eid) == "stopped"   # was running
+        assert sm.get_phase_status("vuln", eid) == "stopped"    # was pending
+
+    def test_completed_phase_untouched(self, sm):
+        eid = sm.active_engagement_id
+        sm.update_phase_status("recon", "complete")
+        sm.end_engagement(eid)
+        assert sm.get_phase_status("recon", eid) == "complete"
+
+    def test_dormant_phase_untouched(self, sm):
+        eid = sm.active_engagement_id
+        # lateral starts dormant — graceful end must not flip it to stopped.
+        sm.end_engagement(eid)
+        assert sm.get_phase_status("lateral", eid) == "dormant"
+
+    def test_clears_active_pointer_when_ending_active(self, sm):
+        sm.end_engagement(sm.active_engagement_id)
+        # No other active engagement → pointer falls back to None.
+        assert sm.active_engagement_id is None
+
+    def test_no_active_engagement_returns_empty(self, tmp_path):
+        manager = StateManager(db_path=str(tmp_path / "empty.db"))
+        assert manager.end_engagement() == {}

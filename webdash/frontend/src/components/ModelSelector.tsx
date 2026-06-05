@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, ModelsResp } from "../api";
+import { agentDisplayName } from "../agentNames";
 import { Panel } from "./Panel";
 
 const PROVIDERS = ["openai", "anthropic", "google"];
@@ -91,7 +92,7 @@ export function ModelSelector() {
         <div className="flex gap-2 items-center">
           <select className={input} value={hybridAgent} onChange={(e) => setHybridAgent(e.target.value)}>
             <option value="">per-agent…</option>
-            {agents.map((a) => <option key={a}>{a}</option>)}
+            {agents.map((a) => <option key={a} value={a}>{agentDisplayName(a)}</option>)}
           </select>
           <select className={input} value={cloudProvider} onChange={(e) => setCloudProvider(e.target.value)}>
             {PROVIDERS.map((p) => <option key={p}>{p}</option>)}
@@ -109,7 +110,7 @@ export function ModelSelector() {
 
         {Object.keys(cfg.agent_overrides ?? {}).length > 0 && (
           <div className="text-[11px] text-slate-500">
-            overrides: {Object.entries(cfg.agent_overrides).map(([a, v]) => `${a}→${v}`).join(", ")}
+            overrides: {Object.entries(cfg.agent_overrides).map(([a, v]) => `${agentDisplayName(a)}→${v}`).join(", ")}
           </div>
         )}
         {msg && <div className={msg.ok ? "text-emerald-400" : "text-rose-400"}>{msg.text}</div>}

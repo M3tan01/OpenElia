@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AgentInfo, AgentsResp, RunResp, apiGet, apiPost } from "../api";
+import { AgentInfo, AgentsResp, ReportBriefResp, RunResp, apiGet, apiPost } from "../api";
+import { agentDisplayName } from "../agentNames";
 import { Badge, Panel } from "./Panel";
 
 // ── mode directives ──────────────────────────────────────────────────────────
@@ -21,10 +22,10 @@ const DOMAIN_ORDER = ["red", "blue", "reporter"];
 
 function domainLabel(domain: string): string {
   switch (domain) {
-    case "red":      return "▸ RED TEAM";
-    case "blue":     return "▸ BLUE TEAM";
-    case "reporter": return "▸ REPORTER";
-    default:         return `▸ ${domain.toUpperCase()}`;
+    case "red":      return "RED TEAM";
+    case "blue":     return "BLUE TEAM";
+    case "reporter": return "REPORTER";
+    default:         return domain.toUpperCase();
   }
 }
 
@@ -46,6 +47,7 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
   const [brainTier, setBrainTier] = useState<"local" | "expensive">("local");
   const [running, setRunning] = useState(false);
   const [run, setRun] = useState<RunResp | null>(null);
+  const [brief, setBrief] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const isReporter = agent.domain === "reporter";
@@ -66,7 +68,6 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
       : MODE_DIRECTIVES[effectiveMode];
 
   const runDisabled =
-    isReporter ||
     running ||
     (isRed && !target.trim());
 
@@ -75,7 +76,17 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
     setRunning(true);
     setErr(null);
     setRun(null);
+    setBrief(null);
     try {
+      if (isReporter) {
+        // Reporter has no /run endpoint — it summarizes current findings.
+        const r = await apiPost<ReportBriefResp>("/api/report/brief", {
+          brain_tier: brainTier,
+          confirm: true,
+        });
+        setBrief(r.markdown);
+        return;
+      }
       let r: RunResp;
       if (isRed) {
         r = await apiPost<RunResp>("/api/run/red", {
@@ -113,55 +124,60 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
       {/* agent name + description */}
       <div>
         <div className="font-mono text-[12px] text-amber glow font-semibold">
-          {agent.name}
+          {agentDisplayName(agent.name)}
         </div>
         <div className="font-mono text-[11px] text-dim mt-0.5 leading-relaxed">
           {agent.description}
         </div>
       </div>
 
-      {/* instruction */}
-      <textarea
-        value={instruction}
-        onChange={(e) => setInstruction(e.target.value)}
-        aria-label={`instruction for ${agent.name}`}
-        placeholder="what should this agent do?"
-        rows={3}
-        className={`${input} resize-y w-full`}
-      />
+      {/* reporter summarizes current findings — instruction/target/mode N/A */}
+      {!isReporter && (
+        <>
+          {/* instruction */}
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            aria-label={`instruction for ${agent.name}`}
+            placeholder="what should this agent do?"
+            rows={3}
+            className={`${input} resize-y w-full`}
+          />
 
-      {/* target */}
-      <input
-        type="text"
-        value={target}
-        onChange={(e) => setTarget(e.target.value)}
-        placeholder={isRed ? "target host / CIDR (required)" : "target host / CIDR (optional)"}
-        aria-label={`target for ${agent.name}`}
-        className={`${input} w-full`}
-      />
+          {/* target */}
+          <input
+            type="text"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            placeholder={isRed ? "target host / CIDR (required)" : "target host / CIDR (optional)"}
+            aria-label={`target for ${agent.name}`}
+            className={`${input} w-full`}
+          />
 
-      {/* mode control */}
-      <div className="space-y-1">
-        <div className="flex gap-2 items-center flex-wrap">
-          {availableModes.map((m) => (
-            <label key={m} className="flex items-center gap-1 cursor-pointer select-none">
-              <input
-                type="radio"
-                name={`mode-${agent.name}`}
-                value={m}
-                checked={effectiveMode === m}
-                onChange={() => setMode(m)}
-                className="accent-amber"
-              />
-              <span className="font-mono text-[11px] text-slate-300 capitalize">{m}</span>
-            </label>
-          ))}
-        </div>
-        {/* inline mode example */}
-        <div className="font-mono text-[10px] text-dim/80 italic border-l-2 border-amber/30 pl-2 leading-relaxed">
-          {MODE_DIRECTIVES[effectiveMode]}
-        </div>
-      </div>
+          {/* mode control */}
+          <div className="space-y-1">
+            <div className="flex gap-2 items-center flex-wrap">
+              {availableModes.map((m) => (
+                <label key={m} className="flex items-center gap-1 cursor-pointer select-none">
+                  <input
+                    type="radio"
+                    name={`mode-${agent.name}`}
+                    value={m}
+                    checked={effectiveMode === m}
+                    onChange={() => setMode(m)}
+                    className="accent-amber"
+                  />
+                  <span className="font-mono text-[11px] text-slate-300 capitalize">{m}</span>
+                </label>
+              ))}
+            </div>
+            {/* inline mode example */}
+            <div className="font-mono text-[10px] text-dim/80 italic border-l-2 border-amber/30 pl-2 leading-relaxed">
+              {MODE_DIRECTIVES[effectiveMode]}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* brain tier + run */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -181,19 +197,19 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
           disabled={runDisabled}
           title={
             isReporter
-              ? "run reporting from Findings → Generate brief"
+              ? "summarize current findings into a brief"
               : isRed && !target.trim()
               ? "target required for red agents"
               : undefined
           }
           className={btn}
         >
-          {running ? "···" : "▶ Run"}
+          {running ? "···" : isReporter ? "▶ Generate brief" : "▶ Run"}
         </button>
 
-        {isReporter && (
+        {isReporter && !brief && (
           <span className="font-mono text-[10px] text-dim italic">
-            run reporting from Findings → Generate brief
+            summarizes all current findings
           </span>
         )}
 
@@ -205,6 +221,26 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
 
         {err && <Badge ok={false}>{err}</Badge>}
       </div>
+
+      {brief && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] text-dim uppercase tracking-widest">
+              brief
+            </span>
+            <button
+              type="button"
+              onClick={() => setBrief(null)}
+              className="font-mono text-[10px] text-dim hover:text-amber"
+            >
+              dismiss
+            </button>
+          </div>
+          <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-200 bg-void border border-line p-2 max-h-72 overflow-auto leading-relaxed">
+            {brief}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
@@ -215,6 +251,10 @@ export function AgentsView() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const toggle = (domain: string) =>
+    setCollapsed((c) => ({ ...c, [domain]: !c[domain] }));
 
   useEffect(() => {
     apiGet<AgentsResp>("/api/agents")
@@ -255,19 +295,38 @@ export function AgentsView() {
         {domainKeys.map((domain) => {
           const list = grouped[domain] ?? [];
           if (list.length === 0) return null;
+          const isCollapsed = collapsed[domain] ?? false;
           return (
             <section key={domain}>
-              {/* domain header */}
-              <div
-                className={`font-display text-[10px] font-semibold uppercase tracking-[0.25em] mb-2 pb-1 border-b border-line ${domainColor(domain)}`}
+              {/* domain header — click to collapse/expand */}
+              <button
+                type="button"
+                onClick={() => toggle(domain)}
+                aria-expanded={!isCollapsed}
+                aria-controls={`agents-${domain}`}
+                className={`w-full flex items-center gap-1.5 font-display text-[10px] font-semibold uppercase tracking-[0.25em] mb-2 pb-1 border-b border-line cursor-pointer select-none hover:opacity-80 ${domainColor(domain)}`}
               >
+                <span
+                  className={`inline-block transition-transform duration-150 ${isCollapsed ? "" : "rotate-90"}`}
+                  aria-hidden="true"
+                >
+                  ▸
+                </span>
                 {domainLabel(domain)}
-              </div>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                {list.map((a) => (
-                  <AgentCard key={a.name} agent={a} />
-                ))}
-              </div>
+                <span className="ml-auto opacity-60 normal-case tracking-normal">
+                  {list.length}
+                </span>
+              </button>
+              {!isCollapsed && (
+                <div
+                  id={`agents-${domain}`}
+                  className="grid grid-cols-1 xl:grid-cols-2 gap-3"
+                >
+                  {list.map((a) => (
+                    <AgentCard key={a.name} agent={a} />
+                  ))}
+                </div>
+              )}
             </section>
           );
         })}

@@ -1,12 +1,6 @@
-import { useEffect, useState } from "react";
-import { apiGet, EngagementResp } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { apiGet, apiPost, EngagementResp } from "../api";
 import { Badge, Panel } from "./Panel";
-
-const readOnlyBadge = (
-  <span className="font-mono text-[10px] px-2 py-0.5 border border-amber/40 text-amber/60 uppercase tracking-wider">
-    read-only
-  </span>
-);
 
 function LockTag() {
   return (
@@ -24,18 +18,66 @@ function PhaseTag({ phase }: { phase: string }) {
   );
 }
 
+type TerminateResp = {
+  terminated: boolean;
+  engagement_id: string;
+  cleanup: { executed: number; refused: number; failed: number; pending: number };
+};
+
 export function EngagementsView() {
   const [data, setData] = useState<EngagementResp[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     apiGet<EngagementResp[]>("/api/engagements")
-      .then(setData)
+      .then((d) => { setData(d); setErr(null); })
       .catch((e: Error) => setErr(e.message));
   }, []);
 
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  async function terminate(eng: EngagementResp) {
+    if (
+      !window.confirm(
+        `Terminate session ${eng.id} (target ${eng.target})?\n\n` +
+          "This ends the engagement and fires its rollback queue (undo of any " +
+          "persistence/payloads, LIFO). History is preserved — data is NOT deleted."
+      )
+    )
+      return;
+    setBusyId(eng.id);
+    setNotice(null);
+    try {
+      const r = await apiPost<TerminateResp>(
+        `/api/engagements/${encodeURIComponent(eng.id)}/terminate`,
+        { confirm: true }
+      );
+      const c = r.cleanup;
+      setNotice({
+        ok: true,
+        text: `terminated ${r.engagement_id} — rollback: ${c.executed} undone, ${c.refused} refused, ${c.failed} failed, ${c.pending} pending`,
+      });
+      load();
+    } catch (e: unknown) {
+      setNotice({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
-    <Panel title="Sessions" right={readOnlyBadge} className="h-full">
+    <Panel title="Sessions" className="h-full">
+      {notice && (
+        <div className="mb-3">
+          <Badge ok={notice.ok}>{notice.text}</Badge>
+        </div>
+      )}
       {err && (
         <div className="mb-3">
           <Badge ok={false}>{err}</Badge>
@@ -69,6 +111,17 @@ export function EngagementsView() {
                 </span>
                 {eng.is_active && <Badge ok={true}>ACTIVE</Badge>}
                 {eng.is_locked && <LockTag />}
+                {eng.is_active && (
+                  <button
+                    type="button"
+                    onClick={() => terminate(eng)}
+                    disabled={busyId === eng.id}
+                    title="Gracefully end this session and roll back its offensive actions"
+                    className="ml-auto font-display uppercase tracking-widest text-[10px] px-2 py-0.5 border border-redteam/70 text-redteam hover:bg-redteam/10 disabled:opacity-40"
+                  >
+                    {busyId === eng.id ? "···" : "⏹ Terminate"}
+                  </button>
+                )}
               </div>
 
               {/* detail row */}

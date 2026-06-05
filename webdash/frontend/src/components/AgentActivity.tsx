@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { apiGet, TaskResult } from "../api";
+import { agentDisplayName } from "../agentNames";
 import { Panel } from "./Panel";
 
 const TIERS: Record<string, string[]> = {
   RECON: ["pentester_recon", "defender_mon"],
   ANALYSIS: ["pentester_vuln", "defender_ana", "defender_hunt"],
-  EXECUTION: ["pentester_exploit", "pentester_lat", "pentester_ex", "defender_res", "reporter_agent"],
+  EXECUTION: ["pentester_exploit", "pentester_persist", "pentester_lat", "pentester_ex", "defender_res", "reporter_agent"],
 };
 
 function tierOf(agent: string): string {
@@ -43,7 +44,7 @@ export function AgentActivity({ liveTasks }: { liveTasks: TaskResult[] }) {
             {rows.length === 0 && <div className="text-xs text-slate-600 italic">idle</div>}
             {rows.map((t) => (
               <div key={t.task_id} className="flex justify-between items-center text-xs py-0.5">
-                <span className="text-slate-300">{t.agent_name}</span>
+                <span className="text-slate-300">{agentDisplayName(t.agent_name)}</span>
                 <span className="flex items-center gap-2">
                   {typeof t.priority === "number" && t.priority > 0 && (
                     <span className="font-mono text-[10px] text-amber/60" title="scheduling priority">

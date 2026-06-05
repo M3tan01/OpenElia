@@ -477,3 +477,39 @@ def unlock(req: Confirm, data: DashboardData = Depends(get_data)) -> dict:
         "webdash", "SYSTEM", "", "UNLOCKED", "kill-switch released via dashboard"
     )
     return {"locked": False}
+
+
+@router.post("/engagements/{engagement_id}/terminate")
+def terminate_engagement(
+    engagement_id: str, req: Confirm, data: DashboardData = Depends(get_data)
+) -> dict:
+    """Gracefully end an engagement: fire its rollback queue (LIFO, firewall-gated),
+    mark it inactive, stop open phases, and audit the action. Does NOT delete data.
+    Confirm-gated (HITL). 404 if the engagement id is unknown."""
+    require_confirm(req.confirm)
+    from security_manager import AuditLogger
+    from state_manager import StateManager
+
+    if engagement_id not in {e["id"] for e in data.engagements()}:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="unknown engagement id")
+
+    sm = StateManager(db_path=str(data.db_path))
+    sm.read()
+
+    # Roll back registered offensive actions for THIS engagement before ending it.
+    # Mirrors the kill-switch contract but scoped to one session. Cleanup failure
+    # must never block the terminate itself.
+    cleanup = {"executed": 0, "refused": 0, "failed": 0, "pending": 0}
+    try:
+        for s in sm.cleanup_registry.run_all(engagement_id):
+            if s["status"] in cleanup:
+                cleanup[s["status"]] += 1
+    except Exception:  # nosec B110 — cleanup failure must not block terminate
+        pass
+
+    sm.end_engagement(engagement_id)
+    AuditLogger(log_path=str(data.audit_log)).log_event(
+        "webdash", "SYSTEM", engagement_id, "TERMINATED",
+        "engagement ended via dashboard",
+    )
+    return {"terminated": True, "engagement_id": engagement_id, "cleanup": cleanup}
