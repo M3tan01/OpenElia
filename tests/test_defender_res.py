@@ -8,6 +8,7 @@ import asyncio
 import os
 import sys
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -175,3 +176,190 @@ class TestAllowlistConstant:
             assert prefix.endswith(" "), (
                 f"Prefix '{prefix}' must end with a space to prevent partial matching"
             )
+
+
+# ---------------------------------------------------------------------------
+# dispatch_thehive_case — live HTTP dispatch
+# ---------------------------------------------------------------------------
+
+class TestDispatchThehiveCase:
+    """Tests for the live TheHive HTTP dispatch in dispatch_thehive_case."""
+
+    CASE_DATA = {
+        "title": "Test case",
+        "description": "Test description",
+        "severity": 2,
+        "tags": ["test"],
+    }
+
+    @pytest.mark.asyncio
+    async def test_missing_config_returns_local_only_message(self, res):
+        """If THEHIVE_URL or THEHIVE_API_KEY is absent, no HTTP call is made."""
+        with patch("secret_store.SecretStore.get_secret", return_value=None):
+            result = await res.dispatch_thehive_case(self.CASE_DATA)
+        assert "local SQLite" in result
+        assert "THEHIVE_URL" in result or "THEHIVE_API_KEY" in result
+
+    @pytest.mark.asyncio
+    async def test_missing_api_key_only_returns_local_only_message(self, res):
+        """If only THEHIVE_API_KEY is absent, local-only message is returned."""
+        def _side_effect(key):
+            return "https://thehive.local" if key == "THEHIVE_URL" else None
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_side_effect):
+            result = await res.dispatch_thehive_case(self.CASE_DATA)
+        assert "local SQLite" in result
+
+    @pytest.mark.asyncio
+    async def test_successful_post_returns_case_id(self, res):
+        """With credentials set and a mocked 200 response, returns the case _id."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"_id": "~123"}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        def _secret(key):
+            return "https://thehive.local" if key == "THEHIVE_URL" else "test-key"
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_secret), \
+             patch("httpx.AsyncClient", return_value=mock_ctx):
+            result = await res.dispatch_thehive_case(self.CASE_DATA)
+
+        assert "~123" in result
+        assert "created" in result.lower()
+
+        # Verify the POST was made to the correct endpoint with Bearer auth
+        mock_client.post.assert_awaited_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0] == "https://thehive.local/api/v1/case"
+        assert call_args[1]["headers"]["Authorization"] == "Bearer test-key"
+
+    @pytest.mark.asyncio
+    async def test_trailing_slash_in_url_is_normalized(self, res):
+        """A trailing slash on THEHIVE_URL must not produce //api/v1/case."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"_id": "~456"}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        def _secret(key):
+            return "https://thehive.local/" if key == "THEHIVE_URL" else "test-key"
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_secret), \
+             patch("httpx.AsyncClient", return_value=mock_ctx):
+            await res.dispatch_thehive_case(self.CASE_DATA)
+
+        call_url = mock_client.post.call_args[0][0]
+        assert "//" not in call_url.split("://", 1)[1], (
+            f"Double slash detected in URL: {call_url}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_http_error_returns_non_fatal_message(self, res):
+        """An httpx.HTTPError must be caught and returned as a non-fatal string."""
+        import httpx
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.HTTPError("connection refused"))
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        def _secret(key):
+            return "https://thehive.local" if key == "THEHIVE_URL" else "test-key"
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_secret), \
+             patch("httpx.AsyncClient", return_value=mock_ctx):
+            result = await res.dispatch_thehive_case(self.CASE_DATA)
+
+        assert "failed" in result.lower()
+        assert "local SQLite" in result
+
+    @pytest.mark.asyncio
+    async def test_non_dict_json_body_stays_non_fatal(self, res):
+        """A 200 with a non-dict JSON body must not crash — returns 'unknown'."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = [{"_id": "~123"}]  # list, not dict
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        def _secret(key):
+            return "https://thehive.local" if key == "THEHIVE_URL" else "test-key"
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_secret), \
+             patch("httpx.AsyncClient", return_value=mock_ctx):
+            result = await res.dispatch_thehive_case(self.CASE_DATA)
+
+        assert "created" in result.lower()
+        assert "unknown" in result
+
+    @pytest.mark.asyncio
+    async def test_raise_for_status_error_is_non_fatal(self, res):
+        """A 4xx/5xx (raise_for_status raises HTTPStatusError) stays non-fatal."""
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                "401 Unauthorized", request=MagicMock(), response=MagicMock()
+            )
+        )
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        def _secret(key):
+            return "https://thehive.local" if key == "THEHIVE_URL" else "test-key"
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_secret), \
+             patch("httpx.AsyncClient", return_value=mock_ctx):
+            result = await res.dispatch_thehive_case(self.CASE_DATA)
+
+        assert "failed" in result.lower()
+        assert "local SQLite" in result
+
+    @pytest.mark.asyncio
+    async def test_missing_title_in_case_data_does_not_crash(self, res):
+        """case_data without a 'title' key must not raise (non-fatal contract)."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"_id": "~789"}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        def _secret(key):
+            return "https://thehive.local" if key == "THEHIVE_URL" else "test-key"
+
+        with patch("secret_store.SecretStore.get_secret", side_effect=_secret), \
+             patch("httpx.AsyncClient", return_value=mock_ctx):
+            result = await res.dispatch_thehive_case({"description": "no title here"})
+
+        assert "~789" in result

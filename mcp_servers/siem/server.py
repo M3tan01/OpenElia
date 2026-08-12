@@ -1,62 +1,30 @@
 import asyncio
-import json
 import os
+import sys
 import httpx
-from urllib.parse import urlparse
 from mcp.server.models import InitializationOptions
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
-def _load_siem_allowlist() -> list[str]:
-    """
-    Load the approved SIEM webhook hostnames from the keychain / env.
-    SIEM_WEBHOOK_ALLOWLIST is a comma-separated list of hostnames,
-    e.g. "splunk.corp.com,siem.internal".
-    Returns an empty list if not set, which causes all URLs to be rejected.
-    """
-    import sys, os as _os
-    sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
-    from secret_store import SecretStore
-    raw = (SecretStore.get_secret("SIEM_WEBHOOK_ALLOWLIST") or "").strip()
-    if not raw:
-        return []
-    return [h.strip().lower() for h in raw.split(",") if h.strip()]
-
-
 def _validate_webhook_url(url: str) -> str:
     """
-    Validate webhook URL against a strict hostname allowlist (SIEM_WEBHOOK_ALLOWLIST).
-    Raises ValueError if the URL is not explicitly approved.
-    This is stronger than a blocklist: unknown hostnames are denied by default.
+    Validate webhook URL against the SIEM_WEBHOOK_ALLOWLIST hostname allowlist.
+    Thin wrapper around core.webhook.validate_webhook_url — kept as a
+    module-level name so tests can patch it directly.
     """
-    allowlist = _load_siem_allowlist()
-    if not allowlist:
-        raise ValueError(
-            "SIEM webhook allowlist is empty. Set SIEM_WEBHOOK_ALLOWLIST to approved hostnames."
-        )
+    from core.webhook import validate_webhook_url
+    return validate_webhook_url(url, "SIEM_WEBHOOK_ALLOWLIST")
 
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        raise ValueError("Malformed webhook URL.")
+def _audit_log_path() -> str:
+    """Return the canonical path to state/audit.log, honouring OPENELIA_STATE_DIR."""
+    return os.path.join(os.getenv("OPENELIA_STATE_DIR", "state"), "audit.log")
 
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError("Webhook URL must use http or https.")
 
-    hostname = (parsed.hostname or "").lower()
-    if not hostname:
-        raise ValueError("Webhook URL missing hostname.")
-
-    if hostname not in allowlist:
-        raise ValueError(
-            f"Webhook hostname '{hostname}' is not in the approved SIEM allowlist."
-        )
-    return url
-
-# Ensure we can import security_manager
+# Ensure we can import security_manager / core
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from security_manager import PrivacyGuard
+from core.jsonl import tail_jsonl
 
 server = Server("mcp-siem")
 
@@ -110,10 +78,37 @@ async def handle_call_tool(
 
         elif name == "sync_audit_log":
             try:
-                _validate_webhook_url(arguments["webhook_url"])
+                validated_url = _validate_webhook_url(arguments["webhook_url"])
             except ValueError as e:
                 return [types.TextContent(type="text", text=f"SSRF Guard: {e}")]
-            return [types.TextContent(type="text", text="SUCCESS: Synchronized last 100 audit entries to SIEM.")]
+
+            limit = int(arguments.get("limit", 100))
+            log_path = _audit_log_path()
+
+            if not os.path.exists(log_path):
+                return [types.TextContent(
+                    type="text",
+                    text=f"SIEM Sync: no audit log found at {log_path}; nothing to forward.",
+                )]
+
+            # File read, parse, redaction, and POST all share one error scope so
+            # any OSError / decode error / redact failure returns a safe string
+            # rather than escaping the MCP dispatch as an uncaught exception.
+            try:
+                events = tail_jsonl(log_path, limit)
+                redacted_events = [PrivacyGuard.redact(event) for event in events]
+                payload = {"events": redacted_events, "count": len(redacted_events)}
+
+                response = await client.post(validated_url, json=payload, timeout=5)
+                response.raise_for_status()
+                return [types.TextContent(
+                    type="text",
+                    text=f"SUCCESS: Synchronized {len(redacted_events)} audit entries to {validated_url} [{response.status_code}]",
+                )]
+            except Exception as e:
+                # Emit the exception TYPE only — the validated URL is in scope and
+                # str(e) could echo the internal SIEM endpoint.
+                return [types.TextContent(type="text", text=f"SIEM Sync Error: {type(e).__name__}")]
 
     return []
 

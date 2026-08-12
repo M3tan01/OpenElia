@@ -34,7 +34,7 @@ export type PanelDef = {
 export const PANEL_CATALOG: PanelDef[] = [
   { id: "control",  label: "Control",          span: "full",   render: (c) => <ControlBar snapshot={c.snapshot} onChange={c.refresh} /> },
   { id: "agents",   label: "Agent Activity",   span: "normal", render: (c) => <AgentActivity liveTasks={c.stream.tasks} /> },
-  { id: "graph",    label: "Attack Surface",   span: "wide",   render: () => <AttackGraph /> },
+  { id: "graph",    label: "Attack Surface Graph", span: "wide", render: () => <AttackGraph /> },
   { id: "audit",    label: "Audit Timeline",   span: "normal", render: (c) => <AuditTimeline liveAudit={c.stream.audit} /> },
   { id: "models",   label: "Brain Models",     span: "wide",   render: () => <ModelSelector /> },
   { id: "cost",     label: "Cost & MITRE",     span: "wide",   render: () => <CostMitre /> },

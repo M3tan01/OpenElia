@@ -25,7 +25,7 @@ from cost_tracker import CostTracker
 from adversary_manager import AdversaryManager
 from vector_manager import VectorManager
 from model_manager import ModelManager
-from llm_client import LLMClient
+from core.schemas import AgentTier
 
 
 # Local model config — used for compression/intel helpers that always stay cheap
@@ -40,9 +40,17 @@ class BaseAgent(ABC):
     MAX_TOKENS: int = 2048
     MAX_RETRIES: int = 3
 
-    def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
+    def __init__(
+        self,
+        state_manager: StateManager,
+        brain_tier: str = "local",
+        tier: AgentTier | None = None,
+    ):
         self.state = state_manager
         self.brain_tier = brain_tier  # persisted for agents that spawn PentesterOS (sterile exec)
+        # Execution tier (RECON/ANALYSIS/EXECUTION). Drives the MCPGateway access
+        # gate — agents that never query servers leave it None (gateway fails closed).
+        self.tier = tier
         self.loader = JITLoader()
         self.artifact_manager = ArtifactManager()
         self.cost_tracker = CostTracker()
@@ -50,13 +58,13 @@ class BaseAgent(ABC):
         self.vector_manager = VectorManager()
 
         # Dedicated local client for zero-cost compression / intel helpers.
-        self.local_client, self._local_model, self._is_local_only = LLMClient.create(
+        self.local_client, self._local_model, self._is_local_only = ModelManager.create_client(
             brain_tier="local",
             agent_name=self.AGENT_NAME,
         )
 
         # Primary client resolved via ModelManager (supports hybrid per-agent routing)
-        self.client, self.MODEL, self.IS_LOCAL = LLMClient.create(
+        self.client, self.MODEL, self.IS_LOCAL = ModelManager.create_client(
             brain_tier=brain_tier,
             agent_name=self.AGENT_NAME,
         )
@@ -304,30 +312,6 @@ class BaseAgent(ABC):
         except Exception as e:
             return f"[COMPRESSION ERROR - RAW OUTPUT TRUNCATED]\n{payload[:1000]}...\n(Error: {str(e)})"
 
-    async def _query_threat_intel(self, payload: str) -> str | None:
-        """Proactively query Threat Intel for any versions or IoCs found in raw outputs."""
-        try:
-            # Use local model to extract potential targets for intel lookup
-            extraction = await self.local_client.chat.completions.create(
-                model=self._local_model,
-                messages=[
-                    {"role": "system", "content": "Extract ONLY software names with versions or IP addresses from the text. Return a simple comma-separated list. If none, return 'NONE'."},
-                    {"role": "user", "content": payload[:2000]}
-                ],
-                max_tokens=64
-            )
-            entities = extraction.choices[0].message.content or "NONE"
-            if "NONE" in entities.upper():
-                return None
-            
-            # DEAD STUB — this was a simulation placeholder and never performed a real lookup.
-            # Real CVE intel is now routed through MCPGateway via pentester_vuln's
-            # lookup_cve_intel tool. Return None so the autonomous enrichment block in
-            # _run_tool_loop skips injection of fake intel text.
-            return None
-        except Exception:
-            return None
-
     # Patterns that commonly appear in prompt injection attempts embedded in
     # external data (nmap output, CVE responses, log files, etc.)
     _INJECTION_PATTERNS = re.compile(
@@ -396,18 +380,26 @@ class BaseAgent(ABC):
         incoming_messages = self.state.get_messages(recipient=self.AGENT_NAME)
         
         # 2. Long-Term Memory Retrieval (mcp-memory)
-        historical_intel = self.vector_manager.search(f"Prior engagement findings for {current_task}", limit=2)
-        
+        # Memory recall is an enhancement, never a dependency: a backend fault
+        # must not crash the agent before it reasons. Degrade to no history.
+        try:
+            historical_intel = self.vector_manager.search(
+                f"Prior engagement findings for {current_task}", limit=2
+            )
+            historical_docs = historical_intel["documents"][0]
+        except Exception as e:
+            print(f"[{self.AGENT_NAME}] memory recall unavailable, continuing without history: {e}")
+            historical_docs = []
+
         msg_block = "\n\n### STRATEGIC & HISTORICAL CONTEXT\n"
         if incoming_messages:
             for m in incoming_messages:
                 msg_block += f"- Direct Intelligence from {m['sender']}: {m['content']}\n"
-        
-        if historical_intel and historical_intel["documents"]:
-            for doc in historical_intel["documents"][0]:
-                msg_block += f"- Historical Engagement Memory: {doc}\n"
-        
-        if incoming_messages or historical_intel["documents"]:
+
+        for doc in historical_docs:
+            msg_block += f"- Historical Engagement Memory: {doc}\n"
+
+        if incoming_messages or historical_docs:
             system += msg_block
 
         chat_messages = [{"role": "system", "content": PrivacyGuard.redact(system)}]
@@ -424,16 +416,19 @@ class BaseAgent(ABC):
             self._check_kill_switch()
             
             # --- LLM Cost Optimization: Semantic Cache Check ---
-            # Fingerprint the current context
-            context_fingerprint = f"{system}\n" + "\n".join([str(m) for m in chat_messages[-3:]])
-            cached_response = self.vector_manager.check_cache(context_fingerprint)
-            
+            # Fingerprint the current context, scoped by engagement id so an
+            # analysis cached in one engagement can never be served to another
+            # on a fingerprint collision. Single scoped lookup returns the
+            # cached response directly (no second unscoped search).
+            engagement_id = getattr(self.state, "active_engagement_id", "") or ""
+            context_fingerprint = (
+                f"eng={engagement_id}\n{system}\n"
+                + "\n".join([str(m) for m in chat_messages[-3:]])
+            )
+            cached_response = self.vector_manager.get_cached_response(context_fingerprint)
             if cached_response:
                 print(f"[{self.AGENT_NAME}] ⚡ Semantic Cache HIT: Reusing prior analysis.")
-                # Retrieve the response from metadata
-                search_res = self.vector_manager.search(context_fingerprint, limit=1)
-                final_text = search_res["metadatas"][0][0].get("response", "")
-                return final_text
+                return cached_response
 
             # T3: LLM call with exponential backoff on transient errors
             _llm_backoff = 1.0
@@ -533,12 +528,11 @@ class BaseAgent(ABC):
                 if loop_decision.is_warn:
                     result_str += f"\n[LOOP GUARD WARNING]: {loop_decision.rationale}"
 
-                # --- ARCHITECTURAL UPGRADE: Autonomous Intel Enrichment ---
-                # If the output contains a version string or IP, proactively query Threat Intel
-                if re.search(r"(\d+\.\d+(\.\d+)?)", result_str) or tc.function.name in ["read_state", "record_service"]:
-                    intel_context = await self._query_threat_intel(result_str)
-                    if intel_context:
-                        result_str += f"\n\n[AUTONOMOUS INTEL ENRICHMENT]\n{intel_context}"
+                # Real CVE/threat-intel enrichment is routed through MCPGateway
+                # (pentester_vuln's lookup_cve_intel tool), not inline here. The
+                # previous inline path fired a local-LLM extraction on every
+                # numeric tool output and always discarded the result, so it was
+                # removed — it cost latency and tokens for zero enrichment.
 
                 # Sanitize external data before it re-enters the model context
                 result_str = self._sanitize_tool_result(result_str)

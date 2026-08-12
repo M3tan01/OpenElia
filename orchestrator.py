@@ -14,7 +14,7 @@ from artifact_manager import ArtifactManager
 from cost_tracker import CostTracker
 from rbac_manager import RBACManager
 from risk_calculator import RiskCalculator
-from llm_client import LLMClient
+from model_manager import ModelManager
 from core.schemas import AgentTask, AgentResult, AgentTier, Domain
 from core.worker_pool import AsyncWorkerPool, MAX_RETRIES
 
@@ -62,7 +62,7 @@ class Orchestrator:
         self.cost_tracker = CostTracker()
         self.risk_calculator = RiskCalculator()
         # Always use the local model for cheap task classification
-        self.client, self._orchestrator_model, self._is_local = LLMClient.create(
+        self.client, self._orchestrator_model, self._is_local = ModelManager.create_client(
             brain_tier="local",
             agent_name="orchestrator",
         )
@@ -273,19 +273,19 @@ class Orchestrator:
 
         if name == "pentester_recon":
             from agents.red.pentester_recon import PentesterRecon
-            agent = PentesterRecon(self.state, brain_tier=task.brain_tier)
+            agent = PentesterRecon(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(f"Target: {target}. {raw_task}")
             return {"output": result}
 
         if name == "pentester_vuln":
             from agents.red.pentester_vuln import PentesterVuln
-            agent = PentesterVuln(self.state, brain_tier=task.brain_tier)
+            agent = PentesterVuln(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(f"Target: {target}. {raw_task}")
             return {"output": result}
 
         if name == "pentester_exploit":
             from agents.red.pentester_exploit import PentesterExploit
-            agent = PentesterExploit(self.state, brain_tier=task.brain_tier)
+            agent = PentesterExploit(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(
                 f"Target: {target}. {raw_task}",
                 stealth=task.stealth,
@@ -297,24 +297,25 @@ class Orchestrator:
         if name == "defender_mon":
             from agents.blue.defender_mon import DefenderMon
             agent = DefenderMon(self.state, brain_tier=task.brain_tier)
+            agent.tier = task.tier
             result = await agent.run(raw_task)
             return {"output": result}
 
         if name == "defender_ana":
             from agents.blue.defender_ana import DefenderAna
-            agent = DefenderAna(self.state, brain_tier=task.brain_tier)
+            agent = DefenderAna(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(raw_task)
             return {"output": result}
 
         if name == "defender_res":
             from agents.blue.defender_res import DefenderRes
-            agent = DefenderRes(self.state, brain_tier=task.brain_tier)
+            agent = DefenderRes(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(raw_task)
             return {"output": result}
 
         if name == "pentester_persist":
             from agents.red.pentester_persist import PentesterPersist
-            agent = PentesterPersist(self.state, brain_tier=task.brain_tier)
+            agent = PentesterPersist(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(
                 f"Target: {target}. {raw_task}",
                 stealth=task.stealth,
@@ -325,7 +326,7 @@ class Orchestrator:
 
         if name == "pentester_lat":
             from agents.red.pentester_lat import PentesterLat
-            agent = PentesterLat(self.state, brain_tier=task.brain_tier)
+            agent = PentesterLat(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(
                 f"Target: {target}. {raw_task}",
                 stealth=task.stealth,
@@ -336,7 +337,7 @@ class Orchestrator:
 
         if name == "pentester_ex":
             from agents.red.pentester_ex import PentesterEx
-            agent = PentesterEx(self.state, brain_tier=task.brain_tier)
+            agent = PentesterEx(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(
                 f"Target: {target}. {raw_task}",
                 stealth=task.stealth,
@@ -347,13 +348,13 @@ class Orchestrator:
 
         if name == "defender_hunt":
             from agents.blue.defender_hunt import DefenderHunt
-            agent = DefenderHunt(self.state, brain_tier=task.brain_tier)
+            agent = DefenderHunt(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(raw_task)
             return {"output": result}
 
         if name == "reporter_agent":
             from agents.reporter_agent import ReporterAgent
-            agent = ReporterAgent(self.state, brain_tier=task.brain_tier)
+            agent = ReporterAgent(self.state, brain_tier=task.brain_tier, tier=task.tier)
             result = await agent.run(raw_task)
             return {"output": result}
 

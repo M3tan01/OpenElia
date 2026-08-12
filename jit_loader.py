@@ -24,9 +24,47 @@ _SECTION_PATTERN = re.compile(
 
 
 class JITLoader:
+    # Skill discovery is a filesystem scan of skills/ + agents/. The map is
+    # stable within a process run, but JITLoader is instantiated per-agent and
+    # per-task (base_agent + core.hooks.pre_run_hook), so scanning every time is
+    # pure waste. Memoize the discovered map per skills_path, keyed by a cheap
+    # directory-mtime signature so a skill added/removed on disk is still picked
+    # up live (long-running dashboard server) without a process restart.
+    # Entry shape: {key: (signature_tuple, skill_map)}. Consumers treat
+    # dynamic_skill_map as read-only; the map object is shared across instances.
+    _DISCOVERY_CACHE: Dict[str, tuple] = {}
+
     def __init__(self, skills_path: str = _SKILLS_PATH):
         self.skills_path = Path(skills_path)
-        self.dynamic_skill_map: Dict[str, List[str]] = self._auto_discover_skills()
+        key = str(self.skills_path)
+        signature = self._discovery_signature()
+        cached = JITLoader._DISCOVERY_CACHE.get(key)
+        if cached is None or cached[0] != signature:
+            skill_map = self._auto_discover_skills()
+            JITLoader._DISCOVERY_CACHE[key] = (signature, skill_map)
+        else:
+            skill_map = cached[1]
+        self.dynamic_skill_map: Dict[str, List[str]] = skill_map
+
+    def _discovery_signature(self) -> tuple:
+        """Cheap change-detector: mtimes of skills/ and the agent team dirs.
+
+        Adding or removing a skill folder changes skills/ mtime; adding an agent
+        module changes the team dir mtime. A missing dir contributes None. Used
+        to invalidate the discovery memo without re-globbing every instantiation.
+        """
+        paths = [
+            self.skills_path,
+            _PROJECT_ROOT / "agents" / "red",
+            _PROJECT_ROOT / "agents" / "blue",
+        ]
+        sig: list = []
+        for p in paths:
+            try:
+                sig.append(p.stat().st_mtime)
+            except OSError:
+                sig.append(None)
+        return tuple(sig)
 
     def _auto_discover_skills(self) -> Dict[str, List[str]]:
         """

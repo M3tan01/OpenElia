@@ -14,6 +14,7 @@ import hashlib
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from agents.base_agent import BaseAgent, _DEFAULT_MODEL
+from core.schemas import AgentTier
 from state_manager import StateManager
 from secret_store import SecretStore
 
@@ -58,8 +59,13 @@ class DefenderRes(BaseAgent):
     MODEL = _DEFAULT_MODEL
     MAX_TOKENS = 8096
 
-    def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
-        super().__init__(state_manager, brain_tier=brain_tier)
+    def __init__(
+        self,
+        state_manager: StateManager,
+        brain_tier: str = "local",
+        tier: AgentTier | None = None,
+    ):
+        super().__init__(state_manager, brain_tier=brain_tier, tier=tier)
 
     def _get_res_tools(self) -> list[dict]:
         return [
@@ -278,16 +284,31 @@ class DefenderRes(BaseAgent):
             print(f"[defender_res] TheHive dispatch skipped — THEHIVE_URL or THEHIVE_API_KEY not configured. Case saved to local SQLite only.")
             return "Case saved to local SQLite only. Set THEHIVE_URL and THEHIVE_API_KEY in the vault to enable live dispatch."
 
-        print(f"[defender_res] Dispatching TheHive case (local only until live API is wired): {case_data['title']}")
-        # Wire real httpx POST here when TheHive endpoint is available:
-        # import httpx
-        # async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-        #     response = await client.post(
-        #         f"{hive_url}/api/v1/case",
-        #         json=case_data,
-        #         headers={"Authorization": f"Bearer {api_key}"},
-        #     )
-        #     response.raise_for_status()
-        #     return f"TheHive case created: {response.json().get('_id', 'unknown')}"
-        case_hash = hashlib.sha256(case_data['title'].encode()).hexdigest()[:8]
-        return f"TheHive case saved locally (ID: TH-{case_hash}). Live dispatch pending API wiring."
+        import httpx
+
+        print(f"[defender_res] Dispatching TheHive case: {case_data.get('title', '<no title>')}")
+        normalized_url = hive_url.rstrip("/")
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                response = await client.post(
+                    f"{normalized_url}/api/v1/case",
+                    json=case_data,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                response.raise_for_status()
+                body = response.json()
+                # TheHive returns a JSON object; guard against a non-dict body
+                # (list/null/string) so a 200 with an odd shape stays non-fatal.
+                case_id = (
+                    (body.get("_id") or body.get("id") or "unknown")
+                    if isinstance(body, dict)
+                    else "unknown"
+                )
+                return f"TheHive case created: {case_id}"
+        except Exception as exc:
+            # Emit the exception TYPE only — never str(exc) — to avoid echoing any
+            # request context. Case is already persisted locally by the caller.
+            return f"TheHive dispatch failed ({type(exc).__name__}). Case retained in local SQLite."

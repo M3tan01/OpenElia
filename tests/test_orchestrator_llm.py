@@ -1,8 +1,8 @@
 """
-tests/test_orchestrator_llm.py — Regression tests for Orchestrator LLMClient alignment.
+tests/test_orchestrator_llm.py — Regression tests for Orchestrator LLM client alignment.
 
 Verifies that Orchestrator.__init__ correctly unpacks the 3-tuple returned by
-LLMClient.create() and that _classify() passes is_local to cost_tracker.track_usage().
+ModelManager.create_client() and that _classify() passes is_local to cost_tracker.track_usage().
 """
 
 import pytest
@@ -31,7 +31,7 @@ class TestOrchestratorLLMClientAlignment:
         from orchestrator import Orchestrator
         mock_client = _make_mock_client()
 
-        with patch("orchestrator.LLMClient.create", return_value=(mock_client, "llama3.1:8b", True)):
+        with patch("orchestrator.ModelManager.create_client", return_value=(mock_client, "llama3.1:8b", True)):
             orch = Orchestrator(state_manager)  # must not raise
 
         assert orch._orchestrator_model == "llama3.1:8b"
@@ -43,7 +43,7 @@ class TestOrchestratorLLMClientAlignment:
         from orchestrator import Orchestrator
         mock_client = _make_mock_client()
 
-        with patch("orchestrator.LLMClient.create", return_value=(mock_client, "gpt-4o", False)):
+        with patch("orchestrator.ModelManager.create_client", return_value=(mock_client, "gpt-4o", False)):
             orch = Orchestrator(state_manager)
 
         assert orch._is_local is False
@@ -63,7 +63,7 @@ class TestOrchestratorLLMClientAlignment:
         fake_response.usage.completion_tokens = 20
         mock_client.chat.completions.create = AsyncMock(return_value=fake_response)
 
-        with patch("orchestrator.LLMClient.create", return_value=(mock_client, "llama3.1:8b", True)):
+        with patch("orchestrator.ModelManager.create_client", return_value=(mock_client, "llama3.1:8b", True)):
             orch = Orchestrator(state_manager)
 
         with patch.object(orch.cost_tracker, "track_usage") as mock_track:

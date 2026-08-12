@@ -20,10 +20,16 @@ def _state_dir() -> Path:
 
 def pre_run_hook(task: AgentTask) -> dict:
     """
-    Inject the minimal JIT context required by this specific agent.
+    Build the lifecycle context dict for this task (telemetry only).
 
-    Returns a mutable context dict passed to the agent and later
-    cleared by post_run_hook. Only lightweight metadata — no agent instances.
+    NOTE: the ``skills`` list here is for logging/observability. The actual
+    skill *injection* into the agent's system prompt happens inside
+    BaseAgent._build_system_prompt (via JITLoader.load_semantic_skills) when the
+    agent runs — this hook does not feed skills into the agent. JITLoader's
+    discovery scan is memoized, so computing the list here is cheap.
+
+    Returns a mutable context dict later cleared by post_run_hook. Only
+    lightweight metadata — no agent instances.
     """
     from jit_loader import JITLoader
     loader = JITLoader()

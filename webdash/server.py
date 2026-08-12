@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from webdash.api import control, models, monitor
+from webdash.api import control, models, monitor, n8n
 from webdash.stream import stream_endpoint
 
 # SPA and API are same-origin (prod: static mount; dev: vite proxies /api), so no CORS needed.
@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(monitor.router)
     app.include_router(models.router)
     app.include_router(control.router)
+    app.include_router(n8n.router)
     app.add_api_websocket_route("/api/stream", stream_endpoint)
 
     @app.get("/healthz")

@@ -14,7 +14,7 @@ Tier 2 — containment actions, TheHive case creation, and immutable audit trail
 
 **Available tools:**
 - `write_response_action(action_type, target, command, rationale, requires_approval)` — `command` REQUIRED; all require human approval before execution.
-- `write_thehive_case(title, severity, tlp, tags, description, observables, tasks)` — creates or updates the incident case.
+- `write_thehive_case(title, severity, tlp, tags, description, observables, tasks)` — creates or updates the incident case. When `THEHIVE_URL` + `THEHIVE_API_KEY` are configured the case is dispatched live (POST `/api/v1/case`, Bearer auth); otherwise it is retained in local SQLite. Dispatch is non-fatal — any HTTP error falls back to local retention.
 - Standard: `read_state`
 
 **Execution rules:**

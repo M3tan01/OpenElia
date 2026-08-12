@@ -109,7 +109,7 @@ export type PlaybookSummary = {
 
 export type SystemResp = { gateway: string; active_engagements: number };
 
-export type AgentInfo = { name: string; domain: string; description: string; supports_stealth: boolean };
+export type AgentInfo = { name: string; domain: string; description: string; tier: string; supports_stealth: boolean };
 export type AgentsResp = { agents: AgentInfo[] };
 
 export type ActorResp = string;

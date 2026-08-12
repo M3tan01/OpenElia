@@ -8,19 +8,25 @@ from datetime import datetime, timezone
 class ScopeValidator:
     _resolution_cache = {}  # Static cache across instances
 
-    def __init__(self, roe_path="roe.json"):
-        self.roe_path = roe_path
+    def __init__(self, roe_path: str | None = None):
+        # An explicit path (even unusual) wins; only None falls back to env.
+        # `""` is intentionally NOT treated as "use env" — it fails closed in
+        # _load_roe (the file "" does not exist) rather than silently switching.
+        self.roe_path = roe_path if roe_path is not None else os.getenv("OPENELIA_ROE_PATH", "roe.json")
         self.authorized_subnets = []
         self.blacklisted_ips = []
         self.prohibited_tools = []
         self.quiet_hours = {}
         self.roe_loaded = False
+        self._roe_mtime = None  # mtime of roe_path at last successful/attempted load
         self._load_roe()
 
     def _load_roe(self):
+        self._roe_mtime = None
         if not os.path.exists(self.roe_path):
             return  # roe_loaded stays False → fail-closed
         try:
+            self._roe_mtime = os.path.getmtime(self.roe_path)
             with open(self.roe_path, "r") as f:
                 roe = json.load(f)
             self.authorized_subnets = [
@@ -39,34 +45,60 @@ class ScopeValidator:
             print(f"[ScopeValidator] ERROR: Failed to parse {self.roe_path}: {e}", file=sys.stderr)
             # roe_loaded stays False → fail-closed
 
+    def _purge_cache_for_path(self):
+        """Drop all cached decisions tied to this validator's roe_path."""
+        for k in [k for k in self._resolution_cache if k[0] == self.roe_path]:
+            del self._resolution_cache[k]
+
+    def _refresh_if_changed(self):
+        """Hot-reload the RoE if its file changed since load, so a scope-NARROWING
+        edit takes effect without a process restart. Fail-closed on stat errors."""
+        try:
+            current = os.path.getmtime(self.roe_path)
+        except OSError:
+            # File vanished after load → fail closed and drop stale cache entries.
+            if self.roe_loaded:
+                self.roe_loaded = False
+                self.authorized_subnets = []
+                self._purge_cache_for_path()
+            return
+        if current != self._roe_mtime:
+            self._purge_cache_for_path()
+            self._load_roe()
+
     def is_allowed(self, target: str) -> bool:
         # Fail closed: no roe.json or empty authorized_subnets → block all
         if not self.roe_loaded or not self.authorized_subnets:
             return False
 
-        if target in self._resolution_cache:
-            return self._resolution_cache[target]
+        # Pick up a live RoE edit (esp. scope narrowing) before serving cache.
+        self._refresh_if_changed()
+        if not self.roe_loaded or not self.authorized_subnets:
+            return False
+
+        if (self.roe_path, target) in self._resolution_cache:
+            return self._resolution_cache[(self.roe_path, target)]
 
         try:
             target_ip = ipaddress.ip_address(target)
 
             if target_ip in self.blacklisted_ips:
-                self._resolution_cache[target] = False
+                self._resolution_cache[(self.roe_path, target)] = False
                 return False
 
             for subnet in self.authorized_subnets:
                 if target_ip in subnet:
-                    self._resolution_cache[target] = True
+                    self._resolution_cache[(self.roe_path, target)] = True
                     return True
 
-            self._resolution_cache[target] = False
+            self._resolution_cache[(self.roe_path, target)] = False
             return False
         except ValueError:
             import socket
             try:
                 resolved_ip = socket.gethostbyname(target)
                 result = self.is_allowed(resolved_ip)
-                self._resolution_cache[target] = result
+                self._resolution_cache[(self.roe_path, target)] = result
                 return result
             except Exception:
                 return False

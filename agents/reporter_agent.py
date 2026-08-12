@@ -13,6 +13,7 @@ import json
 import hashlib
 from datetime import datetime, timezone
 from agents.base_agent import BaseAgent, _DEFAULT_MODEL
+from core.schemas import AgentTier
 from state_manager import StateManager
 from artifact_manager import ArtifactManager
 from graph_manager import GraphManager
@@ -46,8 +47,13 @@ class ReporterAgent(BaseAgent):
     AGENT_NAME = "reporter_agent"
     MODEL = _DEFAULT_MODEL
 
-    def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
-        super().__init__(state_manager, brain_tier=brain_tier)
+    def __init__(
+        self,
+        state_manager: StateManager,
+        brain_tier: str = "local",
+        tier: AgentTier | None = None,
+    ):
+        super().__init__(state_manager, brain_tier=brain_tier, tier=tier)
         self.artifact_manager = ArtifactManager()
         self.graph_manager = GraphManager()
 

@@ -11,7 +11,7 @@ import json as _json
 import os
 
 from graph_manager import GraphManager
-from llm_client import LLMClient  # re-exported so tests can monkeypatch it
+from model_manager import ModelManager  # re-exported so tests can monkeypatch it
 
 
 class AdversaryForge:
@@ -89,7 +89,7 @@ class AdversaryForge:
             f"Topology: {_json.dumps(topology)}"
         )
         try:
-            client, model, _ = LLMClient.create(brain_tier=brain_tier, agent_name="Forge")
+            client, model, _ = ModelManager.create_client(brain_tier=brain_tier, agent_name="Forge")
             resp = await client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],

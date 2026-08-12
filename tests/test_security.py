@@ -202,3 +202,137 @@ class TestAuditLogger:
         logger = AuditLogger(log_path=str(log))
         with pytest.raises(RuntimeError, match="AUDIT FAILURE"):
             logger.log_event("a", "t", "p", "ALLOWED")
+
+
+# ---------------------------------------------------------------------------
+# ScopeValidator — OPENELIA_ROE_PATH env var + RoE-aware cache (Task 6)
+# ---------------------------------------------------------------------------
+
+class TestScopeValidatorRoeEnv:
+    """
+    Verify:
+    (a) OPENELIA_ROE_PATH is honored by no-arg ScopeValidator() and
+        enforce_security_gate().
+    (b) Fail-closed: nonexistent env-pointed path → is_allowed returns False.
+    (c) Explicit roe_path arg always overrides env.
+    (d) Cache is RoE-path-aware — permissive cache entry for path A does NOT
+        serve restrictive validator on path B.
+    """
+
+    def _permissive_roe(self, path, subnets=("10.0.0.0/24",)):
+        import json
+        path.write_text(json.dumps({
+            "authorized_subnets": list(subnets),
+            "blacklisted_ips": [],
+            "prohibited_tools": [],
+            "quiet_hours": {"enabled": False},
+        }))
+        return path
+
+    def setup_method(self):
+        from security_manager import ScopeValidator
+        ScopeValidator._resolution_cache.clear()
+
+    def teardown_method(self):
+        from security_manager import ScopeValidator
+        ScopeValidator._resolution_cache.clear()
+
+    # (a) env honored — no-arg ScopeValidator() picks up OPENELIA_ROE_PATH
+    def test_env_honored_by_no_arg_constructor(self, tmp_path, monkeypatch):
+        p = self._permissive_roe(tmp_path / "roe.json")
+        monkeypatch.setenv("OPENELIA_ROE_PATH", str(p))
+        from security_manager import ScopeValidator
+        sv = ScopeValidator()
+        assert sv.is_allowed("10.0.0.5") is True
+
+    # (a) env honored — enforce_security_gate() also picks it up
+    def test_env_honored_by_enforce_security_gate(self, tmp_path, monkeypatch):
+        p = self._permissive_roe(tmp_path / "roe.json")
+        monkeypatch.setenv("OPENELIA_ROE_PATH", str(p))
+        from security_manager import enforce_security_gate
+        # Must not raise PermissionError for in-scope target
+        result = enforce_security_gate("pentester_persist", "10.0.0.5", "crontab -r")
+        assert result is True
+
+    # (b) fail-closed — env points at nonexistent path → block
+    def test_fail_closed_nonexistent_env_path(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENELIA_ROE_PATH", str(tmp_path / "does_not_exist.json"))
+        from security_manager import ScopeValidator
+        sv = ScopeValidator()
+        assert sv.is_allowed("10.0.0.5") is False
+
+    # (c) explicit arg wins over env
+    def test_explicit_arg_overrides_env(self, tmp_path, monkeypatch):
+        permissive = self._permissive_roe(tmp_path / "permissive.json")
+        monkeypatch.setenv("OPENELIA_ROE_PATH", str(permissive))
+        from security_manager import ScopeValidator
+        # Pass a nonexistent path explicitly — must fail closed despite permissive env
+        sv = ScopeValidator(str(tmp_path / "nonexistent.json"))
+        assert sv.is_allowed("10.0.0.5") is False
+
+    # (d) cache is RoE-path-aware — different path cannot serve stale True
+    def test_cache_is_roe_path_aware_no_fail_open(self, tmp_path):
+        import json
+        from security_manager import ScopeValidator
+
+        # Permissive RoE: allows 10.0.0.0/24
+        path_a = tmp_path / "roe_a.json"
+        self._permissive_roe(path_a, subnets=["10.0.0.0/24"])
+
+        # Restrictive RoE: only allows 192.168.0.0/24
+        path_b = tmp_path / "roe_b.json"
+        path_b.write_text(json.dumps({
+            "authorized_subnets": ["192.168.0.0/24"],
+            "blacklisted_ips": [],
+            "prohibited_tools": [],
+            "quiet_hours": {"enabled": False},
+        }))
+
+        # Populate cache with permissive validator
+        sv_a = ScopeValidator(str(path_a))
+        assert sv_a.is_allowed("10.0.0.5") is True  # caches (path_a, "10.0.0.5") → True
+        # Prove the permissive entry is actually in the cache before the isolation
+        # check — otherwise sv_b returning False could be a cache MISS, not isolation.
+        assert ScopeValidator._resolution_cache.get((str(path_a), "10.0.0.5")) is True
+
+        # Restrictive validator must NOT serve the stale True from path_a
+        sv_b = ScopeValidator(str(path_b))
+        assert sv_b.is_allowed("10.0.0.5") is False  # 10.0.0.5 not in 192.168.0.0/24
+
+    # (e) hot-reload — a scope-NARROWING edit to the same file takes effect
+    # without a restart or manual cache clear (Important review finding).
+    def test_scope_narrowing_edit_invalidates_cache(self, tmp_path):
+        import json
+        import os
+        from security_manager import ScopeValidator
+
+        p = tmp_path / "roe.json"
+        self._permissive_roe(p, subnets=["10.0.0.0/24"])
+
+        sv = ScopeValidator(str(p))
+        assert sv.is_allowed("10.0.0.5") is True  # cached True for (p, 10.0.0.5)
+
+        # Operator narrows scope mid-session: 10.0.0.5 no longer authorized.
+        p.write_text(json.dumps({
+            "authorized_subnets": ["192.168.0.0/24"],
+            "blacklisted_ips": [],
+            "prohibited_tools": [],
+            "quiet_hours": {"enabled": False},
+        }))
+        # Force a strictly newer mtime so the change is detected even on
+        # coarse-grained filesystem timestamp resolution.
+        os.utime(p, (sv._roe_mtime + 10, sv._roe_mtime + 10))
+
+        # Same validator instance must now DENY the now-out-of-scope target.
+        assert sv.is_allowed("10.0.0.5") is False
+
+    # (f) file deleted after load → fail closed on next check
+    def test_roe_file_removed_after_load_fails_closed(self, tmp_path):
+        from security_manager import ScopeValidator
+
+        p = self._permissive_roe(tmp_path / "roe.json")
+        sv = ScopeValidator(str(p))
+        assert sv.is_allowed("10.0.0.5") is True
+
+        p.unlink()  # RoE file vanishes mid-session
+        assert sv.is_allowed("10.0.0.5") is False

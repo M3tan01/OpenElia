@@ -1,115 +1,77 @@
 """
-tests/test_vector_manager.py — VectorManager ChromaDB wrapper.
+tests/test_vector_manager.py — VectorManager sqlite/FTS5 backend.
 
-ChromaDB is mocked at the module level so tests run without a real DB.
-Covers: index_event calls collection.add with correct fields,
-        search delegates to collection.query, check_cache returns
-        cached text when distance < threshold, returns None when above,
-        cache_response delegates to index_event.
+Backed by stdlib sqlite3 (no chromadb). Tests run against a real temp DB.
+Covers: index_event persists a searchable row, search returns chromadb-shaped
+dicts and tolerates FTS-unsafe input, get_cached_response is EXACT-match
+(no fuzzy collisions), cache_response round-trips, read paths never raise.
 """
 import pytest
-from unittest.mock import MagicMock, patch, call
+
+from vector_manager import VectorManager
 
 
 @pytest.fixture()
-def mock_collection():
-    col = MagicMock()
-    col.query.return_value = {"documents": [], "distances": []}
-    return col
-
-
-@pytest.fixture()
-def vm(mock_collection):
-    """VectorManager with chromadb stubbed by injecting into lazy-init cache."""
-    from vector_manager import VectorManager
-    manager = VectorManager(db_path="/tmp/test_vector_db")
-    # Bypass lazy property — inject mock directly so no real DB is created
-    manager._collection = mock_collection
-    mock_client = MagicMock()
-    mock_client.get_or_create_collection.return_value = mock_collection
-    manager._client = mock_client
-    yield manager, mock_collection
+def vm(tmp_path):
+    return VectorManager(db_path=str(tmp_path / "vec"))
 
 
 class TestIndexEvent:
-    def test_calls_collection_add(self, vm):
-        manager, col = vm
-        manager.index_event("agent_recon", "scan", "nmap output", metadata={"target": "10.0.0.1"})
-        col.add.assert_called_once()
-        kwargs = col.add.call_args
-        assert kwargs[1]["documents"] == ["nmap output"]
+    def test_indexed_event_is_searchable(self, vm):
+        vm.index_event("agent_recon", "scan", "nmap found open port 22", metadata={"target": "10.0.0.1"})
+        result = vm.search("nmap port", limit=5)
+        assert "nmap found open port 22" in result["documents"][0]
 
-    def test_metadata_includes_source_and_type(self, vm):
-        manager, col = vm
-        manager.index_event("recon", "finding", "open port 22")
-        meta = col.add.call_args[1]["metadatas"][0]
+    def test_metadata_source_and_type_preserved(self, vm):
+        vm.index_event("recon", "finding", "open port 22 detected")
+        meta = vm.search("open port", limit=1)["metadatas"][0][0]
         assert meta["source"] == "recon"
         assert meta["type"] == "finding"
-
-    def test_metadata_includes_timestamp(self, vm):
-        manager, col = vm
-        manager.index_event("recon", "scan", "content")
-        meta = col.add.call_args[1]["metadatas"][0]
         assert "timestamp" in meta
 
-    def test_id_is_unique_per_call(self, vm):
-        manager, col = vm
-        manager.index_event("a", "scan", "c1")
-        manager.index_event("a", "scan", "c2")
-        ids1 = col.add.call_args_list[0][1]["ids"][0]
-        ids2 = col.add.call_args_list[1][1]["ids"][0]
-        assert ids1 != ids2
-
     def test_custom_metadata_merged(self, vm):
-        manager, col = vm
-        manager.index_event("a", "vuln", "text", metadata={"severity": "critical"})
-        meta = col.add.call_args[1]["metadatas"][0]
+        vm.index_event("a", "vuln", "sql injection here", metadata={"severity": "critical"})
+        meta = vm.search("injection", limit=1)["metadatas"][0][0]
         assert meta["severity"] == "critical"
 
 
 class TestSearch:
-    def test_delegates_to_collection_query(self, vm):
-        manager, col = vm
-        col.query.return_value = {"documents": [["result"]], "distances": [[0.1]]}
-        result = manager.search("nmap scan results", limit=3)
-        col.query.assert_called_once_with(query_texts=["nmap scan results"], n_results=3)
-        assert result == {"documents": [["result"]], "distances": [[0.1]]}
+    def test_returns_chromadb_shape(self, vm):
+        result = vm.search("anything", limit=3)
+        assert set(result) == {"documents", "metadatas", "distances"}
+        assert result["documents"] == [[]]  # empty DB → empty inner list
+
+    def test_limit_is_respected(self, vm):
+        for i in range(5):
+            vm.index_event("s", "scan", f"finding number {i} port open")
+        result = vm.search("finding port", limit=2)
+        assert len(result["documents"][0]) <= 2
+
+    def test_fts_unsafe_query_does_not_raise(self, vm):
+        vm.index_event("s", "scan", "target 10.0.0.1 CVSS:3.1/AV:N score high")
+        # Raw operator chars would break a naive FTS5 MATCH; must not raise.
+        result = vm.search("CVSS:3.1/AV:N -flag 10.0.0.1", limit=5)
+        assert isinstance(result["documents"][0], list)
+
+    def test_empty_query_returns_empty(self, vm):
+        vm.index_event("s", "scan", "some content")
+        assert vm.search("", limit=5)["documents"] == [[]]
 
 
-class TestCheckCache:
-    def test_returns_none_when_no_results(self, vm):
-        manager, col = vm
-        col.query.return_value = {"documents": [], "distances": []}
-        assert manager.check_cache("What is the status?") is None
+class TestCache:
+    def test_exact_prompt_round_trips(self, vm):
+        vm.cache_response("What ports are open?", "Port 22 is open.")
+        assert vm.get_cached_response("What ports are open?") == "Port 22 is open."
 
-    def test_returns_cached_text_when_close_enough(self, vm):
-        manager, col = vm
-        col.query.return_value = {
-            "documents": [["cached response"]],
-            "distances": [[0.05]],  # below default threshold of 0.1
-        }
-        result = manager.check_cache("What is the status?")
-        assert result == "cached response"
+    def test_miss_returns_none(self, vm):
+        assert vm.get_cached_response("never cached") is None
 
-    def test_returns_none_when_distance_above_threshold(self, vm):
-        manager, col = vm
-        col.query.return_value = {
-            "documents": [["cached response"]],
-            "distances": [[0.5]],  # above threshold
-        }
-        assert manager.check_cache("What is the status?") is None
+    def test_different_prompt_is_a_miss_no_fuzzy(self, vm):
+        # Exact-match only: a *similar* prompt must NOT return another's answer.
+        vm.cache_response("Scan host 10.0.0.1 for open ports", "result A")
+        assert vm.get_cached_response("Scan host 10.0.0.2 for open ports") is None
 
-    def test_exception_in_query_returns_none(self, vm):
-        manager, col = vm
-        col.query.side_effect = RuntimeError("DB unavailable")
-        assert manager.check_cache("any prompt") is None
-
-
-class TestCacheResponse:
-    def test_delegates_to_index_event_with_llm_cache_type(self, vm):
-        manager, col = vm
-        manager.cache_response("What is open?", "Port 22 is open.")
-        col.add.assert_called_once()
-        meta = col.add.call_args[1]["metadatas"][0]
-        assert meta["type"] == "llm_cache"
-        assert meta["response"] == "Port 22 is open."
+    def test_cache_overwrites_same_key(self, vm):
+        vm.cache_response("prompt X", "old")
+        vm.cache_response("prompt X", "new")
+        assert vm.get_cached_response("prompt X") == "new"

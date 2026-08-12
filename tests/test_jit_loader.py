@@ -72,6 +72,50 @@ class TestAutoDiscovery:
         loader = JITLoader(skills_path=str(tmp_path / "skills"))
         assert loader.get_skills_for_agent("nonexistent_agent") == []
 
+    def test_repeat_instantiation_same_dirs_scans_once(self, tmp_path, monkeypatch):
+        # Memo: unchanged skills/agents dirs → filesystem scan runs once even
+        # across many JITLoader() instances (per-agent + per-task hot path).
+        JITLoader._DISCOVERY_CACHE.clear()
+        skills = tmp_path / "skills"
+        skills.mkdir()
+        monkeypatch.setattr("jit_loader._PROJECT_ROOT", tmp_path)
+        calls = {"n": 0}
+        orig = JITLoader._auto_discover_skills
+
+        def spy(self):
+            calls["n"] += 1
+            return orig(self)
+
+        monkeypatch.setattr(JITLoader, "_auto_discover_skills", spy)
+        JITLoader(skills_path=str(skills))
+        JITLoader(skills_path=str(skills))
+        JITLoader(skills_path=str(skills))
+        assert calls["n"] == 1
+
+    def test_new_skill_on_disk_is_picked_up_live(self, tmp_path, monkeypatch):
+        # Invalidation: a skill added on disk is discovered without a restart,
+        # once the skills/ dir mtime changes (memo signature miss → re-scan).
+        import os
+        import time
+
+        JITLoader._DISCOVERY_CACHE.clear()
+        skills = tmp_path / "skills"
+        agents = tmp_path / "agents"
+        _make_skill(skills, "pentester_recon", "Do recon.")
+        _make_agent(agents, "red", "pentester_recon")
+        monkeypatch.setattr("jit_loader._PROJECT_ROOT", tmp_path)
+
+        loader1 = JITLoader(skills_path=str(skills))
+        assert "common_opsec" not in loader1.get_skills_for_agent("pentester_recon")
+
+        _make_skill(skills, "common_opsec", "OPSEC checklist.")
+        # Bump mtime so the signature differs even at coarse fs granularity.
+        future = time.time() + 10
+        os.utime(skills, (future, future))
+
+        loader2 = JITLoader(skills_path=str(skills))
+        assert "common_opsec" in loader2.get_skills_for_agent("pentester_recon")
+
 
 # ---------------------------------------------------------------------------
 # Skill extraction

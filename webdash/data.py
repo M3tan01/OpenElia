@@ -15,6 +15,8 @@ from pathlib import Path
 
 import networkx as nx
 
+from core.jsonl import tail_jsonl as _tail_jsonl
+
 
 def _parse_ts(s: object) -> datetime | None:
     """Parse an ISO-8601 timestamp to a UTC-aware datetime, else None.
@@ -54,10 +56,34 @@ AGENT_META: dict[str, str] = {
     "reporter_agent": "Executive & technical reporting",
 }
 
-# Fail loud at import if the description table drifts from the registry — otherwise
-# a new/renamed agent would silently ship an empty description to the Agents view.
+# Worker-pool tier per agent. Mirrors orchestrator._RED_AGENTS / _BLUE_AGENTS
+# tier assignments (+ reporter_agent, scheduled at EXECUTION). Keep in sync with
+# orchestrator.py — test_agent_tiers_match_orchestrator_tier_assignments asserts
+# this. (Not derived directly from Orchestrator: importing it here pulls its full
+# heavy dependency chain — model_manager, rbac_manager, worker_pool — into every
+# webdash import, which measurably slowed the test suite.) Surfaced on /api/agents
+# so the frontend never re-encodes tier membership.
+AGENT_TIERS: dict[str, str] = {
+    "pentester_recon": "RECON",
+    "pentester_vuln": "ANALYSIS",
+    "pentester_exploit": "EXECUTION",
+    "pentester_persist": "EXECUTION",
+    "pentester_lat": "EXECUTION",
+    "pentester_ex": "EXECUTION",
+    "defender_mon": "RECON",
+    "defender_ana": "ANALYSIS",
+    "defender_hunt": "ANALYSIS",
+    "defender_res": "EXECUTION",
+    "reporter_agent": "EXECUTION",
+}
+
+# Fail loud at import if the metadata tables drift from the registry — otherwise
+# a new/renamed agent would silently ship empty description / tier to the UI.
 assert AGENT_META.keys() == {a for agents in AGENT_REGISTRY.values() for a in agents}, (
     "AGENT_META is out of sync with AGENT_REGISTRY"
+)
+assert AGENT_TIERS.keys() == {a for agents in AGENT_REGISTRY.values() for a in agents}, (
+    "AGENT_TIERS is out of sync with AGENT_REGISTRY"
 )
 
 
@@ -75,25 +101,10 @@ def agent_roster() -> list[dict]:
                 "name": name,
                 "domain": domain,
                 "description": AGENT_META.get(name, ""),
+                "tier": AGENT_TIERS.get(name, "OTHER"),
                 "supports_stealth": domain in ("red", "purple"),
             })
     return result
-
-
-def _tail_jsonl(path: Path, limit: int) -> list[dict]:
-    """Last `limit` parsed JSON objects from a JSONL file. Skips bad lines."""
-    if not path.exists():
-        return []
-    out: list[dict] = []
-    for line in path.read_text(errors="replace").splitlines()[-limit:]:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
 
 
 class DashboardData:

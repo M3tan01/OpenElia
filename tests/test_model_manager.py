@@ -204,6 +204,51 @@ class TestGetClientConfig:
             cfg = ModelManager.get_client_config(brain_tier="expensive")
         assert cfg["base_url"] == "https://custom.proxy.com/v1"
 
+    def test_google_provider_accepts_gemini_api_key_alias(self):
+        """GEMINI_API_KEY resolves the google provider when GOOGLE_API_KEY is absent."""
+        from model_manager import ModelManager
+        ModelManager.set_cloud_model("google", "gemini-1.5-pro")
+        # Only GEMINI_API_KEY is set; GOOGLE_API_KEY is absent
+        secrets = {"GEMINI_API_KEY": "AIza-legacy-key"}
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret(secrets)):
+            cfg = ModelManager.get_client_config(brain_tier="expensive")
+        assert cfg["api_key"] == "AIza-legacy-key"
+        assert cfg["model"]   == "gemini-1.5-pro"
+
+    def test_google_provider_prefers_google_api_key_over_gemini_alias(self):
+        """GOOGLE_API_KEY takes precedence when both keys are set."""
+        from model_manager import ModelManager
+        ModelManager.set_cloud_model("google", "gemini-1.5-pro")
+        secrets = {
+            "GOOGLE_API_KEY": "AIza-canonical",
+            "GEMINI_API_KEY": "AIza-legacy-key",
+        }
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret(secrets)):
+            cfg = ModelManager.get_client_config(brain_tier="expensive")
+        assert cfg["api_key"] == "AIza-canonical"
+
+    def test_gemini_alias_does_not_affect_other_providers(self):
+        """GEMINI_API_KEY must not bleed into openai or anthropic resolution."""
+        from model_manager import ModelManager
+        ModelManager.set_cloud_model("openai", "gpt-4o")
+        # Only GEMINI_API_KEY set — openai has no canonical key, so should fall back to "ollama"
+        secrets = {"GEMINI_API_KEY": "AIza-should-not-be-used"}
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret(secrets)):
+            cfg = ModelManager.get_client_config(brain_tier="expensive")
+        assert cfg["api_key"] == "ollama"
+
+    def test_gemini_alias_does_not_shadow_canonical_openai_key(self):
+        """A set GEMINI_API_KEY must not override openai's own canonical key."""
+        from model_manager import ModelManager
+        ModelManager.set_cloud_model("openai", "gpt-4o")
+        secrets = {
+            "OPENAI_API_KEY": "sk-real",
+            "GEMINI_API_KEY": "AIza-should-not-be-used",
+        }
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret(secrets)):
+            cfg = ModelManager.get_client_config(brain_tier="expensive")
+        assert cfg["api_key"] == "sk-real"
+
 
 # ---------------------------------------------------------------------------
 # list_local_models (Ollama tag detection)
@@ -270,34 +315,32 @@ class TestListLocalModels:
 
 
 # ---------------------------------------------------------------------------
-# LLMClient
+# ModelManager.create_client (canonical LLM client factory)
 # ---------------------------------------------------------------------------
 
-class TestLLMClient:
+class TestCreateClient:
     def test_create_returns_client_and_model(self):
-        from llm_client import LLMClient
+        from model_manager import ModelManager
         with patch("secret_store.SecretStore.get_secret", return_value=None):
-            client, model, is_local = LLMClient.create(brain_tier="local")
+            client, model, is_local = ModelManager.create_client(brain_tier="local")
         assert model == "llama3.1:8b"
         assert hasattr(client, "chat")
         assert is_local is True
 
     def test_create_expensive_returns_cloud_model(self, isolated_config):
-        from llm_client import LLMClient
         from model_manager import ModelManager
         ModelManager.set_cloud_model("openai", "gpt-4o")
         secrets = {"OPENAI_API_KEY": "sk-test"}
         with patch("secret_store.SecretStore.get_secret", side_effect=lambda k: secrets.get(k)):
-            client, model, is_local = LLMClient.create(brain_tier="expensive")
+            client, model, is_local = ModelManager.create_client(brain_tier="expensive")
         assert model == "gpt-4o"
         assert is_local is False
 
     def test_create_hybrid_respects_agent_name(self, isolated_config):
-        from llm_client import LLMClient
         from model_manager import ModelManager
         ModelManager.set_agent_override("Reporter", "openai", "gpt-4o-mini")
         secrets = {"OPENAI_API_KEY": "sk-test"}
         with patch("secret_store.SecretStore.get_secret", side_effect=lambda k: secrets.get(k)):
-            _, model, is_local = LLMClient.create(brain_tier="local", agent_name="Reporter")
+            _, model, is_local = ModelManager.create_client(brain_tier="local", agent_name="Reporter")
         assert model == "gpt-4o-mini"
         assert is_local is False

@@ -295,7 +295,7 @@ def test_terminate_marks_inactive_and_preserves_history(client, state_dir, auth)
     assert after[eid]["is_active"] is False
 
 
-def test_terminate_processes_rollback_queue(client, state_dir, auth):
+def test_terminate_processes_rollback_queue(client, state_dir, roe, auth):
     """Terminate invokes the rollback queue scoped to THIS engagement.
 
     The endpoint builds a fresh StateManager, so the in-memory undo callable

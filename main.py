@@ -891,13 +891,13 @@ async def cmd_doctor(args) -> None:
         results.add_row("Engagement DB", "[red]FAIL[/red]", f"Database corrupt or missing: {str(e)}")
 
     # 3. Check API Connectivity
-    keys_to_check = ["GEMINI_API_KEY", "OLLAMA_BASE_URL"]
+    keys_to_check = ["GOOGLE_API_KEY", "OLLAMA_BASE_URL"]
     for key in keys_to_check:
         val = SecretStore.get_secret(key)
         if val:
             results.add_row(f"API Key: {key}", "[green]PASS[/green]", "Verified in secure vault")
         else:
-            results.add_row(f"API Key: {key}", "[yellow]WARN[/yellow]", "Missing - Run 'gemini --resume' to bootstrap")
+            results.add_row(f"API Key: {key}", "[yellow]WARN[/yellow]", "Missing - Store with: python main.py model auth google <YOUR_KEY>")
 
     # 4. Check Sterile Image
     if sys.platform != "win32":

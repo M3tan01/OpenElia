@@ -164,10 +164,10 @@ class _FakeClient:
 
 
 def _patch_llm(monkeypatch, content):
-    from adversary_forge import LLMClient  # re-exported for patching
+    from adversary_forge import ModelManager  # re-exported for patching
     monkeypatch.setattr(
-        LLMClient, "create",
-        staticmethod(lambda **kw: (_FakeClient(content), "fake-model", True)),
+        ModelManager, "create_client",
+        classmethod(lambda cls, **kw: (_FakeClient(content), "fake-model", True)),
     )
 
 

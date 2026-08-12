@@ -203,7 +203,7 @@ export function StixHuntView() {
 
   return (
     <Panel
-      title="Threat Hunt (STIX)"
+      title="IOC Parser (STIX / IOC)"
       className="h-full"
       right={
         brief ? (

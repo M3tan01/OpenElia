@@ -29,7 +29,7 @@ export function AttackGraph() {
 
   return (
     <Panel
-      title="Attack Surface"
+      title="Attack Surface Graph"
       right={
         <>
           {error && <Badge ok={false}>offline</Badge>}

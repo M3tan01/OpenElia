@@ -46,6 +46,7 @@ class RunManager:
         apt_profile: str | None = None,
         state_dir: str = "state",
         agent: str | None = None,
+        callback_url: str | None = None,
     ) -> str:
         if self.active():
             raise RuntimeError("a run is already active")
@@ -61,6 +62,7 @@ class RunManager:
             "finished": None,
             "result": None,
             "error": None,
+            "callback_url": callback_url,
         }
         self._active = run_id
         t = asyncio.create_task(
@@ -92,6 +94,42 @@ class RunManager:
                 rec["status"] = "cancelled"
             if self._active == run_id:
                 self._active = None
+            if rec.get("callback_url"):
+                nt = asyncio.create_task(self._notify(rec))
+                self._tasks.add(nt)
+                nt.add_done_callback(self._tasks.discard)
+
+    async def _notify(self, rec: dict[str, Any]) -> None:
+        """Fire-and-forget completion POST to an n8n callback URL. Failures are
+        logged, not raised — a broken webhook must never affect run status."""
+        import httpx
+
+        from core.webhook import validate_webhook_url
+        from security_manager import PrivacyGuard
+
+        url = rec["callback_url"]
+        try:
+            validate_webhook_url(url, "N8N_WEBHOOK_ALLOWLIST")
+        except ValueError as exc:
+            print(f"n8n callback SSRF guard rejected {url}: {exc}")
+            return
+
+        payload = PrivacyGuard.redact({
+            "run_id": rec["run_id"],
+            "domain": rec["domain"],
+            "task": rec["task"],
+            "targets": rec["targets"],
+            "status": rec["status"],
+            "result": rec["result"],
+            "error": rec["error"],
+            "finished": rec["finished"],
+        })
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, timeout=10)
+                response.raise_for_status()
+        except Exception as exc:
+            print(f"n8n callback POST to {url} failed: {type(exc).__name__}: {exc}")
 
     async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None) -> dict:
         """Actual engine call. Isolated for mocking in tests."""

@@ -56,13 +56,13 @@ def verify(token: str) -> bool:
 
 async def require_token(authorization: str | None = Header(default=None)) -> None:
     """FastAPI dependency: 401 unless a valid bearer token is presented."""
+    provided = _token_from_header(authorization)
     expected = current_token()
     if not expected:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="dashboard token not configured",
         )
-    provided = _token_from_header(authorization)
     if not hmac.compare_digest(provided, expected):
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,

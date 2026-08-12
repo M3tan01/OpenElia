@@ -16,7 +16,7 @@ const NAV: NavGroup[] = [
       { id: "findings", label: "Findings" },
       { id: "agents", label: "Agent Activity" },
       { id: "agents-roster", label: "Agents" },
-      { id: "graph", label: "Attack Graph" },
+      { id: "graph", label: "Attack Surface Graph" },
       { id: "apt", label: "APT Profiles" },
       { id: "forge", label: "Adversary Forge" },
     ],
@@ -26,7 +26,7 @@ const NAV: NavGroup[] = [
     views: [
       { id: "audit", label: "Audit Timeline" },
       { id: "cost", label: "Cost & MITRE" },
-      { id: "stix", label: "Threat Hunt" },
+      { id: "stix", label: "IOC Parser" },
       { id: "cleanup", label: "Rollback Queue" },
     ],
   },
@@ -55,7 +55,6 @@ export function Sidebar({ activeView, onSelect }: {
     <aside className="bg-surface/80 border-r border-line h-full w-52 flex flex-col backdrop-blur-[1px]">
       <div className="px-3 py-2 border-b border-line">
         <h3 className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-amber glow">
-          <span className="text-amber/60">▸</span>
           VIEWS
         </h3>
       </div>

@@ -1,5 +1,5 @@
 """
-core/mcp_gateway.py — Gated query abstraction for MCP and LSP servers.
+core/mcp_gateway.py — Gated query abstraction for MCP servers.
 
 Rules:
   1. Only AgentTier.RECON and AgentTier.ANALYSIS agents may issue queries.
@@ -19,8 +19,6 @@ _SERVER_REGISTRY: dict[str, str] = {
     "siem":            "mcp_servers.siem.server",
     "blue_telemetry":  "mcp_servers.blue_telemetry.server",
     "blue_remediate":  "mcp_servers.blue_remediate.server",
-    # NOTE: "lsp" is intentionally absent — core.lsp_server is a pygls server
-    # (no handle_call_tool). Agents interact with LSP via core.lsp_server directly.
     "atomic":          "mcp_servers.atomic.server",
     "graph":           "mcp_servers.graph.server",
     "memory":          "mcp_servers.memory.server",
@@ -34,20 +32,32 @@ _ALLOWED_TIERS = {AgentTier.RECON, AgentTier.ANALYSIS}
 
 
 class GatewayAccessError(PermissionError):
-    """Raised when an agent tier is not permitted to query MCP/LSP servers."""
+    """Raised when an agent tier is not permitted to query MCP servers."""
 
 
 class MCPGateway:
     """
-    Token-limited MCP/LSP query gateway.
+    Token-limited MCP query gateway.
 
     Usage:
-        gw = MCPGateway(max_tokens=500)
-        summary = await gw.query("siem", "get_alerts", {"hours": 24}, caller_tier=AgentTier.ANALYSIS)
+        gw = MCPGateway(max_tokens=500, caller_tier=agent.tier)
+        summary = await gw.query("siem", "get_alerts", {"hours": 24})
+
+    The caller's tier is bound at construction from the requesting agent's real
+    ``self.tier`` (assigned by the Orchestrator), NOT supplied per-call. This makes
+    the access gate structural: a call site cannot self-declare a permitted tier to
+    bypass the EXECUTION block.
     """
 
-    def __init__(self, max_tokens: int = 500, llm_client=None, llm_model: str | None = None) -> None:
+    def __init__(
+        self,
+        max_tokens: int = 500,
+        caller_tier: AgentTier | None = None,
+        llm_client=None,
+        llm_model: str | None = None,
+    ) -> None:
         self.max_tokens = max_tokens
+        self._caller_tier = caller_tier
         self._llm_client = llm_client
         self._llm_model = llm_model
 
@@ -56,28 +66,35 @@ class MCPGateway:
         server_name: str,
         tool_name: str,
         arguments: dict,
-        caller_tier: AgentTier,
     ) -> str:
         """
-        Execute a tool call against a named MCP/LSP server.
+        Execute a tool call against a named MCP server.
 
         Args:
             server_name:  Key in _SERVER_REGISTRY ("siem", "blue_telemetry", etc.)
             tool_name:    Name of the MCP tool to call.
             arguments:    Tool input as a plain dict.
-            caller_tier:  AgentTier of the requesting agent (enforced gate).
+
+        The gate is enforced against ``self._caller_tier`` (bound at construction).
 
         Returns:
             A string response, guaranteed to be ≤ max_tokens words.
 
         Raises:
-            GatewayAccessError: If caller_tier is AgentTier.EXECUTION.
+            GatewayAccessError: If the bound caller tier is EXECUTION or unset (None).
+                                Fails closed — an unbound tier is never permitted.
             ValueError:         If server_name is not in the registry.
         """
-        if caller_tier not in _ALLOWED_TIERS:
+        if self._caller_tier not in _ALLOWED_TIERS:
+            descr = (
+                f"Tier {self._caller_tier.value} ({self._caller_tier.name})"
+                if self._caller_tier is not None
+                else "An agent with no assigned tier (None)"
+            )
             raise GatewayAccessError(
-                f"Tier {caller_tier.value} ({caller_tier.name}) agents are not permitted "
-                "to query MCP/LSP servers directly. Request a summary from a Tier-1/2 agent."
+                f"{descr} is not permitted to query MCP servers directly. "
+                "The gateway must be constructed with the agent's RECON/ANALYSIS tier "
+                "(caller_tier=self.tier). EXECUTION agents request a summary from a Tier-1/2 agent."
             )
 
         if server_name not in _SERVER_REGISTRY:
@@ -105,8 +122,7 @@ class MCPGateway:
         decorator returns the original function unchanged, leaving it accessible
         at module scope as `handle_call_tool`.
 
-        Raises RuntimeError if the module does not expose `handle_call_tool`
-        (e.g. the LSP server, which uses pygls instead of mcp.server.Server).
+        Raises RuntimeError if the module does not expose `handle_call_tool`.
         """
         import importlib
 
@@ -157,8 +173,8 @@ class MCPGateway:
                 max_tokens=word_limit * 2,
             )
         else:
-            from llm_client import LLMClient
-            client, model, _ = LLMClient.create(brain_tier="local")
+            from model_manager import ModelManager
+            client, model, _ = ModelManager.create_client(brain_tier="local")
             async with client:
                 response = await client.chat.completions.create(
                     model=model,

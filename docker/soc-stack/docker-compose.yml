@@ -1,0 +1,217 @@
+services:
+  # ---------------------------------------------------------------------
+  # MISP (threat intel platform)
+  # Wiring adapted from _vendor/misp-docker-src/docker-compose.yml
+  # ---------------------------------------------------------------------
+  db:
+    image: mariadb:10.11
+    container_name: soc-misp-db
+    restart: unless-stopped
+    environment:
+      - "MYSQL_USER=${MYSQL_USER:-misp}"
+      - "MYSQL_PASSWORD=${MYSQL_PASSWORD:?set in .env}"
+      - "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?set in .env}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE:-misp}"
+      - "TZ=${TZ:-UTC}"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    cap_add:
+      - SYS_NICE
+    healthcheck:
+      test: mysqladmin --user=$$MYSQL_USER --password=$$MYSQL_PASSWORD status
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - soc-stack
+
+  redis:
+    image: valkey/valkey:7.2
+    container_name: soc-misp-redis
+    restart: unless-stopped
+    command: valkey-server --requirepass "${REDIS_PASSWORD:-redispassword}"
+    environment:
+      - "TZ=${TZ:-UTC}"
+    volumes:
+      - cache_data:/data
+    healthcheck:
+      test: valkey-cli -a "${REDIS_PASSWORD:-redispassword}" ping | grep -q PONG || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - soc-stack
+
+  misp-modules:
+    image: ghcr.io/misp/misp-docker/misp-modules:v3.0.9
+    container_name: soc-misp-modules
+    restart: unless-stopped
+    environment:
+      - "TZ=${TZ:-UTC}"
+    healthcheck:
+      test: "/bin/bash -c '</dev/tcp/localhost/6666'"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - soc-stack
+
+  mail:
+    image: ghcr.io/egos-tech/smtp:1.1.3
+    container_name: soc-misp-mail
+    restart: unless-stopped
+    environment:
+      - "SMARTHOST_ADDRESS=${SMARTHOST_ADDRESS:-}"
+      - "SMARTHOST_PORT=${SMARTHOST_PORT:-}"
+      - "SMARTHOST_USER=${SMARTHOST_USER:-}"
+      - "SMARTHOST_PASSWORD=${SMARTHOST_PASSWORD:-}"
+      - "SMARTHOST_ALIASES=${SMARTHOST_ALIASES:-}"
+      - "TZ=${TZ:-UTC}"
+    networks:
+      - soc-stack
+
+  misp-core:
+    image: ghcr.io/misp/misp-docker/misp-core:v2.5.44
+    container_name: soc-misp-core
+    restart: unless-stopped
+    cap_add:
+      - AUDIT_WRITE
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      misp-modules:
+        condition: service_healthy
+    healthcheck:
+      test: curl -ks ${BASE_URL:-https://localhost}/users/heartbeat > /dev/null || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 60s
+    ports:
+      - "${CORE_HTTP_PORT:-8080}:80"
+      - "${CORE_HTTPS_PORT:-8443}:443"
+    volumes:
+      - misp_configs:/var/www/MISP/app/Config
+      - misp_logs:/var/www/MISP/app/tmp/logs
+      - misp_files:/var/www/MISP/app/files
+      - misp_ssl:/etc/nginx/certs
+      - misp_gnupg:/var/www/MISP/.gnupg
+    environment:
+      - "BASE_URL=${BASE_URL:-https://localhost}"
+      - "DISABLE_IPV6=${DISABLE_IPV6:-true}"
+      - "DISABLE_SSL_REDIRECT=${DISABLE_SSL_REDIRECT:-true}"
+      - "ENABLE_BACKGROUND_UPDATES=${ENABLE_BACKGROUND_UPDATES:-true}"
+      - "ENCRYPTION_KEY=${ENCRYPTION_KEY:?set in .env}"
+      - "SALT=${SALT:?set in .env}"
+      - "UUID=${MISP_UUID:?set in .env}"
+      - "ADMIN_EMAIL=${ADMIN_EMAIL:-admin@admin.test}"
+      - "MISP_CONTACT=${MISP_CONTACT:-admin@admin.test}"
+      - "MISP_EMAIL=${MISP_EMAIL:-admin@admin.test}"
+      - "ADMIN_PASSWORD=${ADMIN_PASSWORD:?set in .env}"
+      - "ADMIN_KEY=${ADMIN_KEY:?set in .env}"
+      - "ADMIN_ORG=${ADMIN_ORG:-ORGNAME}"
+      - "GPG_PASSPHRASE=${GPG_PASSPHRASE:?set in .env}"
+      - "TZ=${TZ:-UTC}"
+      - "MYSQL_HOST=db"
+      - "MYSQL_USER=${MYSQL_USER:-misp}"
+      - "MYSQL_PASSWORD=${MYSQL_PASSWORD:?set in .env}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE:-misp}"
+      - "REDIS_HOST=redis"
+      - "REDIS_PASSWORD=${REDIS_PASSWORD:-redispassword}"
+    networks:
+      - soc-stack
+
+  # ---------------------------------------------------------------------
+  # TheHive (case management) — local-storage shape from
+  # _vendor/thehive-templates-src/docker/thehive5-minimal/docker-compose.yml
+  # ---------------------------------------------------------------------
+  thehive:
+    image: strangebee/thehive:5.7.5
+    container_name: soc-thehive
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=1G
+    volumes:
+      - thehive_etc:/etc/thehive
+      - thehive_db:/opt/thp/thehive/db
+      - thehive_index:/opt/thp/thehive/index
+      - thehive_data:/opt/thp/thehive/data
+      - thehive_logs:/var/log/thehive
+    networks:
+      - soc-stack
+
+  # ---------------------------------------------------------------------
+  # Cortex (observable analysis) — wiring adapted from
+  # _vendor/thehive-templates-src/docker/thehive35-cortex3-es7/docker-compose.yml
+  # Image bumped to verified-current 4.1.0; docker.sock intentionally NOT
+  # mounted (Cortex analyzers must not control the Docker daemon).
+  # ---------------------------------------------------------------------
+  elasticsearch-cortex:
+    image: elasticsearch:7.11.1
+    container_name: soc-elasticsearch-cortex
+    restart: unless-stopped
+    environment:
+      - http.host=0.0.0.0
+      - discovery.type=single-node
+      - cluster.name=cortex
+      - script.allowed_types= inline
+      - thread_pool.search.queue_size=100000
+      - thread_pool.write.queue_size=10000
+      - gateway.recover_after_nodes=1
+      - xpack.security.enabled=false
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - cortex_es_data:/usr/share/elasticsearch/data
+      - cortex_es_logs:/usr/share/elasticsearch/logs
+    networks:
+      - soc-stack
+
+  cortex:
+    image: thehiveproject/cortex:4.1.0
+    container_name: soc-cortex
+    restart: unless-stopped
+    environment:
+      - "CORTEX_SECRET_KEY=${CORTEX_SECRET_KEY:?set in .env}"
+    depends_on:
+      - elasticsearch-cortex
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./cortex/application.conf:/etc/cortex/application.conf:ro
+      - cortex_jobs:/tmp/cortex-jobs
+    networks:
+      - soc-stack
+
+networks:
+  soc-stack:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  cache_data:
+  misp_configs:
+  misp_logs:
+  misp_files:
+  misp_ssl:
+  misp_gnupg:
+  thehive_etc:
+  thehive_db:
+  thehive_index:
+  thehive_data:
+  thehive_logs:
+  cortex_es_data:
+  cortex_es_logs:
+  cortex_jobs:

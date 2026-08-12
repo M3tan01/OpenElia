@@ -373,3 +373,20 @@ def test_agent_registry_matches_orchestrator_tier_lists():
     orch_blue = {name for _tier, name in Orchestrator._BLUE_AGENTS}
     assert set(AGENT_REGISTRY["red"]) == orch_red
     assert set(AGENT_REGISTRY["blue"]) == orch_blue
+
+
+def test_agent_tiers_match_orchestrator_tier_assignments():
+    """Lock the tier contract: AGENT_TIERS (surfaced on /api/agents and consumed
+    by the dashboard's Agent Activity view) must equal the tier each agent is
+    actually enqueued at by the orchestrator. reporter_agent is scheduled at
+    EXECUTION outside the red/blue lists. Otherwise the UI would group an agent
+    under a tier it never runs in."""
+    from orchestrator import Orchestrator
+    from webdash.data import AGENT_TIERS
+
+    orch_tiers: dict[str, str] = {}
+    for tier, name in (*Orchestrator._RED_AGENTS, *Orchestrator._BLUE_AGENTS):
+        orch_tiers[name] = tier.name
+    orch_tiers["reporter_agent"] = "EXECUTION"
+
+    assert AGENT_TIERS == orch_tiers

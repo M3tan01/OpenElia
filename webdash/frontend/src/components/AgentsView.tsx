@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { AgentInfo, AgentsResp, ReportBriefResp, RunResp, apiGet, apiPost } from "../api";
-import { usePoll } from "../usePoll";
+import { AgentInfo, ReportBriefResp, RunResp, apiPost } from "../api";
+import { useAgentsRoster } from "../useAgentsRoster";
 import { agentDisplayName } from "../agentNames";
 import { Badge, Panel } from "./Panel";
 
@@ -249,12 +249,11 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
 // ── main view ────────────────────────────────────────────────────────────────
 
 export function AgentsView() {
-  const { data: agentsData, error: err, loading } = usePoll<AgentsResp>(
-    () => apiGet<AgentsResp>("/api/agents"),
-    30000,
-  );
+  const { data: agentsData, error: err, loading } = useAgentsRoster();
   const agents: AgentInfo[] = agentsData?.agents ?? [];
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // which agent is selected within each domain (by agent.name)
+  const [selected, setSelected] = useState<Record<string, string>>({});
 
   const toggle = (domain: string) =>
     setCollapsed((c) => ({ ...c, [domain]: !c[domain] }));
@@ -290,6 +289,13 @@ export function AgentsView() {
           const list = grouped[domain] ?? [];
           if (list.length === 0) return null;
           const isCollapsed = collapsed[domain] ?? false;
+          // default selection = first agent in the domain
+          const selectedName =
+            selected[domain] && list.some((a) => a.name === selected[domain])
+              ? selected[domain]
+              : list[0].name;
+          const selectedAgent =
+            list.find((a) => a.name === selectedName) ?? list[0];
           return (
             <section key={domain}>
               {/* domain header — click to collapse/expand */}
@@ -312,13 +318,30 @@ export function AgentsView() {
                 </span>
               </button>
               {!isCollapsed && (
-                <div
-                  id={`agents-${domain}`}
-                  className="grid grid-cols-1 xl:grid-cols-2 gap-3"
-                >
-                  {list.map((a) => (
-                    <AgentCard key={a.name} agent={a} />
-                  ))}
+                <div id={`agents-${domain}`} className="space-y-2">
+                  {/* agent picker — choose one instead of scrolling the stack */}
+                  <label className="flex items-center gap-2">
+                    <span className="font-display text-[10px] uppercase tracking-[0.15em] text-dim shrink-0">
+                      Agent
+                    </span>
+                    <select
+                      value={selectedName}
+                      onChange={(e) =>
+                        setSelected((s) => ({ ...s, [domain]: e.target.value }))
+                      }
+                      aria-label={`select ${domainLabel(domain)} agent`}
+                      className="bg-void border border-line px-2 py-1 text-xs text-slate-200 font-mono focus:border-amber focus:outline-none w-full"
+                    >
+                      {list.map((a) => (
+                        <option key={a.name} value={a.name}>
+                          {agentDisplayName(a.name)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {/* only the chosen agent's card renders; key forces fresh
+                      form state when switching agents */}
+                  <AgentCard key={selectedAgent.name} agent={selectedAgent} />
                 </div>
               )}
             </section>

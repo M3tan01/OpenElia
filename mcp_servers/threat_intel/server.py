@@ -15,6 +15,14 @@ from secret_store import SecretStore
 
 server = Server("mcp-threat-intel")
 
+
+async def _get_json(client: httpx.AsyncClient, url: str, **kwargs) -> dict:
+    """Shared GET + JSON decode. Raises on HTTP/network error — each call site
+    formats its own error string, since whether str(e) is safe to surface
+    depends on whether the API key rides in the URL (query params) or not."""
+    response = await client.get(url, **kwargs)
+    return response.json()
+
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
     return [
@@ -40,8 +48,8 @@ async def handle_list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="query_graynoise",
-            description="Check if an IP address is known internet noise or a targeted threat.",
+            name="query_abuseipdb",
+            description="Check an IP address against AbuseIPDB for abuse confidence score and report history (free tier).",
             inputSchema={"type": "object", "properties": {"ip": {"type": "string"}}, "required": ["ip"]},
         ),
         types.Tool(
@@ -69,10 +77,12 @@ async def handle_call_tool(
             api_key = SecretStore.get_secret("SHODAN_API_KEY")
             if not api_key: return [types.TextContent(type="text", text="Error: Shodan key missing.")]
             try:
-                response = await client.get(f"https://api.shodan.io/shodan/host/{ip}", params={"key": api_key})
-                return [types.TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                data = await _get_json(client, f"https://api.shodan.io/shodan/host/{ip}", params={"key": api_key})
+                return [types.TextContent(type="text", text=json.dumps(data, indent=2))]
             except Exception as e:
-                return [types.TextContent(type="text", text=f"Shodan error: {str(e)}")]
+                # Key rides in query params; emit the exception TYPE only so a
+                # network error message can't echo the URL (and the API key).
+                return [types.TextContent(type="text", text=f"Shodan error: {type(e).__name__}")]
 
         elif name == "query_virustotal":
             resource = arguments["resource"]
@@ -81,24 +91,38 @@ async def handle_call_tool(
             try:
                 headers = {"x-apikey": api_key}
                 # Check if it's an IP, domain, or hash (simplified)
-                response = await client.get(f"https://www.virustotal.com/api/v3/search?query={resource}", headers=headers)
-                return [types.TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                data = await _get_json(client, f"https://www.virustotal.com/api/v3/search?query={resource}", headers=headers)
+                return [types.TextContent(type="text", text=json.dumps(data, indent=2))]
             except Exception as e:
                 return [types.TextContent(type="text", text=f"VirusTotal error: {str(e)}")]
 
-        elif name == "query_graynoise":
+        elif name == "query_abuseipdb":
             ip = arguments["ip"]
-            api_key = SecretStore.get_secret("GRAYNOISE_API_KEY")
-            if not api_key: return [types.TextContent(type="text", text="Error: GrayNoise key missing.")]
+            api_key = SecretStore.get_secret("ABUSEIPDB_API_KEY")
+            if not api_key: return [types.TextContent(type="text", text="Error: AbuseIPDB key missing.")]
             try:
-                headers = {"key": api_key}
-                response = await client.get(f"https://api.graynoise.io/v3/community/{ip}", headers=headers)
-                return [types.TextContent(type="text", text=json.dumps(response.json(), indent=2))]
+                headers = {"Key": api_key, "Accept": "application/json"}
+                data = await _get_json(
+                    client,
+                    "https://api.abuseipdb.com/api/v2/check",
+                    headers=headers,
+                    params={"ipAddress": ip, "maxAgeInDays": 90},
+                )
+                return [types.TextContent(type="text", text=json.dumps(data, indent=2))]
             except Exception as e:
-                return [types.TextContent(type="text", text=f"GrayNoise error: {str(e)}")]
+                return [types.TextContent(type="text", text=f"AbuseIPDB error: {str(e)}")]
 
         elif name == "search_exploits":
-            return [types.TextContent(type="text", text="Simulated exploit search.")]
+            query = arguments["query"]
+            api_key = SecretStore.get_secret("SHODAN_API_KEY")
+            if not api_key: return [types.TextContent(type="text", text="Error: Shodan key missing.")]
+            try:
+                data = await _get_json(client, "https://exploits.shodan.io/api/search", params={"query": query, "key": api_key})
+                return [types.TextContent(type="text", text=json.dumps(data, indent=2))]
+            except Exception as e:
+                # Key rides in query params; emit the exception TYPE only so a
+                # network error message can't echo the URL (and the API key).
+                return [types.TextContent(type="text", text=f"Exploit search error: {type(e).__name__}")]
 
     return []
 

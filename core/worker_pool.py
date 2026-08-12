@@ -4,7 +4,11 @@ core/worker_pool.py — Tier-stratified async worker pool.
 Design:
   - Three independent asyncio.Queue instances, one per AgentTier.
   - N worker coroutines per tier run concurrently (default=3 to avoid LLM thrashing).
-  - Failed tasks are re-enqueued up to MAX_RETRIES times, then marked "error".
+  - Retry semantics: if the handler RAISES, the task is re-enqueued up to
+    MAX_RETRIES times, then marked "error". A handler that catches its own
+    exceptions and returns an error AgentResult (as orchestrator._dispatch_task
+    deliberately does — see test_dispatch_task_error) never triggers this pool
+    retry; that path relies on the agent's own reflective-retry loop instead.
   - The pool is single-use: call run_until_complete() once, then discard.
 """
 

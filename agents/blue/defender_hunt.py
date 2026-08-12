@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from agents.base_agent import BaseAgent, _DEFAULT_MODEL
+from core.schemas import AgentTier
 from state_manager import StateManager
 
 _BASE_PROMPT = """You are defender_hunt, the Proactive Threat Hunter of OpenElia.
@@ -50,8 +51,13 @@ class DefenderHunt(BaseAgent):
     MODEL = _DEFAULT_MODEL
     MAX_TOKENS = 8096
 
-    def __init__(self, state_manager: StateManager, brain_tier: str = "local"):
-        super().__init__(state_manager, brain_tier=brain_tier)
+    def __init__(
+        self,
+        state_manager: StateManager,
+        brain_tier: str = "local",
+        tier: AgentTier | None = None,
+    ):
+        super().__init__(state_manager, brain_tier=brain_tier, tier=tier)
 
     def _get_hunt_tools(self) -> list[dict]:
         return [

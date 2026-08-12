@@ -173,6 +173,26 @@ class ModelManager:
         SecretStore.set_secret(key_name, api_key)
 
     # ------------------------------------------------------------------ #
+    # Key resolution helper                                               #
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    def _provider_api_key(cls, provider: str, key_name: str) -> str | None:
+        """Resolve the API key for a provider from the OS keychain.
+
+        For the ``google`` provider, ``GEMINI_API_KEY`` is accepted as a
+        legacy alias when ``GOOGLE_API_KEY`` is not set, so that users who
+        bootstrapped with the old name are not silently broken.
+
+        Returns the first non-empty secret found, or ``None``.
+        """
+        from secret_store import SecretStore
+        value = SecretStore.get_secret(key_name)
+        if not value and provider == "google":
+            value = SecretStore.get_secret("GEMINI_API_KEY")
+        return value
+
+    # ------------------------------------------------------------------ #
     # Client resolution                                                    #
     # ------------------------------------------------------------------ #
 
@@ -234,7 +254,7 @@ class ModelManager:
             model     = cfg.get("cloud_model", "gpt-4o")
             key_name  = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
             api_key   = (
-                SecretStore.get_secret(key_name)
+                cls._provider_api_key(provider, key_name)
                 or SecretStore.get_secret("EXPENSIVE_BRAIN_KEY")
                 or "ollama"
             )
@@ -255,6 +275,27 @@ class ModelManager:
         return res
 
     @classmethod
+    def create_client(
+        cls,
+        brain_tier: str = "local",
+        agent_name: str | None = None,
+    ):
+        """
+        Canonical LLM client factory. Returns (AsyncOpenAI, model_name, is_local).
+
+        Single door to the model subsystem: resolves config via get_client_config
+        and builds the OpenAI-compatible client. Callers never need to know whether
+        they're hitting Ollama, OpenAI, Anthropic, or Google.
+
+            client, model, is_local = ModelManager.create_client(brain_tier="expensive", agent_name="Reporter")
+            response = await client.chat.completions.create(model=model, ...)
+        """
+        from openai import AsyncOpenAI
+        cfg = cls.get_client_config(brain_tier=brain_tier, agent_name=agent_name)
+        client = AsyncOpenAI(base_url=cfg["base_url"], api_key=cfg["api_key"])
+        return client, cfg["model"], cfg.get("is_local", False)
+
+    @classmethod
     def _resolve(cls, provider: str, model: str) -> dict:
         from secret_store import SecretStore
         if provider in ("local", "ollama"):
@@ -269,7 +310,7 @@ class ModelManager:
             }
         key_name = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
         api_key  = (
-            SecretStore.get_secret(key_name)
+            cls._provider_api_key(provider, key_name)
             or SecretStore.get_secret("EXPENSIVE_BRAIN_KEY")
             or "ollama"
         )
