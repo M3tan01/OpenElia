@@ -140,7 +140,18 @@ class Orchestrator:
             force_agent=force_agent,
         )
 
+        # Purple/blue runs dispatch a blue batch; gate the coverage race-status
+        # marker to those domains so an independent red run never falsely marks
+        # blue "complete" (which would turn pending TTPs into false misses).
+        blue_batch = domain in ("blue", "purple")
+        if blue_batch:
+            self.state.set_metadata("blue_run_status", "running")
+
         results = await self._pool.run_until_complete(self._dispatch_task)
+
+        if blue_batch:
+            self.state.set_metadata("blue_run_status", "complete")
+
         self._print_summary(results)
         return routing
 

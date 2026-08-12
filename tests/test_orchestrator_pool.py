@@ -164,6 +164,42 @@ async def test_orchestrator_purple_enqueues_both_red_and_blue(tmp_path):
     assert len(blue_tasks) == 4
 
 
+async def test_purple_run_marks_blue_run_status_complete(tmp_path):
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("10.0.0.1", "single-host")
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "purple", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.RBACManager") as mock_rbac, \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_rbac.enforce_red_team_auth.return_value = True
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock()
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("purple team exercise", targets=["10.0.0.1"])
+    assert sm.get_metadata("blue_run_status") == "complete"
+
+
+async def test_red_only_run_does_not_mark_blue_run_status(tmp_path):
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("10.0.0.1", "single-host")
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "red", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.RBACManager") as mock_rbac, \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_rbac.enforce_red_team_auth.return_value = True
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock()
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("scan target", targets=["10.0.0.1"])
+    assert sm.get_metadata("blue_run_status") is None
+
+
 async def test_dispatch_task_success(tmp_path):
     """_dispatch_task wraps a successful _run_agent call in AgentResult(status=success)."""
     from state_manager import StateManager
