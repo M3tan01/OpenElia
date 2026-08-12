@@ -237,11 +237,36 @@ roe.json
 # Local MCP configuration (contains absolute paths)
 .mcp.json
 
-# pipeline staging scratch (Claude<->Python handoff)
-pipeline/staging/
-
 # webdash build artifacts (regenerate with: cd webdash/frontend && npm run build)
 webdash/static/
 webdash/frontend/node_modules/
 webdash/frontend/dist/
 webdash/frontend/*.tsbuildinfo
+
+# Local graph export artifacts
+graphify-out/
+
+# Large external data bundles — fetch locally, do not commit (see docs/SCOPE.md)
+state/enterprise-attack.json
+
+# Vendored third-party source — reference upstream, do not vendor in-tree (see docs/SCOPE.md)
+docker/soc-stack/_vendor/
+mcp_servers/misp_mcp_src/
+
+# Personal/global agent skills — not part of the OpenElia project
+.agents/
+
+# Stale duplicate assistant instructions (canonical file is CLAUDE.md)
+GEMINI.md
+
+# Generated STIX actor-TTP extract — regenerate with scripts/extract_actor_ttps.py (see docs/SCOPE.md)
+actor_ttps.json
+
+# Personal Claude Code state — not part of the project
+.claude/
+
+# Generated tailored adversary profiles (forge output); base profiles are tracked
+adversaries/tailored_*.json
+
+# Skills lockfile — regenerated locally
+skills-lock.json
