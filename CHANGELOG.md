@@ -4,7 +4,43 @@ All notable changes to the OpenElia project will be documented in this file.
 
 ## [Unreleased]
 
+### 🧹 Removed / Trimmed
+- **Removed the vestigial top-level `src/` TypeScript CLI** (`openelia-cli`). It was a
+  parallel CLI never imported by the Python engine or the web dashboard and only mirrored
+  `python main.py`. All docs (`README.md`, `COMMANDS.txt`, `setup.sh`) updated to drop it.
+- **Removed the unused LSP server** (`core/lsp_server.py`) and the `pygls` dependency
+  (from `requirements.txt` and `pyproject.toml` dev extras). The server exposed only
+  static completions and was called by no agent; it was already excluded from
+  `MCPGateway` routing.
+
+### 📝 Docs / Honesty
+- Toned down overstated marketing language across `README.md` (e.g. "Autonomous
+  Self-Healing" → retry-with-self-correction; "Subnet Swarming" → parallel per-host
+  scanning; "hardware-backed RBAC" → OS-keyring + token RBAC). Added a **Maturity &
+  requirements** section noting that the multi-operator team server is roadmap.
+- **Removed the unwired `pipeline/` subsystem** — a standalone IOC/SIEM/log mock-fetcher
+  CLI (`run_stage.py`) with no runtime importer in the engine. Never reachable from the
+  orchestrator or any agent; deleted to cut dead surface.
+- **Fixed version drift**: `pyproject.toml` (was 1.0.1) and `COMMANDS.txt` header
+  (was 1.0.4) now both read 1.0.5, matching the CHANGELOG.
+- **Corrected the `python-dotenv` record**: it is still a runtime dependency
+  (`main.py` calls `load_dotenv()`); the earlier [1.0.3] "removed" note was inaccurate.
+
 ### ✨ Features
+- **Free-tier IP reputation (threat-intel MCP)**: added `query_abuseipdb`
+  (`ABUSEIPDB_API_KEY`, `api.abuseipdb.com/api/v2/check`) to
+  `mcp_servers/threat_intel/server.py`.
+- **`search_exploits` wired live**: now queries the Shodan Exploits API
+  (`exploits.shodan.io`), reusing the existing `SHODAN_API_KEY` (was a stub returning
+  "Simulated exploit search.").
+- **TheHive live case dispatch**: `defender_res.dispatch_thehive_case` performs a real
+  async POST to `{THEHIVE_URL}/api/v1/case` (Bearer auth) when configured; non-fatal —
+  any error falls back to local SQLite. Guards malformed input and non-dict responses.
+- **SIEM `sync_audit_log` wired live**: reads the tail of `state/audit.log` (configurable
+  `limit`), PII-redacts each event via the Privacy Guard, and POSTs a batch to the
+  SSRF-allowlisted webhook (was a hardcoded success stub). Absent log handled gracefully.
+- **Configurable RoE path**: `ScopeValidator` / `enforce_security_gate` honor
+  `OPENELIA_ROE_PATH` (default `roe.json`); explicit constructor paths still win.
 - **Adversary Forge**: Generate topology- and RoE-constrained MITRE adversary
   emulation profiles from a threat-actor name. Offline `scripts/extract_actor_ttps.py`
   parses the ATT&CK STIX bundle into a committed slim `actor_ttps.json` (the only
@@ -22,11 +58,70 @@ All notable changes to the OpenElia project will be documented in this file.
     and the React **Adversary Forge** view (config workspace / live pipeline / gated footer).
   - RoE: new optional `blacklisted_techniques` field (whitelist + sentinel + `roe.example.json`).
 
+### 🐛 Fixed
+- **Cloud Google/Gemini key mismatch**: the google provider reads `GOOGLE_API_KEY`, but
+  onboarding/docs referenced `GEMINI_API_KEY`, so a user-set key was never found (silent
+  fallback to a placeholder → 401). Unified on `GOOGLE_API_KEY` with `GEMINI_API_KEY`
+  accepted as a read-side alias (`model_manager.py`, `main.py check`, `.env.example`,
+  `COMMANDS.txt`).
+- **VirusTotal IP enrichment**: `pipeline/enrichers.py` sent IPv4 IOCs to VT's
+  `/domains/{ip}` endpoint (always returned nothing). Added `query_virustotal_ip` hitting
+  the correct `/ip_addresses/{ip}` endpoint.
+- **Semantic-cache false hit / cross-engagement leak**: the agent tool loop matched the
+  cache with a `check_cache` call, then re-fetched the answer with a second **unscoped**
+  `search` that could land on a non-cache event and return `""` as a "hit". Replaced with a
+  single `VectorManager.get_cached_response` scoped to `type=="llm_cache"` that reads the
+  response straight from metadata (empty/missing → miss, not `""`). Fingerprint is now
+  prefixed with `active_engagement_id`, so one engagement's analysis can't be served to
+  another on a collision (`vector_manager.py`, `agents/base_agent.py`).
+- **Wasted enrichment inference removed**: `BaseAgent._run_tool_loop` fired a local-LLM
+  extraction (`_query_threat_intel`) on every tool output containing a version-like number,
+  then always discarded the result (dead stub). Removed the call site and the method — real
+  CVE intel already routes through MCPGateway (`pentester_vuln.lookup_cve_intel`). Saves a
+  local inference + latency on the hot path.
+
+### ⚡ Performance
+- **JIT discovery memoized**: `JITLoader` scanned `skills/` + `agents/` on every
+  instantiation (per-agent *and* per-task via `pre_run_hook`). Now memoized per skills path
+  and invalidated by a cheap `skills/`+`agents/` mtime signature — scan runs once when
+  unchanged, but a skill added on disk is still picked up live (no restart) (`jit_loader.py`).
+
+### 🔒 Security
+- **Scope-cache fail-open closed**: `ScopeValidator._resolution_cache` is now keyed by
+  `(roe_path, target)`, so a permissive RoE can no longer leak an "allowed" decision into
+  a stricter RoE instance sharing the process.
+- **RoE hot-reload**: the scope gate re-reads the RoE on file-mtime change so a
+  scope-narrowing edit applies mid-session without a restart; a removed RoE file fails closed.
+- **API-key leak hardening**: error strings for query-param-keyed lookups (`query_shodan`,
+  `search_exploits`) emit the exception TYPE only — never `str(e)`, which could echo the URL
+  including the key. TheHive / SIEM-sync error returns sanitized the same way.
+
+### 🧪 Tests
+- Added coverage for: google key alias, VT IP endpoint, TheHive live + non-fatal paths,
+  SIEM sync (redaction / SSRF / malformed-skip / HTTP error), Shodan exploit search
+  (incl. no key-leak assertion), and RoE env / path-aware cache / hot-reload / fail-closed
+  behavior. Made `test_terminate_processes_rollback_queue` self-isolating (was a wall-clock
+  quiet-hours flake).
+- Replaced `TestCheckCache` with `TestGetCachedResponse` (scoped-query assertion +
+  missing-response→`None` regression). Added JITLoader memo/live-reload tests
+  (`test_repeat_instantiation_same_dirs_scans_once`, `test_new_skill_on_disk_is_picked_up_live`).
+  Full suite: 733 passing.
+
+### 📝 Docs
+- `CLAUDE.md`: corrected the JIT section — skill *injection* happens in
+  `BaseAgent._build_system_prompt`, not `pre_run_hook` (whose `skills` list is telemetry only);
+  noted the memoized-with-mtime-invalidation discovery scan.
+- `core/worker_pool.py` / `core/hooks.py`: docstrings now state actual retry and hook
+  semantics (pool retry fires only when the handler *raises*; the orchestrator handles its
+  own errors and relies on the agent reflective-retry loop).
+
 ### Removed
 - **OpenClaw module** (`openclaw/`) and `tests/test_openclaw.py`: the zero-trust external-data
   ingestion layer was never wired into the engine (no production importers). Removed as dead
   code along with its `COMMANDS.txt` Section 8. External-fetch sanitization can be reintroduced
   at the agent fetch boundary if/when needed.
+- **`VectorManager.check_cache`**: dead after the semantic-cache rewrite (its only caller
+  moved to `get_cached_response`). Method and its tests removed.
 
 ## [1.0.5] - 2026-04-19
 

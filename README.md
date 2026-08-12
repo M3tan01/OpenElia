@@ -3,12 +3,20 @@
 
 # 🛡️ OpenElia Core
 
-**Autonomous AI-Powered Purple Team Orchestration Platform**
+**AI-assisted purple-team orchestration platform**
 
-OpenElia is a next-generation cybersecurity operations library designed to handle multi-agent offensive and defensive operations. Powered by LLMs and the Model Context Protocol (MCP), it provides a secure, high-performance ecosystem for simulating realistic attacks and automating real-time defense.
+OpenElia is a multi-agent cybersecurity operations library for offensive (red), defensive (blue), and collaborative (purple) operations. It uses LLMs and the Model Context Protocol (MCP) to drive agents through scanning, triage, and remediation workflows under an enforced Rules-of-Engagement scope. It is a research/lab tool — most integrations require configuration (API keys, Docker, Ollama) to be useful; see **Maturity & requirements** below.
 
 ## **Important Note:**
 **Check COMMANDS.txt for COMPLETE COMMAND REFERENCE & MODEL CONFIGURATION GUIDE!**
+
+## 🧭 Maturity & requirements
+
+OpenElia is a lab/research tool, not a turnkey product. Honest status of the moving parts:
+
+- **Works out of the box:** the CLI (`check`, `status`, `red`/`blue`/`purple`/`forge`, `nmap`/`msf`, `sbom`, `archive`, `lock`/`unlock`), the orchestrator/agent engine, the TUI and web dashboard, and the RoE scope gate.
+- **Needs configuration to be useful:** an LLM provider (local Ollama **or** a cloud key), Docker for sterile offensive execution, and the optional threat-intel keys in the tables below. Each integration **degrades gracefully** when its key is absent (the feature is skipped, not broken).
+- **Roadmap, not built:** multi-operator team server (mTLS, concurrent operators). See `docs/superpowers/plans/2026-06-03-v2-multi-operator.md`. The current console is single-operator, localhost-only.
 
 ## 🚀 5-Tier Security Architecture
 
@@ -20,19 +28,19 @@ OpenElia is a next-generation cybersecurity operations library designed to handl
 
 ## 🛠️ Key Features
 
-*   🔴 **Red Team (Pentester)**: Autonomous reconnaissance, vulnerability assessment, and exploitation using the **Atomic Red Team** library.
-*   🔵 **Blue Team (Defender)**: Real-time log analysis, SIEM-style telemetry, and active remediation (block IP via iptables, kill process via SIGKILL). Operates in simulation mode by default; live execution enabled via `BLUE_REMEDIATE_LIVE=1` with RBAC token verification.
-*   🟣 **Purple Team (Simulation)**: Collaborative, true N-iteration attack/defend loops (**Continuous Chaos**) with coverage delta tracking, early exit, and adaptive red task seeding based on previous blue alert types.
-*   📺 **War Room Dashboard**: Live, real-time TUI with MITRE heatmap, findings, red/blue logs, and active pivot session panel — or a browser **C2 console** (`dashboard --web`) with the same telemetry plus interactive control (run red/blue/purple, kill-switch, brain-model selection). See `webdash/README.md`.
-*   🧠 **Autonomic Self-Healing**: Agents automatically detect tool errors, reflect on the cause, and issue corrected commands.
-*   🕵️ **Stealth Mode (OPSEC)**: Randomized jitter and LotL techniques to evade detection.
-*   🐝 **Subnet Swarming**: Launch parallel agent threads to scan and assess entire CIDR ranges simultaneously.
-*   ⚖️ **Risk/Success Engine**: Real-time probabilistic modeling of exploit success and detection risk.
-*   🚨 **Shadow Shell**: Interactive human-AI tactical handoff for live session control.
-*   🔐 **Role-Based Access Control (RBAC)**: Hardware-backed identity verification and OS-level privilege enforcement.
-*   🛑 **Global Kill-Switch**: A technical fail-safe that allow the operator to instantly pause or terminate all active agents.
-*   📡 **Strategic Message Bus**: Enables real-time inter-agent communication and coordination.
-*   ⚡ **Elite Efficiency**: Built-in **Semantic Caching** (ChromaDB) and **Massive Output Auto-Compression** to slash API costs and latency.
+*   🔴 **Red Team (Pentester)**: LLM-driven reconnaissance, vulnerability assessment, and exploitation using the **Atomic Red Team** library, gated by human-in-the-loop confirmation on sensitive actions.
+*   🔵 **Blue Team (Defender)**: Log analysis, SIEM-style telemetry, and remediation (block IP via iptables, kill process via SIGKILL). Operates in simulation mode by default; live execution requires `BLUE_REMEDIATE_LIVE=1` plus an RBAC token.
+*   🟣 **Purple Team**: N-iteration attack/defend loops with coverage delta tracking, early exit, and adaptive red task seeding based on previous blue alert types.
+*   📺 **Dashboard**: Real-time TUI with MITRE heatmap, findings, red/blue logs, and pivot session panel — or a local browser console (`dashboard --web`, 127.0.0.1 only) with the same telemetry plus interactive control (run red/blue/purple, kill-switch, model selection). See `webdash/README.md`.
+*   🧠 **Retry with self-correction**: On a tool error, an agent reflects on the cause and reissues a corrected command (max 3 retries).
+*   🕵️ **Stealth Mode (OPSEC)**: Randomized timing jitter and living-off-the-land command preferences to reduce noise.
+*   🐝 **Parallel host scanning**: A CIDR target fans out into concurrent per-host scanning threads.
+*   ⚖️ **Risk/Success heuristics**: Estimates of exploit success and detection risk to inform loud-action decisions.
+*   🚨 **Shadow Shell**: Interactive human-AI handoff for live session control.
+*   🔐 **Access control**: OS-keyring-backed secrets and a token-gated RBAC check for live remediation.
+*   🛑 **Global Kill-Switch**: Operator fail-safe to pause or terminate active agents (`lock`/`unlock`).
+*   📡 **Message bus**: Inter-agent messaging for coordination.
+*   ⚡ **Efficiency**: Semantic caching (ChromaDB) and large-output auto-compression to reduce API cost and latency.
 
 ## 📁 Project Structure
 
@@ -74,13 +82,7 @@ OpenElia/
 │   ├── threat_intel/       # Threat intelligence
 │   └── vault/              # Secure credential storage
 ├── skills/                 # Domain-specific skill modules
-├── src/                    # TypeScript CLI (project root)
-│   ├── src/                # TypeScript source files
-│   │   ├── cli.ts          # CLI implementation
-│   │   └── index.ts        # Entry point
-│   ├── dist/               # Compiled JavaScript output
-│   ├── package.json        # Node.js dependencies
-│   └── tsconfig.json       # TypeScript config
+├── webdash/                # FastAPI + React browser console (127.0.0.1 only)
 ├── state/                  # Persistent state and databases
 ├── requirements.txt        # Python dependencies
 ├── pyproject.toml          # Python project config
@@ -92,10 +94,10 @@ OpenElia/
 ## 🏁 Getting Started
 
 ### Prerequisites
-- Docker (for sterile execution)
-- Ollama (running locally with `llama3.1:8b` or similar)
-- Python 3.11+
-- Node.js 18+ (for TypeScript CLI)
+- Python 3.11+ (required)
+- Docker (optional — for sterile execution of offensive tooling)
+- Ollama (optional — local LLM, e.g. `llama3.1:8b`; cloud providers work as an alternative)
+- Node.js 18+ (optional — only to rebuild the web dashboard frontend)
 
 ### Installation
 
@@ -134,15 +136,6 @@ python3 main.py check
 > ```bash
 > source .venv/bin/activate
 > ```
-
-**TypeScript CLI (Optional but Recommended):**
-```bash
-# Install TypeScript CLI
-cd src
-npm install
-npm run build
-npm link  # Make globally available as 'openelia-cli'
-```
 
 **Global Command (Optional):**
 ```bash
@@ -215,35 +208,6 @@ python3 main.py report --brain-tier expensive
 python3 main.py execute-remediation --action-id 42
 ```
 
-#### TypeScript CLI (Enhanced UX)
-```bash
-# Interactive mode (recommended)
-openelia-cli
-
-# Direct commands
-openelia-cli red --target 10.10.10.50 --stealth
-openelia-cli blue --logs /var/log/auth.log
-openelia-cli purple --target 10.10.10.50 --iterations 3
-openelia-cli nmap --target 10.10.10.50
-openelia-cli msf --target 10.10.10.50
-openelia-cli report
-openelia-cli report --task "Board-level summary" --brain-tier expensive
-openelia-cli execute-remediation --action-id 42
-openelia-cli check
-openelia-cli status
-openelia-cli dashboard
-openelia-cli lock
-openelia-cli unlock
-openelia-cli archive
-openelia-cli sbom
-openelia-cli doctor
-
-# Switch agents in interactive mode
-openelia-cli interactive
-> agent Pentester
-> red --target 10.10.10.50
-```
-
 #### Agent Commands
 ```bash
 # Switch to Pentester agent
@@ -273,12 +237,28 @@ Outbound traffic is automatically redacted for PII by the **Privacy Guard**. All
 | Variable / File | Purpose | Effect if missing |
 |----------------|---------|------------------|
 | `roe.json` with `authorized_subnets` | Defines legal target scope | All operations blocked |
+| `OPENELIA_ROE_PATH` | Override path to the RoE file for the scope gate | Falls back to `roe.json` (cwd) |
 | `SIEM_WEBHOOK_ALLOWLIST` | Comma-separated approved SIEM hostnames | All webhook forwarding blocked |
-| `THEHIVE_URL` | TheHive instance base URL | TheHive case dispatch silently skipped |
-| `THEHIVE_API_KEY` | TheHive API key | TheHive case dispatch silently skipped |
+| `THEHIVE_URL` | TheHive instance base URL | TheHive case dispatch falls back to local SQLite only |
+| `THEHIVE_API_KEY` | TheHive API key | TheHive case dispatch falls back to local SQLite only |
 | OS Keyring secrets | API keys, vault encryption key | Prompted interactively on first run |
 | `BLUE_REMEDIATE_LIVE` | Set to `1` to enable live iptables/kill execution | Runs in safe simulation mode |
 | `BLUE_REMEDIATE_RBAC_TOKEN` | RBAC token env var (must match keyring value) | Live remediation actions denied |
+
+**Optional threat-intel / cloud-LLM keys** (OS keyring or env; all degrade gracefully):
+
+| Variable | Purpose | Effect if missing |
+|----------|---------|------------------|
+| `GOOGLE_API_KEY` | Google/Gemini cloud LLM provider (`GEMINI_API_KEY` accepted as a legacy alias) | Google cloud provider unavailable |
+| `SHODAN_API_KEY` | Shodan passive host intel **and** exploit search (commercial; limited free tier) | Those lookups skipped |
+| `VT_API_KEY` | VirusTotal hash/IP/domain lookups (commercial; rate-limited free public API) | VirusTotal lookups skipped |
+| `ABUSEIPDB_API_KEY` | AbuseIPDB IP reputation (free tier) | AbuseIPDB lookups skipped |
+
+> **No commercial key required.** IOC enrichment works on the free-tier path alone
+> (AbuseIPDB). Shodan and VirusTotal are optional commercial enhancers —
+> every lookup degrades gracefully when its key is absent.
+
+> The scope gate hot-reloads `roe.json` (or `OPENELIA_ROE_PATH`) on file change, so a scope-**narrowing** edit takes effect mid-session without a restart. A removed RoE file fails closed.
 
 ### SIEM Webhook Allowlist
 

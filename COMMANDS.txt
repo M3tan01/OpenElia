@@ -1,7 +1,7 @@
 ================================================================================
   OPENELIA — COMPLETE COMMAND REFERENCE & MODEL CONFIGURATION GUIDE
 ================================================================================
-  Version: 1.0.4  |  Python 3.11+  |  Last updated: 2026-04-18
+  Version: 1.0.5  |  Python 3.11+  |  Last updated: 2026-08-11
 ================================================================================
 
 
@@ -119,7 +119,6 @@
   Requires    : An active engagement with at least one logged response action
   Examples:
     python main.py execute-remediation --action-id 3
-    openelia-cli execute-remediation --action-id 3
 
 
   python main.py archive
@@ -373,7 +372,6 @@
   ── 6A. CHECK CURRENT CONFIGURATION ────────────────────────────────────────
 
     python main.py model status
-    openelia-cli model status
 
 
   ── 6B. SET LOCAL OLLAMA MODEL ──────────────────────────────────────────────
@@ -462,14 +460,6 @@
   OpenAI    │ o3                        │ Slow   │ $$$$   │ API      │ Deep chain reasoning
 
 
-  ── 6F. TYPESCRIPT CLI ─────────────────────────────────────────────────────
-
-    openelia-cli model status
-    openelia-cli model set local llama3.2:latest
-    openelia-cli model set cloud anthropic claude-opus-4-6
-    openelia-cli model auth anthropic sk-ant-YOUR_KEY
-    openelia-cli model hybrid --agent Reporter --provider openai --model gpt-4o
-
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   SECTION 7 — API KEY MANAGEMENT (SECURESTORE)
@@ -488,10 +478,10 @@
   EXPENSIVE_BRAIN_URL         Paid API base URL (Claude / Gemini / OpenAI)
   EXPENSIVE_BRAIN_KEY         Paid API key
   EXPENSIVE_MODEL             Paid model name (default fallback: gpt-4o)
-  GEMINI_API_KEY              Gemini key for threat_intel MCP server
+  GOOGLE_API_KEY              Google/Gemini key for cloud LLM (model_manager; GEMINI_API_KEY also accepted)
   SHODAN_API_KEY              Shodan for passive OSINT (recon MCP server)
   VT_API_KEY                  VirusTotal for malware / IOC lookups
-  GRAYNOISE_API_KEY           GreyNoise for IP reputation
+  ABUSEIPDB_API_KEY           AbuseIPDB for IP reputation (free tier)
   THEHIVE_URL                 TheHive instance base URL (e.g. https://thehive.corp.com)
   THEHIVE_API_KEY             TheHive API key for case management integration
   BLUE_REMEDIATE_RBAC_TOKEN   RBAC token for blue_remediate live mode.
@@ -560,8 +550,12 @@
                               SSRF-protected via hostname allowlist
                               (SIEM_WEBHOOK_ALLOWLIST env var).
                               Input: webhook_url, payload (object)
-    sync_audit_log            Synchronize the last 100 audit entries to SIEM.
-                              Input: webhook_url
+    sync_audit_log            Forward recent audit-log entries to a SIEM webhook.
+                              SSRF-protected via the same hostname allowlist;
+                              each event is PII-redacted by the Privacy Guard
+                              before sending. Absent log file is handled
+                              gracefully (no POST).
+                              Input: webhook_url, limit (int, default 100)
 
   ── mcp-pivot ──────────────────────────────────────────────────────────────
   Server  : mcp_servers/pivot/server.py
@@ -579,9 +573,8 @@
 
   ── mcp-red-recon ──────────────────────────────────────────────────────────
   Server  : mcp_servers/red_recon/server.py
-  Tools   : Reconnaissance — nmap wrapper, OSINT lookups (Shodan, Censys),
-            DNS enumeration, banner grabbing. All targets validated against
-            roe.json scope before execution.
+  Tools   : nmap_scan — nmap wrapper. Targets validated against roe.json
+            scope before execution.
 
   ── mcp-blue-remediate ─────────────────────────────────────────────────────
   Server  : mcp_servers/blue_remediate/server.py
@@ -616,8 +609,9 @@
   ── mcp-threat-intel ───────────────────────────────────────────────────────
   Server  : mcp_servers/threat_intel/server.py
   Tools   : CVE lookups (cve.circl.lu), VirusTotal hash/IP/domain lookups
-            (VT_API_KEY), GreyNoise IP reputation (GRAYNOISE_API_KEY),
-            Shodan passive host intel (SHODAN_API_KEY).
+            (VT_API_KEY), AbuseIPDB IP reputation (ABUSEIPDB_API_KEY),
+            Shodan passive host intel + exploit search (SHODAN_API_KEY,
+            shared by query_shodan and search_exploits).
 
   ── mcp-vault ──────────────────────────────────────────────────────────────
   Server  : mcp_servers/vault/server.py
@@ -700,34 +694,6 @@
 
   Requires: GEMINI_API_KEY set (see Section 7)
   Install : npm install -g @google/gemini-cli
-
-  ── TypeScript CLI ─────────────────────────────────────────────────────────
-
-  Install once:
-    cd src && npm install && npm run build && npm link
-
-  Commands:
-    openelia-cli red --target 10.10.10.50 --stealth
-    openelia-cli blue --logs /var/log/auth.log
-    openelia-cli purple --target 10.10.10.50 --iterations 3
-    openelia-cli nmap --target 10.10.10.50
-    openelia-cli msf --target 10.10.10.50
-    openelia-cli report
-    openelia-cli report --task "Board-level summary" --brain-tier expensive
-    openelia-cli check
-    openelia-cli status
-    openelia-cli dashboard
-    openelia-cli lock
-    openelia-cli unlock
-    openelia-cli archive
-    openelia-cli sbom
-    openelia-cli doctor
-    openelia-cli interactive     # Enter interactive REPL mode
-    openelia-cli model status
-    openelia-cli model set local llama3.2:latest
-    openelia-cli model set cloud anthropic claude-sonnet-4-6
-    openelia-cli model auth anthropic sk-ant-YOUR_KEY
-    openelia-cli model hybrid --agent Reporter --provider openai --model gpt-4o
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

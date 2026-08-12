@@ -12,7 +12,7 @@
 
 ---
 
-This project is a multi-agent cybersecurity operations library. It integrates a Python-based agent engine with a Claude Code-style TypeScript CLI.
+This project is a multi-agent cybersecurity operations library. It integrates a Python-based agent engine with in-process MCP servers and a FastAPI + React web dashboard.
 
 ## Core Agents
 - **Pentester (Red Team)**: Use for offensive operations, recon, and exploitation. **Mandate**: Prioritize Atomic Red Team techniques and use the **Shadow Shell** tool for human handoffs.
@@ -45,7 +45,7 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
 
 ## Architecture
 - **Engine**: Python (`main.py`, `agents/`, `orchestrator.py`)
-- **Platform**: TypeScript (`src/`)
+- **Web UI**: FastAPI + React dashboard (`webdash/`, 127.0.0.1 only)
 - **Persistence**: SQLite Relational Backend (`state/engagement.db`).
 - **Intelligence Layer**:
   - `mcp-graph`: Attack Surface Knowledge Graph (`NetworkX`).
@@ -66,16 +66,16 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
 - A fresh `AsyncWorkerPool` is created per `route()` call — pools are single-use.
 
 **Just-In-Time (JIT) Resource Injection**
-- Never load all plugins/skills globally. Use `JITLoader` to inject only the 2–3 skills required for the specific agent being spun up.
-- `pre_run_hook` injects JIT context. `post_run_hook` extracts output and calls `context.clear()`. `error_hook` writes to `state/audit.log`.
+- Never load all plugins/skills globally. Use `JITLoader` to inject only the 2–3 skills required for the specific agent being spun up. `JITLoader` memoizes its filesystem discovery scan, invalidated by a `skills/` + `agents/` mtime signature, so a skill added on disk is picked up without a restart.
+- Skill *injection* happens in `BaseAgent._build_system_prompt` (via `JITLoader.load_semantic_skills`) when the agent runs. `pre_run_hook` builds the lifecycle context dict (task metadata + a `skills` list for telemetry only — it does **not** feed skills into the agent). `post_run_hook` persists the result and calls `context.clear()`. `error_hook` writes to `state/audit.log`.
 
 **Tier-Based Async Worker Pool**
 - Three tiers: `RECON` (data gathering) → `ANALYSIS` (reasoning) → `EXECUTION` (action).
 - Each tier has its own `asyncio.Queue` and N concurrent workers (`core/worker_pool.py`).
 - Agents are lazily imported and instantiated inside `_run_agent()` — never at import time.
 
-**MCP/LSP Gateway Gate**
-- All MCP and LSP queries must go through `MCPGateway`. Never call MCP servers directly from agent code.
+**MCP Gateway Gate**
+- All MCP queries must go through `MCPGateway`. Never call MCP servers directly from agent code.
 - `EXECUTION` tier agents are blocked from querying servers — they receive pre-summarized context from `ANALYSIS` tier only.
 - Responses exceeding `max_tokens` words are summarized by the local LLM before being returned.
 
@@ -84,7 +84,6 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
 - `core/worker_pool.py` — `AsyncWorkerPool`, `MAX_RETRIES = 3`
 - `core/hooks.py` — `pre_run_hook`, `post_run_hook`, `error_hook`
 - `core/mcp_gateway.py` — `MCPGateway`, `GatewayAccessError`
-- `core/lsp_server.py` — pygls 2.x LSP server (`pygls.lsp.server.LanguageServer`)
 - `jit_loader.py` — `JITLoader`, `get_skills_for_agent()`
 
 ---
