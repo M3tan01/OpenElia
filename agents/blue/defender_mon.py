@@ -145,6 +145,7 @@ class DefenderMon:
                     description=rule["description"],
                     severity=rule["severity"],
                     source="defender_mon",
+                    mitre_ttp=rule["mitre"],
                 )
 
         return alerts

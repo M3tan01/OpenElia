@@ -110,3 +110,45 @@ def test_coverage_pct_excludes_pending_and_zero_resolved():
     eid2 = st.active_engagement_id
     _seed(st, eid2, findings=[], alerts=[], blue_status=None)
     assert st.get_coverage(eid2)["coverage_pct"] == 0
+
+
+class _RecordingState:
+    def __init__(self):
+        self.calls = []
+
+    def add_blue_alert(self, **kwargs):
+        self.calls.append(kwargs)
+
+
+def test_defender_mon_passes_rule_mitre_to_alert():
+    from agents.blue.defender_mon import DefenderMon
+
+    st = _RecordingState()
+    mon = DefenderMon(st)
+    # T1003_LSASS_ACCESS rule requires both patterns to match (AND logic).
+    log_text = "TargetImage=C:\\Windows\\System32\\lsass.exe EventCode=10"
+    mon.analyze(log_text)
+
+    assert st.calls, "expected add_blue_alert to be called"
+    assert st.calls[0]["mitre_ttp"] == "T1003.001"
+
+
+def test_defender_hunt_passes_tool_mitre_to_alert():
+    from agents.blue.defender_hunt import DefenderHunt
+
+    st = _RecordingState()
+    hunt = object.__new__(DefenderHunt)
+    hunt.state = st
+
+    hunt._execute_hunt_tool(
+        "record_persistence_finding",
+        {
+            "mechanism": "cron",
+            "location": "/etc/cron.d/x",
+            "evidence": "x",
+            "severity": "high",
+            "mitre_ttp": "T1547.001",
+        },
+    )
+
+    assert st.calls[0]["mitre_ttp"] == "T1547.001"

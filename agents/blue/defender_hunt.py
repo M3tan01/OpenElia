@@ -84,7 +84,8 @@ class DefenderHunt(BaseAgent):
                 alert_type=f"PERSISTENCE_{tool_input['mechanism'].upper()}",
                 description=f"Proactive hunt found {tool_input['mechanism']} at {tool_input['location']}",
                 severity=tool_input.get("severity", "medium"),
-                source="defender_hunt"
+                source="defender_hunt",
+                mitre_ttp=tool_input["mitre_ttp"],
             )
             return f"Hunt finding logged: {tool_input['mechanism']} at {tool_input['location']}"
         return self._execute_tool(tool_name, tool_input)
