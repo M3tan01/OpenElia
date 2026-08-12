@@ -32,6 +32,13 @@ def _safe_json_loads(data: str | None, fallback: dict | None = None) -> dict:
         raise ValueError(f"JSON payload exceeds size limit ({len(data)} > {_JSON_MAX_BYTES} bytes)")
     return json.loads(data)
 
+def _base_ttp(ttp: str | None) -> str:
+    """Base-normalize a MITRE TTP id: 'T1003.001' -> 'T1003'; None/empty -> ''."""
+    if not ttp:
+        return ""
+    return ttp.split(".", 1)[0].strip().upper()
+
+
 _DEFAULT_DB_FILE = os.getenv("STATE_FILE", "state/engagement.db").replace(".json", ".db")
 
 
@@ -556,3 +563,49 @@ class StateManager:
         with self._get_conn() as conn:
             conn.execute("INSERT OR REPLACE INTO metadata (engagement_id, key, value) VALUES (?, ?, ?)", (eid, "thehive_case", json.dumps(case_data)))
             conn.commit()
+
+    def get_coverage(self, engagement_id: str) -> dict:
+        """Tri-state (caught/pending/missed) purple-team coverage, joined on base-normalized MITRE TTP."""
+        blue_done = self.get_metadata("blue_run_status", engagement_id) == "complete"
+
+        with self._get_conn() as conn:
+            finding_rows = conn.execute(
+                "SELECT mitre_ttp, title FROM findings "
+                "WHERE engagement_id = ? AND mitre_ttp IS NOT NULL AND mitre_ttp != '' "
+                "ORDER BY id ASC",
+                (engagement_id,),
+            ).fetchall()
+            alert_rows = conn.execute(
+                "SELECT mitre_ttp FROM blue_alerts "
+                "WHERE engagement_id = ? AND mitre_ttp IS NOT NULL AND mitre_ttp != ''",
+                (engagement_id,),
+            ).fetchall()
+
+        # Representative finding per base-normalized TTP (first row by id wins for title).
+        reps: dict[str, str] = {}
+        for row in finding_rows:
+            base = _base_ttp(row["mitre_ttp"])
+            if base and base not in reps:
+                reps[base] = row["title"]
+
+        caught_bases = {_base_ttp(row["mitre_ttp"]) for row in alert_rows}
+        caught_bases.discard("")
+
+        caught, missed, pending = [], [], []
+        for base, title in reps.items():
+            entry = {"ttp": base, "title": title}
+            if base in caught_bases:
+                caught.append(entry)
+            elif blue_done:
+                missed.append(entry)
+            else:
+                pending.append(entry)
+
+        resolved = len(caught) + len(missed)
+        coverage_pct = round(100.0 * len(caught) / resolved, 1) if resolved else 0
+        return {
+            "coverage_pct": coverage_pct,
+            "caught": caught,
+            "missed": missed,
+            "pending": pending,
+        }
