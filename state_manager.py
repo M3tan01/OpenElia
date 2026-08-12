@@ -99,6 +99,7 @@ class StateManager:
                     timestamp TEXT,
                     escalated INTEGER DEFAULT 0,
                     escalated_at TEXT,
+                    mitre_ttp TEXT,
                     FOREIGN KEY(engagement_id) REFERENCES engagement(id) ON DELETE CASCADE
                 );
 
@@ -181,6 +182,19 @@ class StateManager:
                         conn.execute(ddl)
                     except sqlite3.OperationalError:
                         pass  # column added by a concurrent initializer — fine
+            conn.commit()
+
+            # Idempotent migration: add mitre_ttp to blue_alerts if absent
+            # (handles existing DBs created before this column was added).
+            existing_alert_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(blue_alerts)").fetchall()
+            }
+            if "mitre_ttp" not in existing_alert_cols:
+                try:
+                    conn.execute("ALTER TABLE blue_alerts ADD COLUMN mitre_ttp TEXT")
+                except sqlite3.OperationalError:
+                    pass  # column added by a concurrent initializer — fine
             conn.commit()
 
     def _get_last_active_id(self) -> Optional[str]:
@@ -461,14 +475,14 @@ class StateManager:
             """, (f_id, eid, severity, title, description, evidence, mitre_ttp, datetime.now(timezone.utc).isoformat(), cvss_score, cvss_vector, source_agent))
             conn.commit()
 
-    def add_blue_alert(self, alert_type: str, description: str, severity: str, source: str, engagement_id: str = None) -> None:
+    def add_blue_alert(self, alert_type: str, description: str, severity: str, source: str, engagement_id: str = None, mitre_ttp: str | None = None) -> None:
         eid = engagement_id or self.active_engagement_id
         with self._get_conn() as conn:
             a_id = f"ALERT-{int(time.time())}-{uuid.uuid4().hex[:4].upper()}"
             conn.execute("""
-                INSERT INTO blue_alerts (id, engagement_id, type, description, severity, source, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (a_id, eid, alert_type, description, severity, source, datetime.now(timezone.utc).isoformat()))
+                INSERT INTO blue_alerts (id, engagement_id, type, description, severity, source, timestamp, mitre_ttp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (a_id, eid, alert_type, description, severity, source, datetime.now(timezone.utc).isoformat(), mitre_ttp))
             conn.commit()
 
     def mark_alert_escalated(self, alert_id: str, engagement_id: str = None) -> None:
