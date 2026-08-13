@@ -216,12 +216,25 @@ class SecretStore:
             ("THEHIVE_API_KEY",     "TheHive API key"),
         ]
 
+        # Non-interactive stdin (CI, pipes, `cmd < /dev/null`) can't answer
+        # prompts — getpass raises EOFError. Skip the interactive prompt loops in
+        # that case, but still run the .env → keychain migration below.
+        interactive = sys.stdin.isatty()
+        if not interactive:
+            console.print(
+                "  [dim]Non-interactive stdin — skipping secret prompts. "
+                "Set keys via .env or a tty session.[/dim]"
+            )
+
         def _prompt(key: str, label: str, required: bool = True):
             existing = cls.get_secret(key)
             if existing:
                 console.print(f"  [dim]✓ {key} already set.[/dim]")
                 return
-            value = getpass.getpass(f"  {label}: ").strip()
+            try:
+                value = getpass.getpass(f"  {label}: ").strip()
+            except EOFError:
+                value = ""
             if value:
                 # Write directly into cache; single _flush() at the end
                 cls._cache[key] = value
@@ -232,16 +245,17 @@ class SecretStore:
                 else:
                     console.print(f"  [dim]↩ {key} skipped.[/dim]")
 
-        console.print("\n[bold]Required integrations:[/bold]")
-        for key in required_keys:
-            _prompt(key, f"Enter your {key}", required=True)
+        if interactive:
+            console.print("\n[bold]Required integrations:[/bold]")
+            for key in required_keys:
+                _prompt(key, f"Enter your {key}", required=True)
 
-        console.print("\n[bold]Optional integrations[/bold] [dim](press Enter to skip):[/dim]")
-        for key, label in optional_keys:
-            _prompt(key, label, required=False)
+            console.print("\n[bold]Optional integrations[/bold] [dim](press Enter to skip):[/dim]")
+            for key, label in optional_keys:
+                _prompt(key, label, required=False)
 
-        # Single write for everything entered above
-        cls._flush()
+            # Single write for everything entered above
+            cls._flush()
 
         # Migrate any remaining .env keys into the blob
         migrated = []
