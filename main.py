@@ -57,7 +57,13 @@ def _is_safe_url(url: str) -> bool:
 
 
 def _check_ollama() -> bool:
-    base_url = SecretStore.get_secret("OLLAMA_BASE_URL") or "http://localhost:11434/v1"
+    from model_manager import ModelManager, DEFAULT_OLLAMA_URL
+    # Stored OLLAMA_BASE_URL may lack the /v1 suffix (e.g. "http://localhost:11434").
+    # _sanitize_url appends /v1 for :11434 hosts so we hit the OpenAI-compat
+    # /v1/models endpoint (200) instead of the native /models path (404).
+    base_url = ModelManager._sanitize_url(
+        SecretStore.get_secret("OLLAMA_BASE_URL") or DEFAULT_OLLAMA_URL
+    )
     try:
         url = f"{base_url}/models"
         if not _is_safe_url(url):
@@ -78,7 +84,7 @@ def _require_api_key(brain_tier: str = "local") -> None:
         cfg = ModelManager.get_client_config(brain_tier="expensive")
         # api_key falls back to "ollama" when nothing is found — that means unset
         if cfg["api_key"] in ("", "ollama"):
-            provider = ModelManager.get_config().get("cloud_provider", "openai")
+            provider = ModelManager.get_config()["cloud_provider"]  # _DEFAULTS guarantees this key
             key_name = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
             print(f"ERROR: --brain-tier expensive requires a cloud API key.")
             print(f"Run:  python main.py model auth {provider} <your-api-key>")
@@ -86,7 +92,8 @@ def _require_api_key(brain_tier: str = "local") -> None:
             sys.exit(1)
         return
     if not _check_ollama():
-        base_url = SecretStore.get_secret("OLLAMA_BASE_URL") or "http://localhost:11434/v1"
+        from model_manager import DEFAULT_OLLAMA_URL
+        base_url = SecretStore.get_secret("OLLAMA_BASE_URL") or DEFAULT_OLLAMA_URL
         print(f"ERROR: Ollama is not reachable at {base_url}.")
         print("Make sure Ollama is running: ollama serve")
         sys.exit(1)
@@ -895,8 +902,8 @@ async def cmd_doctor(args) -> None:
     # Cloud brain is provider-agnostic: reuse the real resolver so the check
     # reflects whatever is configured (named provider key, GEMINI alias, or the
     # generic EXPENSIVE_BRAIN_KEY) rather than hardcoding one vendor.
-    from model_manager import ModelManager
-    provider = ModelManager.get_config().get("cloud_provider", "openai")
+    from model_manager import ModelManager, DEFAULT_OLLAMA_URL
+    provider = ModelManager.get_config()["cloud_provider"]  # _DEFAULTS guarantees this key
     resolved_key = ModelManager.get_client_config(brain_tier="expensive").get("api_key")
     if resolved_key and resolved_key != "ollama":
         results.add_row("Cloud Brain Key", "[green]PASS[/green]", f"Verified in secure vault (provider: {provider})")
@@ -910,7 +917,7 @@ async def cmd_doctor(args) -> None:
     if SecretStore.get_secret("OLLAMA_BASE_URL"):
         results.add_row("API Key: OLLAMA_BASE_URL", "[green]PASS[/green]", "Verified in secure vault")
     else:
-        results.add_row("API Key: OLLAMA_BASE_URL", "[yellow]WARN[/yellow]", "Missing - defaults to http://localhost:11434")
+        results.add_row("API Key: OLLAMA_BASE_URL", "[yellow]WARN[/yellow]", f"Missing - defaults to {DEFAULT_OLLAMA_URL}")
 
     # 4. Check Sterile Image
     if sys.platform != "win32":

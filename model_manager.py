@@ -35,13 +35,18 @@ _DEFAULTS: dict = {
     },
 }
 
+# Single source of truth for the local Ollama OpenAI-compat endpoint.
+# Overridable at runtime via the OLLAMA_BASE_URL secret; every fallback
+# below references this constant instead of re-literalizing the URL.
+DEFAULT_OLLAMA_URL = "http://localhost:11434/v1/"
+
 # OpenAI-compatible base URLs for each provider
 PROVIDER_BASE_URLS: dict[str, str] = {
     "openai":    "https://api.openai.com/v1/",
     "anthropic": "https://api.anthropic.com/v1/",
     "google":    "https://generativelanguage.googleapis.com/v1beta/openai/",
-    "ollama":    "http://localhost:11434/v1/",
-    "local":     "http://localhost:11434/v1/",
+    "ollama":    DEFAULT_OLLAMA_URL,
+    "local":     DEFAULT_OLLAMA_URL,
 }
 
 # SecretStore key names for each provider
@@ -136,7 +141,7 @@ class ModelManager:
 
         from secret_store import SecretStore
 
-        base = SecretStore.get_secret("OLLAMA_BASE_URL") or "http://localhost:11434/v1/"
+        base = SecretStore.get_secret("OLLAMA_BASE_URL") or DEFAULT_OLLAMA_URL
         # tags live at the daemon root, not under the OpenAI-compat /v1 path
         root = base.split("/v1", 1)[0].rstrip("/")
         if not root.startswith(("http://", "https://")):
@@ -259,7 +264,7 @@ class ModelManager:
 
         # 2 & 3. Expensive tier or global cloud mode
         if brain_tier == "expensive" or cfg["mode"] == "cloud":
-            provider  = cfg.get("cloud_provider", "openai")
+            provider  = cfg["cloud_provider"]  # _DEFAULTS guarantees this key
             # No default model: prefer the persisted cloud_model, then the
             # generic EXPENSIVE_MODEL env slot. If neither is set, fail loudly.
             model     = cfg.get("cloud_model") or SecretStore.get_secret("EXPENSIVE_MODEL")
@@ -325,7 +330,7 @@ class ModelManager:
         if provider in ("local", "ollama"):
             base_url = (
                 SecretStore.get_secret("OLLAMA_BASE_URL")
-                or "http://localhost:11434/v1/"
+                or DEFAULT_OLLAMA_URL
             )
             return {
                 "base_url": cls._sanitize_url(base_url),
