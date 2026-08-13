@@ -24,14 +24,18 @@ from secret_store import SecretStore
 from cost_tracker import CostTracker
 from adversary_manager import AdversaryManager
 from vector_manager import VectorManager
-from model_manager import ModelManager
+from model_manager import ModelManager, ModelNotConfiguredError
 from core.schemas import AgentTier
 
 
-# Local model config — used for compression/intel helpers that always stay cheap
-_local_cfg = ModelManager.get_client_config(brain_tier="local")
-_OLLAMA_BASE_URL = _local_cfg["base_url"]
-_DEFAULT_MODEL   = _local_cfg["model"]
+# Class-attr placeholder only — each agent's real model is resolved per-instance
+# by create_client() in __init__. We must not hard-fail at import time if the
+# operator hasn't configured a local model yet; the loud ModelNotConfiguredError
+# is raised where it belongs — when an agent is actually instantiated.
+try:
+    _DEFAULT_MODEL = ModelManager.get_client_config(brain_tier="local")["model"]
+except ModelNotConfiguredError:
+    _DEFAULT_MODEL = ""
 
 
 class BaseAgent(ABC):

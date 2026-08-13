@@ -23,9 +23,9 @@ _CONFIG_FILE = _CONFIG_DIR / "config.json"
 
 _DEFAULTS: dict = {
     "mode":            "local",    # "local" | "cloud" | "hybrid"
-    "local_model":     "llama3.1:8b",
+    "local_model":     "",          # no default — user must set (model set local <name>)
     "cloud_provider":  "openai",   # "openai" | "anthropic" | "google"
-    "cloud_model":     "gpt-4o",
+    "cloud_model":     "",          # no default — user must set (model set cloud <provider> <name>)
     "agent_overrides": {},          # {"Pentester": "local:llama3.1:8b", ...}
     "loop_detection": {             # tool-loop guardrail thresholds (core/loop_guard.py)
         "enabled":                True,
@@ -52,6 +52,15 @@ PROVIDER_KEY_NAMES: dict[str, str] = {
 }
 
 SUPPORTED_PROVIDERS = list(PROVIDER_KEY_NAMES.keys())
+
+
+class ModelNotConfiguredError(RuntimeError):
+    """Raised when a model is required but the end user has not configured one.
+
+    OpenElia ships with no default model name for either tier — the operator
+    must explicitly choose one. This surfaces the misconfiguration loudly at
+    resolve time instead of silently falling back to some vendor's model.
+    """
 
 
 class ModelManager:
@@ -251,7 +260,15 @@ class ModelManager:
         # 2 & 3. Expensive tier or global cloud mode
         if brain_tier == "expensive" or cfg["mode"] == "cloud":
             provider  = cfg.get("cloud_provider", "openai")
-            model     = cfg.get("cloud_model", "gpt-4o")
+            # No default model: prefer the persisted cloud_model, then the
+            # generic EXPENSIVE_MODEL env slot. If neither is set, fail loudly.
+            model     = cfg.get("cloud_model") or SecretStore.get_secret("EXPENSIVE_MODEL")
+            if not model:
+                raise ModelNotConfiguredError(
+                    "No cloud/expensive model configured. Set one with:\n"
+                    "  python main.py model set cloud <provider> <model>\n"
+                    "or set EXPENSIVE_MODEL for the provider-agnostic slot."
+                )
             key_name  = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
             api_key   = (
                 cls._provider_api_key(provider, key_name)
@@ -269,8 +286,15 @@ class ModelManager:
                 "is_local": False
             }
 
-        # 4. Local / Ollama
-        res = cls._resolve("local", cfg.get("local_model", "llama3.1:8b"))
+        # 4. Local / Ollama — no default model: user must pick one.
+        local_model = cfg.get("local_model")
+        if not local_model:
+            raise ModelNotConfiguredError(
+                "No local model configured. Set one with:\n"
+                "  python main.py model set local <model>\n"
+                "(list installed Ollama models: python main.py model status)"
+            )
+        res = cls._resolve("local", local_model)
         res["is_local"] = True
         return res
 

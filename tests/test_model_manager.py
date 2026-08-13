@@ -135,16 +135,40 @@ class TestGetClientConfig:
             return key_map.get(key)
         return _get
 
-    def test_local_config_default(self):
+    def test_local_config_requires_configured_model(self):
+        """No default local model — resolving with none set must fail loudly."""
+        from model_manager import ModelManager, ModelNotConfiguredError
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret({})):
+            with pytest.raises(ModelNotConfiguredError):
+                ModelManager.get_client_config(brain_tier="local")
+
+    def test_local_config_uses_configured_model(self):
         from model_manager import ModelManager
+        ModelManager.set_local_model("llama3.1:8b")
         with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret({})):
             cfg = ModelManager.get_client_config(brain_tier="local")
         assert cfg["api_key"] == "ollama"
         assert cfg["model"]   == "llama3.1:8b"
         assert "11434" in cfg["base_url"]
 
+    def test_cloud_config_requires_configured_model(self):
+        """No default cloud model — expensive tier with none set must fail loudly."""
+        from model_manager import ModelManager, ModelNotConfiguredError
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret({})):
+            with pytest.raises(ModelNotConfiguredError):
+                ModelManager.get_client_config(brain_tier="expensive")
+
+    def test_cloud_config_falls_back_to_expensive_model_env(self):
+        """EXPENSIVE_MODEL is honoured as the provider-agnostic model slot."""
+        from model_manager import ModelManager
+        secrets = {"EXPENSIVE_MODEL": "gpt-4o", "EXPENSIVE_BRAIN_KEY": "sk-x"}
+        with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret(secrets)):
+            cfg = ModelManager.get_client_config(brain_tier="expensive")
+        assert cfg["model"] == "gpt-4o"
+
     def test_local_config_uses_ollama_url_from_keychain(self):
         from model_manager import ModelManager
+        ModelManager.set_local_model("llama3.1:8b")
         secrets = {"OLLAMA_BASE_URL": "http://gpu-server:11434/v1"}
         with patch("secret_store.SecretStore.get_secret", side_effect=self._mock_secret(secrets)):
             cfg = ModelManager.get_client_config(brain_tier="local")
@@ -179,6 +203,7 @@ class TestGetClientConfig:
     def test_hybrid_falls_back_to_local_when_no_override(self):
         from model_manager import ModelManager
         ModelManager.set_agent_override("Reporter", "openai", "gpt-4o")
+        ModelManager.set_local_model("llama3.1:8b")  # stays hybrid; local slot must be configured
         with patch("secret_store.SecretStore.get_secret", return_value=None):
             # Pentester has no override — should get local config
             cfg = ModelManager.get_client_config(brain_tier="local", agent_name="Pentester")
@@ -321,6 +346,7 @@ class TestListLocalModels:
 class TestCreateClient:
     def test_create_returns_client_and_model(self):
         from model_manager import ModelManager
+        ModelManager.set_local_model("llama3.1:8b")
         with patch("secret_store.SecretStore.get_secret", return_value=None):
             client, model, is_local = ModelManager.create_client(brain_tier="local")
         assert model == "llama3.1:8b"

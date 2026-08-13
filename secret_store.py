@@ -201,7 +201,7 @@ class SecretStore:
             # Expensive brain — skip if using local Ollama only
             ("EXPENSIVE_BRAIN_URL", "Expensive brain base URL (e.g. https://api.openai.com/v1 or https://api.anthropic.com)"),
             ("EXPENSIVE_BRAIN_KEY", "Expensive brain API key (OpenAI / Anthropic / Gemini)"),
-            ("EXPENSIVE_MODEL",     "Model name (e.g. gpt-4o, claude-opus-4-6, gemini-1.5-pro) [default: gpt-4o]"),
+            ("EXPENSIVE_MODEL",     "Cloud/expensive model name — no default (e.g. gpt-4o, claude-opus-4-6, gemini-1.5-pro)"),
             # Operational constraints
             ("MAX_TOKEN_BUDGET",    "Max spend per session in USD [default: 5.00]"),
             ("CYBER_RISK_INSTRUCTION", "Custom risk instruction injected into every agent prompt"),

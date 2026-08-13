@@ -122,7 +122,7 @@ async def cmd_check(args) -> None:
     print("[ ] Checking Ollama...", end="\r")
     if _check_ollama():
         from model_manager import ModelManager
-        model = ModelManager.get_config().get("local_model", "llama3.1:8b")
+        model = ModelManager.get_config().get("local_model") or "not set — run: model set local <model>"
         print(f"[✓] Ollama: Reachable (Target Model: {model})")
     else:
         print(f"[✗] Ollama: Not reachable at {SecretStore.get_secret('OLLAMA_BASE_URL') or 'localhost'}")
@@ -342,10 +342,11 @@ async def cmd_model(args) -> None:
         t = Table(title="[bold cyan]OpenElia Model Configuration[/bold cyan]", show_header=True)
         t.add_column("Setting", style="cyan", min_width=22)
         t.add_column("Value",   style="green")
+        _unset = "[dim]not set[/dim]"
         t.add_row("Mode",           cfg["mode"])
-        t.add_row("Local Model",    cfg["local_model"])
+        t.add_row("Local Model",    cfg["local_model"] or _unset)
         t.add_row("Cloud Provider", cfg["cloud_provider"])
-        t.add_row("Cloud Model",    cfg["cloud_model"])
+        t.add_row("Cloud Model",    cfg["cloud_model"] or _unset)
         overrides = cfg.get("agent_overrides", {})
         if overrides:
             for agent, override in overrides.items():
