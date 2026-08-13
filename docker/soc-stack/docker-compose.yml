@@ -21,53 +21,6 @@ services:
     networks:
       - soc-stack
 
-  # ---------------------------------------------------------------------
-  # Cortex (observable analysis) — wiring adapted from
-  # _vendor/thehive-templates-src/docker/thehive35-cortex3-es7/docker-compose.yml
-  # Image bumped to verified-current 4.1.0; docker.sock intentionally NOT
-  # mounted (Cortex analyzers must not control the Docker daemon).
-  # ---------------------------------------------------------------------
-  elasticsearch-cortex:
-    image: elasticsearch:7.11.1
-    container_name: soc-elasticsearch-cortex
-    restart: unless-stopped
-    environment:
-      - http.host=0.0.0.0
-      - discovery.type=single-node
-      - cluster.name=cortex
-      - script.allowed_types= inline
-      - thread_pool.search.queue_size=100000
-      - thread_pool.write.queue_size=10000
-      - gateway.recover_after_nodes=1
-      - xpack.security.enabled=false
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    volumes:
-      - cortex_es_data:/usr/share/elasticsearch/data
-      - cortex_es_logs:/usr/share/elasticsearch/logs
-    networks:
-      - soc-stack
-
-  cortex:
-    image: thehiveproject/cortex:4.1.0
-    container_name: soc-cortex
-    restart: unless-stopped
-    environment:
-      - "CORTEX_SECRET_KEY=${CORTEX_SECRET_KEY:?set in .env}"
-    depends_on:
-      - elasticsearch-cortex
-    ports:
-      - "9001:9001"
-    volumes:
-      - ./cortex/application.conf:/etc/cortex/application.conf:ro
-      - cortex_jobs:/tmp/cortex-jobs
-    networks:
-      - soc-stack
-
 networks:
   soc-stack:
     driver: bridge
@@ -78,6 +31,3 @@ volumes:
   thehive_index:
   thehive_data:
   thehive_logs:
-  cortex_es_data:
-  cortex_es_logs:
-  cortex_jobs:
