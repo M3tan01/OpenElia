@@ -232,6 +232,7 @@ roe.json
 # Temporary files
 *.tmp
 *.bak
+*.premerge-bak
 *.swp
 *.swo
 # Local MCP configuration (contains absolute paths)

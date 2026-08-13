@@ -10,8 +10,9 @@ is the genesis value (64 hex zeros). This makes any tampering with a
 historical entry detectable: the hash chain breaks at the modified record.
 
 The HMAC key is sourced from SecretStore("AUDIT_HMAC_KEY"). If not set,
-a deterministic fallback key is used so the chain always functions — but
-operators should set a real key in production (openelia lock --set-hmac-key).
+a deterministic PUBLIC fallback key is used so the chain always functions —
+but tamper-evidence is only effective once a real key is set. Store it in
+the keychain (prompted by OpenElia setup) or via the AUDIT_HMAC_KEY env var.
 """
 
 from __future__ import annotations
@@ -19,18 +20,34 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
+_log = logging.getLogger("OpenElia.AuditChain")
+
 _GENESIS_HASH = "0" * 64
 _FALLBACK_KEY = b"openelia-audit-default-key-change-in-prod"
 
+_fallback_warned = False  # emit the insecure-key warning at most once per process
+
 
 def _hmac_key() -> bytes:
+    global _fallback_warned
     from secret_store import SecretStore
     raw = SecretStore.get_secret("AUDIT_HMAC_KEY")
-    return raw.encode() if raw else _FALLBACK_KEY
+    if raw:
+        return raw.encode()
+    if not _fallback_warned:
+        _log.warning(
+            "AUDIT_HMAC_KEY not set — audit chain is signing with the public "
+            "fallback key. Tamper-evidence is NOT effective until you set a "
+            "real key in the keychain (prompted by OpenElia setup) or the "
+            "AUDIT_HMAC_KEY environment variable."
+        )
+        _fallback_warned = True
+    return _FALLBACK_KEY
 
 
 def _canonical(record: dict) -> bytes:

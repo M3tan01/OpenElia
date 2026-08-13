@@ -209,6 +209,8 @@ class SecretStore:
             ("SIEM_WEBHOOK_ALLOWLIST", "Comma-separated approved SIEM hostnames (e.g. splunk.corp.com,siem.internal)"),
             # Blue team live remediation
             ("BLUE_REMEDIATE_RBAC_TOKEN", "RBAC token for live iptables/kill execution (any strong random string)"),
+            # Audit log tamper-evidence — without this the chain signs with a PUBLIC fallback key
+            ("AUDIT_HMAC_KEY",      "HMAC key for tamper-evident audit log (any strong random string; openssl rand -hex 32)"),
             # TheHive — skip if not using case management
             ("THEHIVE_URL",         "TheHive instance URL (e.g. https://thehive.corp.com)"),
             ("THEHIVE_API_KEY",     "TheHive API key"),
