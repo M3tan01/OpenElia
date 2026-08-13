@@ -251,7 +251,6 @@ state/enterprise-attack.json
 
 # Vendored third-party source — reference upstream, do not vendor in-tree (see docs/SCOPE.md)
 docker/soc-stack/_vendor/
-mcp_servers/misp_mcp_src/
 
 # Personal/global agent skills — not part of the OpenElia project
 .agents/
