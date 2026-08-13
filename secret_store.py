@@ -186,12 +186,15 @@ class SecretStore:
 
         console.print("\n[bold cyan]🔐 OpenElia Secret Setup[/bold cyan]")
 
+        # Cloud LLM keys are NOT prompted here — they are provider-agnostic and
+        # set via `python main.py model auth <provider> <key>` (or the generic
+        # EXPENSIVE_BRAIN_KEY optional entry below). Only local Ollama + the
+        # active threat-intel connectors are prompted as required.
         required_keys = [
             "OLLAMA_BASE_URL",
-            "GEMINI_API_KEY",
             "SHODAN_API_KEY",
             "VT_API_KEY",
-            "GRAYNOISE_API_KEY",
+            "ABUSEIPDB_API_KEY",
         ]
 
         optional_keys = [
