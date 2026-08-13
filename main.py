@@ -925,7 +925,7 @@ async def cmd_doctor(args) -> None:
             client.images.get("cyber-ops-recon:strict")
             results.add_row("Offensive Image", "[green]PASS[/green]", "Sterile container image found locally")
         except Exception:
-            results.add_row("Offensive Image", "[yellow]WARN[/yellow]", "Image missing - Run 'docker build -f Dockerfile.offensive .'")
+            results.add_row("Offensive Image", "[yellow]WARN[/yellow]", "Image missing - Run 'docker build -t cyber-ops-recon:strict -f Dockerfile.offensive .'")
 
     console.print(results)
     console.print("\n[bold green]Doctor's Verdict: System operational with warnings.[/bold green]\n")
