@@ -26,7 +26,7 @@ class AdversaryForge:
         self.roe_path = roe_path
 
     def load_actor(self, actor_name: str) -> dict:
-        """Return {'name', 'techniques'} for actor_name (matched by name or alias).
+        """Return {'name', 'techniques', 'software'} for actor_name (by name or alias).
 
         Raises ValueError if the map is missing or the actor is not found.
         """
@@ -39,7 +39,11 @@ class AdversaryForge:
         for name, rec in actor_map.items():
             names = {name.lower()} | {a.lower() for a in rec.get("aliases", [])}
             if needle in names:
-                return {"name": name, "techniques": rec.get("techniques", [])}
+                return {
+                    "name": name,
+                    "techniques": rec.get("techniques", []),
+                    "software": rec.get("software", []),
+                }
         raise ValueError(f"Actor '{actor_name}' not found in {self.actor_map_path}")
 
     def filter_techniques(
@@ -131,7 +135,7 @@ class AdversaryForge:
             "alias": actor["name"],
             "description": f"Topology- and RoE-constrained emulation of {actor['name']}.",
             "preferred_ttps": ordered,
-            "tools": [],
+            "tools": list(actor.get("software", [])),
             "stealth_required": stealth,
             "rationale": (
                 f"Forged from {len(actor['techniques'])} actor techniques: "
