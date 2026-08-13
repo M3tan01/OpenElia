@@ -15,7 +15,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from core.webhook import validate_webhook_url
+from core.webhook import load_webhook_allowlist, validate_webhook_url
 from webdash.api.control import _launch, _validate_agent
 from webdash.data import DashboardData, get_data
 from webdash.guards import require_confirm, require_unlocked, scope_gate
@@ -35,6 +35,13 @@ class N8nTrigger(BaseModel):
     agent: str | None = None
     callback_url: str | None = None
     confirm: bool = False
+
+
+class N8nStatus(BaseModel):
+    allowlist_configured: bool
+    allowlist_count: int
+    trigger_path: str
+    domains: list[str]
 
 
 @router.post("/trigger")
@@ -57,4 +64,19 @@ async def trigger(
         rm, domain=req.domain, task=req.task, targets=[req.target],
         stealth=req.stealth, brain_tier=req.brain_tier, apt_profile=req.apt_profile,
         state_dir=str(data.dir), agent=req.agent, callback_url=req.callback_url,
+    )
+
+
+@router.get("/status", response_model=N8nStatus)
+def status_endpoint() -> N8nStatus:
+    """Read-only n8n integration status. Reports whether the outbound-callback
+    allowlist is configured (count only — never the hostnames, which are secret)
+    and the inbound trigger path/domains an external orchestrator can POST to.
+    Never launches a run."""
+    hosts = load_webhook_allowlist("N8N_WEBHOOK_ALLOWLIST")
+    return N8nStatus(
+        allowlist_configured=bool(hosts),
+        allowlist_count=len(hosts),
+        trigger_path="/api/n8n/trigger",
+        domains=["red", "blue", "purple"],
     )
