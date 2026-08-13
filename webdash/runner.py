@@ -63,6 +63,7 @@ class RunManager:
             "result": None,
             "error": None,
             "callback_url": callback_url,
+            "state_dir": state_dir,
         }
         self._active = run_id
         t = asyncio.create_task(
@@ -124,6 +125,21 @@ class RunManager:
             "error": rec["error"],
             "finished": rec["finished"],
         })
+
+        # Purple runs carry detection-coverage telemetry so n8n can gate/alert on it.
+        if rec.get("domain") == "purple" and rec.get("state_dir"):
+            try:
+                from state_manager import StateManager
+
+                sm = StateManager(db_path=str(Path(rec["state_dir"]) / "engagement.db"))
+                sm.read()
+                cov = sm.get_coverage(sm.active_engagement_id)
+                payload["coverage_pct"] = cov["coverage_pct"]
+                payload["caught_ttps"] = [c["ttp"] for c in cov["caught"]]
+                payload["missed_ttps"] = [m["ttp"] for m in cov["missed"]]
+            except Exception as exc:  # best-effort enrichment — never block the POST
+                print(f"n8n coverage enrichment failed: {type(exc).__name__}: {exc}")
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=payload, timeout=10)
