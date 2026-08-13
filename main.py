@@ -891,13 +891,25 @@ async def cmd_doctor(args) -> None:
         results.add_row("Engagement DB", "[red]FAIL[/red]", f"Database corrupt or missing: {str(e)}")
 
     # 3. Check API Connectivity
-    keys_to_check = ["GOOGLE_API_KEY", "OLLAMA_BASE_URL"]
-    for key in keys_to_check:
-        val = SecretStore.get_secret(key)
-        if val:
-            results.add_row(f"API Key: {key}", "[green]PASS[/green]", "Verified in secure vault")
-        else:
-            results.add_row(f"API Key: {key}", "[yellow]WARN[/yellow]", "Missing - Store with: python main.py model auth google <YOUR_KEY>")
+    # Cloud brain is provider-agnostic: reuse the real resolver so the check
+    # reflects whatever is configured (named provider key, GEMINI alias, or the
+    # generic EXPENSIVE_BRAIN_KEY) rather than hardcoding one vendor.
+    from model_manager import ModelManager
+    provider = ModelManager.get_config().get("cloud_provider", "openai")
+    resolved_key = ModelManager.get_client_config(brain_tier="expensive").get("api_key")
+    if resolved_key and resolved_key != "ollama":
+        results.add_row("Cloud Brain Key", "[green]PASS[/green]", f"Verified in secure vault (provider: {provider})")
+    else:
+        results.add_row(
+            "Cloud Brain Key",
+            "[yellow]WARN[/yellow]",
+            f"Missing - set EXPENSIVE_BRAIN_KEY, or run: python main.py model auth {provider} <YOUR_KEY>",
+        )
+
+    if SecretStore.get_secret("OLLAMA_BASE_URL"):
+        results.add_row("API Key: OLLAMA_BASE_URL", "[green]PASS[/green]", "Verified in secure vault")
+    else:
+        results.add_row("API Key: OLLAMA_BASE_URL", "[yellow]WARN[/yellow]", "Missing - defaults to http://localhost:11434")
 
     # 4. Check Sterile Image
     if sys.platform != "win32":
