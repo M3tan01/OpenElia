@@ -182,7 +182,9 @@ async def test_purple_run_marks_blue_run_status_complete(tmp_path):
     assert sm.get_metadata("blue_run_status") == "complete"
 
 
-async def test_red_only_run_does_not_mark_blue_run_status(tmp_path):
+async def test_red_only_run_marks_blue_run_status_running(tmp_path):
+    """A red-only run creates findings the blue batch hasn't hunted, so it sets
+    the marker to 'running' (never 'complete') — new TTPs must score as pending."""
     from state_manager import StateManager
     sm = StateManager(db_path=str(tmp_path / "test.db"))
     sm.initialize_engagement("10.0.0.1", "single-host")
@@ -197,7 +199,29 @@ async def test_red_only_run_does_not_mark_blue_run_status(tmp_path):
         mock_pool.run_until_complete = AsyncMock(return_value=[])
         mock_pool_class.return_value = mock_pool
         await orch.route("scan target", targets=["10.0.0.1"])
-    assert sm.get_metadata("blue_run_status") is None
+    assert sm.get_metadata("blue_run_status") == "running"
+
+
+async def test_red_run_clears_stale_complete_marker(tmp_path):
+    """Regression: a red-only run following a completed purple/blue run on the
+    same engagement must reset the sticky 'complete' marker back to 'running',
+    else its new findings would be scored as false misses."""
+    from state_manager import StateManager
+    sm = StateManager(db_path=str(tmp_path / "test.db"))
+    sm.initialize_engagement("10.0.0.1", "single-host")
+    sm.set_metadata("blue_run_status", "complete")  # left by a prior purple run
+    from orchestrator import Orchestrator
+    orch = Orchestrator(sm)
+    with patch.object(orch, "_classify", new=AsyncMock(return_value={"domain": "red", "confidence": 0.9, "reason": "test"})), \
+         patch("orchestrator.RBACManager") as mock_rbac, \
+         patch("orchestrator.AsyncWorkerPool") as mock_pool_class:
+        mock_rbac.enforce_red_team_auth.return_value = True
+        mock_pool = MagicMock()
+        mock_pool.submit = AsyncMock()
+        mock_pool.run_until_complete = AsyncMock(return_value=[])
+        mock_pool_class.return_value = mock_pool
+        await orch.route("scan target", targets=["10.0.0.1"])
+    assert sm.get_metadata("blue_run_status") == "running"
 
 
 async def test_dispatch_task_success(tmp_path):

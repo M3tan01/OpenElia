@@ -140,11 +140,15 @@ class Orchestrator:
             force_agent=force_agent,
         )
 
-        # Purple/blue runs dispatch a blue batch; gate the coverage race-status
-        # marker to those domains so an independent red run never falsely marks
-        # blue "complete" (which would turn pending TTPs into false misses).
+        # Coverage race-status marker. Every red/blue/purple run (re)sets it to
+        # "running" before dispatch: a red-only run creates findings the blue
+        # batch has NOT yet hunted, so a stale "complete" left by an earlier
+        # purple/blue run on the same persisted engagement must be reset —
+        # otherwise those new TTPs would be scored as false misses. Only the
+        # blue batch (blue/purple) transitions it to "complete" once its
+        # detectors have run.
         blue_batch = domain in ("blue", "purple")
-        if blue_batch:
+        if domain in ("red", "blue", "purple"):
             self.state.set_metadata("blue_run_status", "running")
 
         results = await self._pool.run_until_complete(self._dispatch_task)

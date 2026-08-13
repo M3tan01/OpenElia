@@ -127,6 +127,9 @@ class RunManager:
         })
 
         # Purple runs carry detection-coverage telemetry so n8n can gate/alert on it.
+        # Added AFTER redact() intentionally: only base TTP ids (non-PII) and a
+        # number go out here — never finding titles/descriptions. Keep it that way,
+        # or move any free-text field back through PrivacyGuard.redact first.
         if rec.get("domain") == "purple" and rec.get("state_dir"):
             try:
                 from state_manager import StateManager
