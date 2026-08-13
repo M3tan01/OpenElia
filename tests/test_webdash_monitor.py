@@ -82,6 +82,18 @@ def test_heatmap_returns_dict(client, state_dir, auth):
     assert isinstance(body, dict)
 
 
+def test_coverage_returns_buckets(client, state_dir, auth):
+    """GET /api/coverage returns the four tri-state buckets."""
+    body = client.get("/api/coverage", headers=auth).json()
+    assert set(body) == {"coverage_pct", "caught", "missed", "pending"}
+
+
+def test_coverage_requires_token(client, state_dir):
+    """No token → 401."""
+    resp = client.get("/api/coverage")
+    assert resp.status_code == 401
+
+
 def test_chain_verify_endpoint(client, state_dir, auth):
     body = client.get("/api/chain/verify", headers=auth).json()
     assert body["chain_ok"] is True

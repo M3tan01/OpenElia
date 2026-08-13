@@ -50,6 +50,12 @@ def get_heatmap(data: DashboardData = Depends(get_data)) -> dict:
     return data.heatmap()
 
 
+@router.get("/coverage")
+def get_coverage(data: DashboardData = Depends(get_data)) -> dict:
+    """Purple-team detection coverage (caught/pending/missed) for the active engagement."""
+    return data.coverage()
+
+
 @router.get("/cost")
 def get_cost(data: DashboardData = Depends(get_data)) -> dict:
     """Cost summary + per-session series."""

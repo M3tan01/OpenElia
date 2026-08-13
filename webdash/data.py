@@ -177,6 +177,14 @@ class DashboardData:
         findings = self.state().get("findings", [])
         return GraphManager(db_path=str(self.graph_path)).get_mitre_heatmap(findings)
 
+    # --- purple coverage --------------------------------------------------- #
+    def coverage(self) -> dict:
+        from state_manager import StateManager
+
+        sm = StateManager(db_path=str(self.db_path))
+        sm.read()
+        return sm.get_coverage(sm.active_engagement_id)
+
     # --- cost / budget ----------------------------------------------------- #
     def cost(self) -> dict:
         from cost_tracker import CostTracker
