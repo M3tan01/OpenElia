@@ -14,6 +14,7 @@ import { CostMitre } from "./components/CostMitre";
 import { EngagementsView } from "./components/EngagementsView";
 import { FindingsView } from "./components/FindingsView";
 import { ModelSelector } from "./components/ModelSelector";
+import { PurpleCoverageView } from "./components/PurpleCoverageView";
 import { RoEView } from "./components/RoEView";
 
 export type PanelCtx = {
@@ -38,6 +39,7 @@ export const PANEL_CATALOG: PanelDef[] = [
   { id: "audit",    label: "Audit Timeline",   span: "normal", render: (c) => <AuditTimeline liveAudit={c.stream.audit} /> },
   { id: "models",   label: "Brain Models",     span: "wide",   render: () => <ModelSelector /> },
   { id: "cost",     label: "Cost & MITRE",     span: "wide",   render: () => <CostMitre /> },
+  { id: "coverage", label: "Purple Coverage",  span: "wide",   render: () => <PurpleCoverageView /> },
   { id: "findings", label: "Findings",         span: "normal", render: () => <FindingsView /> },
   { id: "cleanup",  label: "Rollback Queue",   span: "normal", render: () => <CleanupView /> },
   { id: "sessions", label: "Sessions",         span: "normal", render: () => <EngagementsView /> },
