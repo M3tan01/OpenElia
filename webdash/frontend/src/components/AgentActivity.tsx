@@ -9,6 +9,7 @@ import { useAgentsRoster } from "../useAgentsRoster";
 const TIER_ORDER = ["RECON", "ANALYSIS", "EXECUTION", "OTHER"];
 
 const STATUS_COLOR: Record<string, string> = {
+  running: "text-amber animate-blink",
   success: "text-emerald-400",
   error: "text-rose-400",
   skipped: "text-slate-500",
@@ -38,9 +39,12 @@ export function AgentActivity({ liveTasks }: { liveTasks: TaskResult[] }) {
     ...Object.keys(tierAgents).filter((t) => !TIER_ORDER.includes(t)),
   ];
 
-  // Merge polled tasks with live stream, dedup by task_id (live wins).
+  // Merge polled tasks with live stream, dedup by task_id — latest status wins.
+  // liveTasks is newest-first; reverse it so the newest record is applied LAST
+  // and overwrites older ones (a 'running' marker is superseded by its terminal
+  // success/error record). Live records also override the poll (applied after).
   const merged = new Map<string, TaskResult>();
-  [...(polledTasks ?? []), ...liveTasks].forEach((t) => merged.set(t.task_id, t));
+  [...(polledTasks ?? []), ...[...liveTasks].reverse()].forEach((t) => merged.set(t.task_id, t));
   const all = [...merged.values()];
 
   return (
