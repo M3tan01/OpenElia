@@ -270,3 +270,7 @@ adversaries/tailored_*.json
 
 # Skills lockfile — regenerated locally
 skills-lock.json
+
+# Git worktrees for isolated SDD workspaces
+.worktrees/
+.superpowers/
