@@ -111,6 +111,13 @@ export type PlaybookSummary = {
 
 export type SystemResp = { gateway: string; active_engagements: number };
 
+export type N8nStatus = {
+  allowlist_configured: boolean;
+  allowlist_count: number;
+  trigger_path: string;
+  domains: string[];
+};
+
 export type AgentInfo = { name: string; domain: string; description: string; tier: string; supports_stealth: boolean };
 export type AgentsResp = { agents: AgentInfo[] };
 
