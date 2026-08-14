@@ -28,6 +28,7 @@ const NAV: NavGroup[] = [
       { id: "cost", label: "Cost & MITRE" },
       { id: "stix", label: "IOC Parser" },
       { id: "cleanup", label: "Rollback Queue" },
+      { id: "n8n", label: "n8n Integration" },
     ],
   },
   {

@@ -14,6 +14,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FindingsView } from "./components/FindingsView";
 import { HamburgerToggle } from "./components/HamburgerToggle";
 import { ModelSelector } from "./components/ModelSelector";
+import { N8nView } from "./components/N8nView";
 import { PlaybooksView } from "./components/PlaybooksView";
 import { RoEView } from "./components/RoEView";
 import { Sidebar } from "./components/Sidebar";
@@ -117,6 +118,7 @@ export default function App() {
                 case "playbooks":    return <Solo><PlaybooksView /></Solo>;
                 case "findings":     return <Solo><FindingsView /></Solo>;
                 case "cleanup":      return <Solo><CleanupView /></Solo>;
+                case "n8n":          return <Solo><N8nView /></Solo>;
                 case "stix":         return <Solo><StixHuntView /></Solo>;
                 case "apt":          return <Solo><APTProfilesView /></Solo>;
                 case "forge":        return <Solo><AdversaryForgeView /></Solo>;
