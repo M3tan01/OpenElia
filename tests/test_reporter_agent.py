@@ -22,6 +22,15 @@ def mock_state(tmp_path):
             {"type": "sql_injection_attempt", "severity": "high"},
         ],
     }
+    sm.get_coverage.return_value = {
+        "scorecard": [
+            {"ttp": "T1190", "title": "SQLi", "rung": "detected", "time_to_detect_s": 30},
+        ],
+        "rung_counts": {
+            "missed": 0, "logged": 0, "alerted": 0,
+            "detected": 1, "triaged": 0, "contained": 0,
+        },
+    }
     return sm
 
 
@@ -171,3 +180,25 @@ class TestReporterAgentBrief:
             await reporter.brief([{"title": "X", "severity": "low"}])
         # third positional arg (index 2) is tools — should be empty list
         assert mock_cwt.call_args[0][2] == []
+
+
+class TestReporterAgentPTEFScorecard:
+    """run() must inject the PTEF per-TTP scorecard + rung counts into the LLM context."""
+
+    async def test_run_context_includes_ptef_scorecard(self, reporter, mock_state):
+        captured = {}
+
+        async def fake_call(system, messages, tools):
+            captured["messages"] = messages
+            return "## Report"
+
+        with patch.object(reporter, "_call_with_tools", side_effect=fake_call), \
+             patch.object(reporter, "_build_system_prompt", return_value="sys"), \
+             patch.object(reporter, "_get_standard_tools", return_value=[]):
+            await reporter.run()
+
+        mock_state.get_coverage.assert_called_once_with(mock_state.active_engagement_id)
+        payload = captured["messages"][0]["content"]
+        assert "ptef_scorecard" in payload
+        assert "T1190" in payload
+        assert "rung_counts" in payload
