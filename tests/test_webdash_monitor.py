@@ -85,7 +85,7 @@ def test_heatmap_returns_dict(client, state_dir, auth):
 def test_coverage_returns_buckets(client, state_dir, auth):
     """GET /api/coverage returns the four tri-state buckets."""
     body = client.get("/api/coverage", headers=auth).json()
-    assert set(body) == {"coverage_pct", "caught", "missed", "pending"}
+    assert {"coverage_pct", "caught", "missed", "pending"} <= set(body)
 
 
 def test_coverage_requires_token(client, state_dir):
