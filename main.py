@@ -518,6 +518,7 @@ async def cmd_purple(args) -> None:
     iterations = args.iterations
     prev_blue_alerts: list = []
     prev_findings: list = []
+    prev_covered: set[str] = set()
 
     print(f"\n[Purple Loop] Starting {iterations}-iteration feedback loop")
     print("[Purple Loop] Red → Blue → Coverage delta → Adapt → repeat\n")
@@ -574,15 +575,20 @@ async def cmd_purple(args) -> None:
         print(f"[Purple Loop] Blue raised {len(new_alerts)} new alert(s) "
               f"({len(current_alerts)} total)")
 
-        # ── Coverage Delta ─────────────────────────────────────────────────────
-        if current_findings:
-            # Rough coverage: ratio of alerts to findings this iteration
-            coverage_pct = min(100, int(len(current_alerts) / max(len(current_findings), 1) * 100))
-        else:
-            coverage_pct = 0
+        # ── Coverage Delta (PTEF per-TTP scorecard) ────────────────────────────
+        cov = state.get_coverage(state.active_engagement_id)
+        rc = cov["rung_counts"]
+        coverage_pct = cov["coverage_pct"]
+        rung_line = " · ".join(f"{name} {rc[name]}" for name in
+                               ("PREVENTED", "ALERTED", "DETECTED", "LOGGED", "MISSED", "PENDING"))
+        print(f"[Purple Loop] Detection ladder: {rung_line}")
 
-        print(f"[Purple Loop] Coverage estimate: {coverage_pct}% "
-              f"({len(current_alerts)} alerts / {len(current_findings)} findings)")
+        covered_now = {e["ttp"] for e in cov["scorecard"] if e["rung"] not in ("MISSED", "PENDING")}
+        newly_covered = covered_now - prev_covered
+        if newly_covered:
+            print(f"[Purple Loop] Newly covered this iteration: {', '.join(sorted(newly_covered))}")
+        print(f"[Purple Loop] Coverage: {coverage_pct}% ({len(covered_now)}/{len(cov['scorecard'])} TTPs)")
+        prev_covered = covered_now
 
         prev_findings = current_findings
         prev_blue_alerts = current_alerts
