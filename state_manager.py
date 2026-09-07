@@ -39,6 +39,16 @@ def _base_ttp(ttp: str | None) -> str:
     return ttp.split(".", 1)[0].strip().upper()
 
 
+def _ttd_seconds(finding_ts: str | None, alert_ts: str | None) -> int | None:
+    """Seconds from earliest finding to earliest detecting alert for a TTP.
+    Returns None on missing/malformed timestamps; clamps negatives (clock skew) to 0."""
+    try:
+        delta = (datetime.fromisoformat(alert_ts) - datetime.fromisoformat(finding_ts)).total_seconds()
+    except (TypeError, ValueError):
+        return None
+    return max(0, int(delta))
+
+
 _DEFAULT_DB_FILE = os.getenv("STATE_FILE", "state/engagement.db").replace(".json", ".db")
 
 
@@ -594,6 +604,28 @@ class StateManager:
                 "WHERE engagement_id = ? AND mitre_ttp IS NOT NULL AND mitre_ttp != ''",
                 (engagement_id,),
             ).fetchall()
+            alert_detail_rows = conn.execute(
+                "SELECT id, mitre_ttp, escalated, timestamp FROM blue_alerts "
+                "WHERE engagement_id = ? AND mitre_ttp IS NOT NULL AND mitre_ttp != ''",
+                (engagement_id,),
+            ).fetchall()
+            finding_ts_rows = conn.execute(
+                "SELECT mitre_ttp, timestamp FROM findings "
+                "WHERE engagement_id = ? AND mitre_ttp IS NOT NULL AND mitre_ttp != ''",
+                (engagement_id,),
+            ).fetchall()
+            response_rows = conn.execute(
+                "SELECT mitre_ttp FROM response_actions "
+                "WHERE engagement_id = ? AND mitre_ttp IS NOT NULL AND mitre_ttp != ''",
+                (engagement_id,),
+            ).fetchall()
+            dismiss_rows = conn.execute(
+                "SELECT ba.mitre_ttp AS ttp FROM blue_analyses an "
+                "JOIN blue_alerts ba ON an.alert_id = ba.id "
+                "WHERE an.engagement_id = ? AND an.escalate = 0 "
+                "AND ba.mitre_ttp IS NOT NULL AND ba.mitre_ttp != ''",
+                (engagement_id,),
+            ).fetchall()
 
         # Representative finding per base-normalized TTP (first row by id wins for title).
         reps: dict[str, str] = {}
@@ -617,9 +649,65 @@ class StateManager:
 
         resolved = len(caught) + len(missed)
         coverage_pct = round(100.0 * len(caught) / resolved, 1) if resolved else 0
+
+        # ── PTEF scorecard: highest-maturity rung per executed (finding) base TTP ──
+        # ISO-8601 UTC strings compare lexicographically == chronologically, so min()
+        # over strings is safe for "earliest".
+        finding_first_ts: dict[str, str] = {}
+        for row in finding_ts_rows:
+            base = _base_ttp(row["mitre_ttp"])
+            if base and row["timestamp"] and (base not in finding_first_ts or row["timestamp"] < finding_first_ts[base]):
+                finding_first_ts[base] = row["timestamp"]
+
+        alert_by_base: dict[str, dict] = {}
+        for row in alert_detail_rows:
+            base = _base_ttp(row["mitre_ttp"])
+            if not base:
+                continue
+            slot = alert_by_base.setdefault(base, {"escalated": False, "first_ts": None})
+            if row["escalated"]:
+                slot["escalated"] = True
+            ts = row["timestamp"]
+            if ts and (slot["first_ts"] is None or ts < slot["first_ts"]):
+                slot["first_ts"] = ts
+
+        prevented_bases = {_base_ttp(r["mitre_ttp"]) for r in response_rows}
+        prevented_bases.discard("")
+        dismissed_bases = {_base_ttp(r["ttp"]) for r in dismiss_rows}
+        dismissed_bases.discard("")
+
+        rung_precedence = {"PREVENTED": 5, "ALERTED": 4, "DETECTED": 3, "LOGGED": 2, "MISSED": 1, "PENDING": 0}
+        scorecard = []
+        for base, title in reps.items():
+            if base in prevented_bases:
+                rung = "PREVENTED"
+            elif base in alert_by_base and alert_by_base[base]["escalated"]:
+                rung = "ALERTED"
+            elif base in alert_by_base and base in dismissed_bases:
+                rung = "LOGGED"
+            elif base in alert_by_base:
+                rung = "DETECTED"
+            elif blue_done:
+                rung = "MISSED"
+            else:
+                rung = "PENDING"
+
+            ttd = None
+            if base in alert_by_base:
+                ttd = _ttd_seconds(finding_first_ts.get(base), alert_by_base[base]["first_ts"])
+
+            scorecard.append({"ttp": base, "title": title, "rung": rung, "time_to_detect_s": ttd})
+
+        scorecard.sort(key=lambda e: (-rung_precedence[e["rung"]], e["ttp"]))
+        rung_counts = {name: 0 for name in rung_precedence}
+        for e in scorecard:
+            rung_counts[e["rung"]] += 1
+
         return {
             "coverage_pct": coverage_pct,
             "caught": caught,
             "missed": missed,
             "pending": pending,
+            "scorecard": scorecard,
+            "rung_counts": rung_counts,
         }
