@@ -36,3 +36,28 @@ def _seed_model_config(tmp_path, monkeypatch):
     monkeypatch.setattr(mm, "_CONFIG_DIR", cfg_dir)
     monkeypatch.setattr(mm, "_CONFIG_FILE", cfg_file)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state_dir(tmp_path, monkeypatch):
+    """Redirect the lifecycle hooks' state dir into a per-test tmp sandbox.
+
+    core.hooks._state_dir() resolves Path(os.getenv("STATE_DIR", "state")) at
+    call time, so post_run_hook / error_hook otherwise append to the *live*
+    state/audit.log (HMAC-chained) and state/task_results.jsonl. Tests that
+    exercise _dispatch_task or the hooks directly (test_orchestrator_pool,
+    test_purple_loop, test_worker_pool) were leaking synthetic 'agent exploded'
+    records into the production audit trail. Isolating STATE_DIR here keeps every
+    test's hook writes inside tmp_path.
+    """
+    # Distinct name (not "state") so it never collides with tests that create
+    # their own tmp_path/state — e.g. test_rbac_manager chdir's into tmp_path and
+    # mkdir's ./state, which would FileExistsError if we pre-created it here.
+    state_dir = tmp_path / "_hook_state"
+    state_dir.mkdir()
+    # Two env names are in play across the codebase: core.hooks resolves STATE_DIR,
+    # while the audit-domain writers (AuditLogger, webdash/guards, mcp siem) resolve
+    # OPENELIA_STATE_DIR. Set both so every audit/task-result writer lands in tmp.
+    monkeypatch.setenv("STATE_DIR", str(state_dir))
+    monkeypatch.setenv("OPENELIA_STATE_DIR", str(state_dir))
+    yield

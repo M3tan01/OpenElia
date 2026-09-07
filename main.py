@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 import ipaddress
 import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from secret_store import SecretStore
 
@@ -170,8 +170,9 @@ async def cmd_check(args) -> None:
     print("[ ] Checking RBAC Status...", end="\r")
     from rbac_manager import RBACManager
     is_admin = RBACManager.is_os_admin()
-    has_idp = os.path.exists("state/idp_session.json")
-    status = "Admin" if is_admin else "User"
+    has_idp = os.path.exists(os.path.join(os.getenv("OPENELIA_STATE_DIR", "state"), "idp_session.json"))
+    allow_unpriv = os.getenv("OPENELIA_ALLOW_UNPRIV_RED") == "1"
+    status = "Admin" if is_admin else ("User+unpriv-red" if allow_unpriv else "User")
     print(f"[✓] RBAC: Running as {status} | IdP Session: {'Found' if has_idp else 'Missing'}")
 
     # 6. macOS Hardware Security Check
@@ -931,6 +932,51 @@ async def cmd_doctor(args) -> None:
     console.print("\n[bold green]Doctor's Verdict: System operational with warnings.[/bold green]\n")
 
 
+async def cmd_grant(args) -> None:
+    """Mint (or revoke) the signed IdP session that authorizes red/purple ops.
+
+    enforce_red_team_auth's second gate reads state/idp_session.json and checks
+    both its HMAC signature and that it carries an allowed role. There was no way
+    to produce that file, so red/purple were unreachable from the dashboard even
+    for a legitimate operator. `grant` closes that gap: it signs the claims with
+    the same IDP_HMAC_KEY the verifier uses, so a hand-edited or forged file fails
+    the signature check.
+    """
+    from rbac_manager import sign_idp_session
+
+    state_dir = Path(os.getenv("OPENELIA_STATE_DIR", "state"))
+    state_dir.mkdir(parents=True, exist_ok=True)
+    idp_path = state_dir / "idp_session.json"
+
+    if args.revoke:
+        if idp_path.exists():
+            idp_path.unlink()
+            print(f"[grant] Revoked IdP session — removed {idp_path}")
+        else:
+            print(f"[grant] No IdP session to revoke at {idp_path}")
+        return
+
+    import time
+    exp = int(time.time()) + int(args.ttl_hours * 3600)
+    claims = {"user": args.user, "roles": [args.role], "exp": exp}
+    signed = sign_idp_session(claims)
+    idp_path.write_text(json.dumps(signed, indent=2))
+    # The session is a bearer token (verified by HMAC + role only, not bound to a
+    # host/user), so lock it to the owner — otherwise any local user could copy it
+    # into their own OPENELIA_STATE_DIR and inherit the grant. Best-effort on the
+    # state dir too. os.chmod is a no-op-ish on Windows; the multi-user threat is POSIX.
+    try:
+        os.chmod(idp_path, 0o600)
+        os.chmod(state_dir, 0o700)
+    except OSError as exc:
+        print(f"[grant] Warning: could not tighten permissions on {idp_path}: {exc}")
+    print(f"[grant] Signed IdP session written to {idp_path} (mode 0600)")
+    print(f"[grant] user={args.user} role={args.role} expires={datetime.fromtimestamp(exp, timezone.utc).isoformat()}")
+    print("[grant] Red/purple ops now authorized for this operator (subject to the OS-root gate).")
+    if os.getenv("OPENELIA_ALLOW_UNPRIV_RED") != "1" and not (sys.platform != "win32" and os.getuid() == 0):
+        print("[grant] Note: not running as root — set OPENELIA_ALLOW_UNPRIV_RED=1 for rootless-lab mode, or run under sudo.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openelia", description="OpenElia — AI-powered pentesting and blue team analysis")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -977,6 +1023,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("archive", parents=[common], help="Package engagement archive")
     sub.add_parser("lock", help="Engage Global Kill-Switch")
     sub.add_parser("unlock", help="Disengage Global Kill-Switch")
+
+    grant_p = sub.add_parser("grant", help="Mint/revoke the signed IdP session authorizing red/purple ops")
+    grant_p.add_argument("--user", default="operator", help="Operator identity to record in the session")
+    grant_p.add_argument("--role", default="red_team_lead",
+                         choices=["admin", "security_lead", "red_team_lead"],
+                         help="Role to grant (must be one enforce_red_team_auth accepts)")
+    grant_p.add_argument("--ttl-hours", type=float, default=12.0,
+                         help="Hours until the minted session expires (default: 12)")
+    grant_p.add_argument("--revoke", action="store_true", help="Remove the existing IdP session instead of minting one")
 
     report_p = sub.add_parser("report", parents=[common], help="Generate executive report and MITRE heatmap")
     report_p.add_argument("--task", help="Override the default report task prompt")
@@ -1044,7 +1099,7 @@ def main() -> None:
     SecretStore.bootstrap()
     parser = build_parser()
     args = parser.parse_args()
-    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model, "forge": cmd_forge, "playbook": cmd_playbook}
+    handlers = {"check": cmd_check, "doctor": cmd_doctor, "red": cmd_red, "blue": cmd_blue, "status": cmd_status, "clear": cmd_clear, "nmap": cmd_nmap, "msf": cmd_msf, "purple": cmd_purple, "dashboard": cmd_dashboard, "sbom": cmd_sbom, "archive": cmd_archive, "lock": cmd_lock, "unlock": cmd_unlock, "grant": cmd_grant, "report": cmd_report, "execute-remediation": cmd_execute_remediation, "model": cmd_model, "forge": cmd_forge, "playbook": cmd_playbook}
     handler = handlers.get(args.command)
     if handler:
         asyncio.run(handler(args))

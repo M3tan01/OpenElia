@@ -276,6 +276,24 @@ class DefenderRes(BaseAgent):
         tools = self._get_standard_tools() + self._get_res_tools()
         return await self._run_tool_loop(system, messages, tools, self._execute_res_tool)
 
+    async def run(self, task: str) -> str:
+        """Tier 2 response entry point.
+
+        Invoked once defender_ana has confirmed a true positive (escalate=true).
+        `task` carries the serialized analysis plus the original alert context.
+        Drives the response tool loop (write_response_action / write_thehive_case);
+        containment commands are logged for explicit operator approval, never
+        auto-executed here.
+        """
+        print(f"[defender_res] Tier 2 response triggered — {task[:120]}")
+
+        system = self._build_system_prompt(_BASE_PROMPT)
+        messages = [{"role": "user", "content": task}]
+
+        result = await self._call_with_res_tools(system, messages)
+        print(f"[defender_res] Response complete.\n{result[:500]}")
+        return result
+
     async def dispatch_thehive_case(self, case_data: dict) -> str:
         """Push a case directly to TheHive REST API."""
         hive_url = SecretStore.get_secret("THEHIVE_URL")

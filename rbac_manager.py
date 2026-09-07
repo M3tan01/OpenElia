@@ -6,6 +6,7 @@ import platform
 import ctypes
 import json
 import sys
+import time
 from rich.console import Console
 
 console = Console()
@@ -61,8 +62,11 @@ class RBACManager:
         In this prototype, we look for an 'idp_session.json' which simulates 
         a verified token from an IdP (e.g., GitHub, Okta).
         """
-        idp_path = "state/idp_session.json"
-        
+        # Resolve the state dir at call time so `grant` (which mints the session)
+        # and this verifier agree on one path, and both honor an OPENELIA_STATE_DIR
+        # override — matching AuditLogger / webdash/guards / mcp siem.
+        idp_path = os.path.join(os.getenv("OPENELIA_STATE_DIR", "state"), "idp_session.json")
+
         if not os.path.exists(idp_path):
             console.print("[yellow]Warning: No IdP session found. Access restricted.[/yellow]")
             return False
@@ -73,6 +77,22 @@ class RBACManager:
 
             if not verify_idp_session(claims):
                 console.print("[red]✗ IdP Session integrity check failed: signature invalid or tampered.[/red]")
+                return False
+
+            # Fail-closed expiry: `exp` is inside the signed payload, so it cannot be
+            # extended without invalidating the signature. A session with no exp, or a
+            # past/malformed exp, is rejected — a leaked file must not be a permanent
+            # credential.
+            exp = claims.get("exp")
+            if exp is None:
+                console.print("[red]✗ IdP Session missing expiry — rejecting (fail-closed).[/red]")
+                return False
+            try:
+                if float(exp) < time.time():
+                    console.print("[red]✗ IdP Session expired — mint a fresh one with 'openelia grant'.[/red]")
+                    return False
+            except (TypeError, ValueError):
+                console.print("[red]✗ IdP Session has a malformed expiry — rejecting.[/red]")
                 return False
 
             user_roles = claims.get("roles", [])
@@ -93,11 +113,21 @@ class RBACManager:
         """Tier 1: Enforce high-level authentication for offensive ops."""
         console.print("\n[bold magenta]🛡️ OpenElia RBAC Authorization[/bold magenta]")
         
-        # 1. Check OS Privileges
-        if not cls.is_os_admin():
+        # 1. Check OS Privileges.
+        # The host-root gate exists so a stray offensive module can't fire from an
+        # unprivileged shell. It is deliberately bypassable in a rootless lab via
+        # OPENELIA_ALLOW_UNPRIV_RED=1: the documented architecture runs offensive
+        # tooling inside rootless, ephemeral Docker containers, so the *host* process
+        # never needs to be root — and running the dashboard/API as root would be
+        # worse posture than skipping this check. The IdP role gate below remains the
+        # real authorization control in both modes; it is never bypassed.
+        allow_unpriv = os.getenv("OPENELIA_ALLOW_UNPRIV_RED") == "1"
+        if not cls.is_os_admin() and not allow_unpriv:
             console.print("[red]✗ Access Denied: OS Administrative privileges required for offensive modules.[/red]")
-            console.print("[dim]Hint: Run with 'sudo' or as Administrator.[/dim]")
+            console.print("[dim]Hint: run with 'sudo'/as Administrator, or set OPENELIA_ALLOW_UNPRIV_RED=1 for a rootless lab.[/dim]")
             return False
+        if allow_unpriv and not cls.is_os_admin():
+            console.print("[dim]OS-root gate bypassed via OPENELIA_ALLOW_UNPRIV_RED=1 (rootless lab mode).[/dim]")
             
         # 2. Check IdP Claims
         if not cls.verify_idp_claims(["admin", "security_lead", "red_team_lead"]):
