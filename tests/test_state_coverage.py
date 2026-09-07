@@ -152,3 +152,45 @@ def test_defender_hunt_passes_tool_mitre_to_alert():
     )
 
     assert st.calls[0]["mitre_ttp"] == "T1547.001"
+
+
+def test_add_response_action_persists_mitre_ttp():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    st.add_response_action(
+        {"action_type": "block_ip", "target": "10.0.0.5", "command": "iptables -I INPUT -s 10.0.0.5 -j DROP",
+         "rationale": "C2", "mitre_ttp": "T1071.001"},
+        engagement_id=eid,
+    )
+    ras = st.read(eid)["response_actions"]
+    assert ras[0]["mitre_ttp"] == "T1071.001"
+
+
+def test_add_response_action_without_mitre_ttp_defaults_null():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    st.add_response_action(
+        {"action_type": "other", "target": "host", "command": "noop", "rationale": "r"},
+        engagement_id=eid,
+    )
+    assert st.read(eid)["response_actions"][0]["mitre_ttp"] is None
+
+
+def test_legacy_db_gains_response_actions_mitre_ttp_column():
+    import sqlite3 as _sq, os as _os, tempfile as _tf
+    fd, path = _tf.mkstemp(suffix=".db")
+    _os.close(fd)
+    # Simulate a pre-migration DB: response_actions without mitre_ttp.
+    conn = _sq.connect(path)
+    conn.execute(
+        "CREATE TABLE response_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, engagement_id TEXT, "
+        "action_type TEXT, target TEXT, command TEXT, rationale TEXT, requires_approval INTEGER, logged_at TEXT)"
+    )
+    conn.commit()
+    conn.close()
+    # Opening via StateManager must run the idempotent migration without error.
+    st = StateManager(db_path=path)
+    cols = {row[1] for row in _sq.connect(path).execute("PRAGMA table_info(response_actions)").fetchall()}
+    assert "mitre_ttp" in cols

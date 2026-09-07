@@ -204,6 +204,19 @@ class StateManager:
                     pass  # column added by a concurrent initializer — fine
             conn.commit()
 
+            # Idempotent migration: add mitre_ttp to response_actions if absent
+            # (PTEF scorecard PREVENTED rung matches a response to a finding's TTP).
+            existing_ra_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(response_actions)").fetchall()
+            }
+            if "mitre_ttp" not in existing_ra_cols:
+                try:
+                    conn.execute("ALTER TABLE response_actions ADD COLUMN mitre_ttp TEXT")
+                except sqlite3.OperationalError:
+                    pass  # column added by a concurrent initializer — fine
+            conn.commit()
+
     def _get_last_active_id(self) -> Optional[str]:
         with self._get_conn() as conn:
             row = conn.execute("SELECT id FROM engagement WHERE is_active = 1 ORDER BY started DESC LIMIT 1").fetchone()
@@ -530,11 +543,12 @@ class StateManager:
         with self._get_conn() as conn:
             ts = datetime.now(timezone.utc).isoformat()
             cursor = conn.execute("""
-                INSERT INTO response_actions (engagement_id, action_type, target, command, rationale, requires_approval, logged_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO response_actions (engagement_id, action_type, target, command, rationale, requires_approval, mitre_ttp, logged_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (eid, action_data.get("action_type"), action_data.get("target"),
                   action_data.get("command"), action_data.get("rationale"),
-                  1 if action_data.get("requires_approval") else 0, ts))
+                  1 if action_data.get("requires_approval") else 0,
+                  action_data.get("mitre_ttp"), ts))
             conn.commit()
             return {"id": cursor.lastrowid}
 
