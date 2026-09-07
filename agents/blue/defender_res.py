@@ -100,6 +100,10 @@ class DefenderRes(BaseAgent):
                             "description": "REQUIRED. Exact command or procedure, e.g. 'iptables -I INPUT -s 10.0.0.77 -j DROP' or 'Disable-ADAccount -Identity jsmith'.",
                         },
                         "rationale": {"type": "string"},
+                        "mitre_ttp": {
+                            "type": "string",
+                            "description": "MITRE ATT&CK technique this response counters, e.g. 'T1071.001'. Used for PTEF PREVENTED-rung scoring — set it whenever the technique is known.",
+                        },
                         "requires_approval": {
                             "type": "boolean",
                             "description": "True if this action needs IR Manager sign-off first",

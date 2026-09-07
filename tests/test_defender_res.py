@@ -44,6 +44,17 @@ class TestAgentContract:
         assert inspect.iscoroutinefunction(agent.run)
 
 
+class TestWriteResponseActionSchema:
+    def test_write_response_action_schema_advertises_mitre_ttp(self, res):
+        """write_response_action tool schema must advertise optional mitre_ttp property."""
+        tools = res._get_res_tools()
+        schema = next(t for t in tools if t["name"] == "write_response_action")["input_schema"]
+        assert "mitre_ttp" in schema["properties"]
+        assert schema["properties"]["mitre_ttp"]["type"] == "string"
+        # optional — must NOT be in required
+        assert "mitre_ttp" not in schema["required"]
+
+
 # ---------------------------------------------------------------------------
 # _ALLOWED_CMD_PREFIXES — security gate
 # ---------------------------------------------------------------------------
