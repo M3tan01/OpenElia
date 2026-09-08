@@ -218,12 +218,27 @@ class BaseAgent(ABC):
         
         try:
             if tool_name == "execute_atomic_test":
+                # Validate args BEFORE dispatch so a malformed call returns a
+                # recoverable, self-describing error the model can fix on the next
+                # turn — not a bare KeyError string like "Error: 'ttp_id'" that
+                # weaker models fixate on and repeat until the loop guard halts.
+                ttp_id = tool_input.get("ttp_id")
+                if not ttp_id:
+                    return ("Tool arg error: 'ttp_id' is required (e.g. 'T1003.001'). "
+                            "You passed: " + json.dumps(tool_input) + ". Retry with a valid "
+                            "'ttp_id'. Note 'test_id' is an integer index, not the TTP.")
+                test_id = tool_input.get("test_id", 1)
+                try:
+                    test_id = int(test_id)
+                except (TypeError, ValueError):
+                    return ("Tool arg error: 'test_id' must be an integer index (default 1), "
+                            f"got {test_id!r}. Put the MITRE TTP in 'ttp_id' instead.")
                 # Delegate to PentesterOS if available, else local simulation
                 try:
                     from agents.red.pentester_os import PentesterOS
                     pos = PentesterOS(self.state)
                     # Return the coroutine to be awaited in the tool loop
-                    return pos.execute_atomic_test(tool_input["ttp_id"], tool_input.get("test_id", 1), tool_input.get("target_ip"))
+                    return pos.execute_atomic_test(ttp_id, test_id, tool_input.get("target_ip"))
                 except Exception as e:
                     return f"Atomic Execution Error: {str(e)}"
 
@@ -475,9 +490,14 @@ class BaseAgent(ABC):
 
             tool_calls = message.tool_calls
             if not tool_calls:
-                # Cache the successful non-tool response
-                self.vector_manager.cache_response(context_fingerprint, message.content or "")
-                return message.content or ""
+                final = message.content or ""
+                # Only cache a non-empty result. Caching "" poisons the semantic
+                # cache: an empty answer (model produced nothing, or the tool loop
+                # bailed) would be replayed as a HIT for that fingerprint forever,
+                # so a later capable run never gets to re-reason and re-find.
+                if final.strip():
+                    self.vector_manager.cache_response(context_fingerprint, final)
+                return final
 
             for tc in tool_calls:
                 try:

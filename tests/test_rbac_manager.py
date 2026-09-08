@@ -6,6 +6,7 @@ Covers: sign_idp_session adds _sig, verify_idp_session accepts valid,
         verify_idp_claims with missing/present/tampered session files.
 """
 import json
+import time
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -80,25 +81,41 @@ class TestIsOsAdmin:
 
 class TestVerifyIdpClaims:
     def test_no_session_file_returns_false(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
         assert RBACManager.verify_idp_claims(["admin"]) is False
 
     def test_valid_session_with_matching_role_returns_true(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
         (tmp_path / "state").mkdir()
-        claims = sign_idp_session({"user": "bob", "roles": ["admin"]})
+        claims = sign_idp_session({"user": "bob", "roles": ["admin"], "exp": time.time() + 3600})
         (tmp_path / "state" / "idp_session.json").write_text(json.dumps(claims))
         assert RBACManager.verify_idp_claims(["admin"]) is True
 
     def test_valid_session_without_required_role_returns_false(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
         (tmp_path / "state").mkdir()
-        claims = sign_idp_session({"user": "bob", "roles": ["viewer"]})
+        claims = sign_idp_session({"user": "bob", "roles": ["viewer"], "exp": time.time() + 3600})
+        (tmp_path / "state" / "idp_session.json").write_text(json.dumps(claims))
+        assert RBACManager.verify_idp_claims(["admin"]) is False
+
+    def test_expired_session_returns_false(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
+        (tmp_path / "state").mkdir()
+        # Signed, correct role, but exp is in the past — must be rejected.
+        claims = sign_idp_session({"user": "bob", "roles": ["admin"], "exp": time.time() - 1})
+        (tmp_path / "state" / "idp_session.json").write_text(json.dumps(claims))
+        assert RBACManager.verify_idp_claims(["admin"]) is False
+
+    def test_session_without_exp_returns_false(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
+        (tmp_path / "state").mkdir()
+        # Validly signed, correct role, but no expiry — fail-closed rejection.
+        claims = sign_idp_session({"user": "bob", "roles": ["admin"]})
         (tmp_path / "state" / "idp_session.json").write_text(json.dumps(claims))
         assert RBACManager.verify_idp_claims(["admin"]) is False
 
     def test_tampered_session_returns_false(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
         (tmp_path / "state").mkdir()
         claims = sign_idp_session({"user": "bob", "roles": ["viewer"]})
         claims["roles"] = ["admin"]  # tamper after signing
@@ -106,7 +123,7 @@ class TestVerifyIdpClaims:
         assert RBACManager.verify_idp_claims(["admin"]) is False
 
     def test_invalid_json_returns_false(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENELIA_STATE_DIR", str(tmp_path / "state"))
         (tmp_path / "state").mkdir()
         (tmp_path / "state" / "idp_session.json").write_text("{not valid json")
         assert RBACManager.verify_idp_claims(["admin"]) is False

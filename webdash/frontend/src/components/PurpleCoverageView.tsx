@@ -1,4 +1,4 @@
-import { apiGet, CoverageResp, CoverageTtp } from "../api";
+import { apiGet, CoverageResp, CoverageTtp, ScorecardEntry } from "../api";
 import { usePoll } from "../usePoll";
 import { Badge, Panel } from "./Panel";
 
@@ -23,6 +23,31 @@ function TtpRow({ entry, rowClass, tag }: { entry: CoverageTtp; rowClass: string
         <span className="text-slate-200 ml-2">{entry.title}</span>
       </span>
       <span className="font-mono text-[10px] uppercase tracking-wider shrink-0">{tag}</span>
+    </div>
+  );
+}
+
+const RUNG_CLASS: Record<string, string> = {
+  PREVENTED: "border-phos/60 text-phos",
+  ALERTED:   "border-phos/60 text-phos",
+  DETECTED:  "border-amber/60 text-amber",
+  LOGGED:    "border-amber/60 text-amber",
+  MISSED:    "border-red-400/60 text-red-400",
+  PENDING:   "border-slate-500/60 text-slate-400",
+};
+
+function ScorecardRow({ e }: { e: ScorecardEntry }) {
+  const cls = RUNG_CLASS[e.rung] ?? "border-slate-500/60 text-slate-400";
+  const ttd = e.time_to_detect_s == null ? "—" : `${e.time_to_detect_s}s`;
+  return (
+    <div className={`flex items-center justify-between gap-2 border-l-2 ${cls} bg-surface/40 px-3 py-1.5`}>
+      <span className="font-mono text-sm">
+        <span className="text-amber/80">{e.ttp}</span>
+        <span className="text-slate-200 ml-2">{e.title}</span>
+      </span>
+      <span className="font-mono text-[10px] uppercase tracking-wider shrink-0">
+        {e.rung} · {ttd}
+      </span>
     </div>
   );
 }
@@ -64,6 +89,16 @@ export function PurpleCoverageView() {
           );
         })}
       </div>
+      {data && data.scorecard.length > 0 && (
+        <div className="mt-4 space-y-1">
+          <div className="font-display uppercase tracking-wider text-dim text-[11px]">
+            🎯 detection ladder · {data.scorecard.length}
+          </div>
+          {data.scorecard.map((e, i) => (
+            <ScorecardRow key={`${e.ttp}-${i}`} e={e} />
+          ))}
+        </div>
+      )}
     </Panel>
   );
 }

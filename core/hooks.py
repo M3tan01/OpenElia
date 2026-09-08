@@ -34,11 +34,41 @@ def pre_run_hook(task: AgentTask) -> dict:
     from jit_loader import JITLoader
     loader = JITLoader()
     skill_names = loader.get_skills_for_agent(task.agent_name)
+    _write_running(task)
     return {
         "skills": skill_names,
         "task_id": task.task_id,
         "agent_name": task.agent_name,
     }
+
+
+def _write_running(task: AgentTask) -> None:
+    """Append an in-progress marker so the dashboard shows an agent the moment it
+    starts — not only when it finishes.
+
+    Written to task_results.jsonl (tailed by the live WS stream) but deliberately
+    NOT to the immutable audit chain: 'running' is not a completion fact. The
+    `completed_at` is null so webdash.data.tasks() (which scopes by completed_at)
+    ignores it; the terminal record from post_run_hook then supersedes it live
+    (dedup is by task_id, latest status wins). Best-effort — a telemetry write
+    failure must never block the agent from running.
+    """
+    state_dir = _state_dir()
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "task_id": task.task_id,
+            "agent_name": task.agent_name,
+            "status": "running",
+            "output_keys": [],
+            "completed_at": None,
+            "tokens_used": 0,
+            "priority": round(getattr(task, "priority", 0.0), 4),
+        }
+        with (state_dir / "task_results.jsonl").open("a") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
 
 
 def post_run_hook(task: AgentTask, result: AgentResult, context: dict) -> None:

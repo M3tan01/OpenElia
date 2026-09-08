@@ -152,3 +152,143 @@ def test_defender_hunt_passes_tool_mitre_to_alert():
     )
 
     assert st.calls[0]["mitre_ttp"] == "T1547.001"
+
+
+def test_add_response_action_persists_mitre_ttp():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    st.add_response_action(
+        {"action_type": "block_ip", "target": "10.0.0.5", "command": "iptables -I INPUT -s 10.0.0.5 -j DROP",
+         "rationale": "C2", "mitre_ttp": "T1071.001"},
+        engagement_id=eid,
+    )
+    ras = st.read(eid)["response_actions"]
+    assert ras[0]["mitre_ttp"] == "T1071.001"
+
+
+def test_add_response_action_without_mitre_ttp_defaults_null():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    st.add_response_action(
+        {"action_type": "other", "target": "host", "command": "noop", "rationale": "r"},
+        engagement_id=eid,
+    )
+    assert st.read(eid)["response_actions"][0]["mitre_ttp"] is None
+
+
+def _first_alert_id(st, eid):
+    return st.read(eid)["blue_alerts"][0]["id"]
+
+
+def _rung_of(cov, ttp):
+    return next(e["rung"] for e in cov["scorecard"] if e["ttp"] == ttp)
+
+
+def test_rung_prevented_when_response_matches():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1071.001", "C2")], alerts=["T1071"], blue_status="complete")
+    st.add_response_action(
+        {"action_type": "block_ip", "target": "1.1.1.1", "command": "iptables -I INPUT -s 1.1.1.1 -j DROP",
+         "rationale": "r", "mitre_ttp": "T1071"},
+        engagement_id=eid,
+    )
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1071") == "PREVENTED"
+
+
+def test_rung_alerted_when_alert_escalated():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1003", "LSASS")], alerts=["T1003"], blue_status="complete")
+    st.mark_alert_escalated(_first_alert_id(st, eid), eid)
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1003") == "ALERTED"
+
+
+def test_rung_detected_when_alert_unescalated_no_analysis():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1003", "LSASS")], alerts=["T1003"], blue_status="complete")
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1003") == "DETECTED"
+
+
+def test_rung_logged_when_dismissing_analysis_present():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1003", "LSASS")], alerts=["T1003"], blue_status="complete")
+    aid = _first_alert_id(st, eid)
+    st.add_blue_analysis({"alert_id": aid, "verdict": "fp", "escalate": False}, engagement_id=eid)
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1003") == "LOGGED"
+
+
+def test_rung_missed_when_blue_complete_no_signal():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1490", "VSS")], alerts=[], blue_status="complete")
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1490") == "MISSED"
+
+
+def test_rung_pending_when_blue_running_no_signal():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1490", "VSS")], alerts=[], blue_status="running")
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1490") == "PENDING"
+
+
+def test_rung_counts_and_sort_order():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1003", "a"), ("T1490", "b")], alerts=["T1003"], blue_status="complete")
+    cov = st.get_coverage(eid)
+    assert cov["rung_counts"]["DETECTED"] == 1
+    assert cov["rung_counts"]["MISSED"] == 1
+    # sorted by precedence desc: DETECTED(3) before MISSED(1)
+    assert [e["ttp"] for e in cov["scorecard"]] == ["T1003", "T1490"]
+
+
+def test_time_to_detect_none_when_no_alert():
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1490", "b")], alerts=[], blue_status="complete")
+    cov = st.get_coverage(eid)
+    assert next(e for e in cov["scorecard"] if e["ttp"] == "T1490")["time_to_detect_s"] is None
+
+
+def test_time_to_detect_clamps_and_computes():
+    from state_manager import _ttd_seconds
+    assert _ttd_seconds("2026-09-07T10:00:00+00:00", "2026-09-07T10:00:30+00:00") == 30
+    assert _ttd_seconds("2026-09-07T10:00:30+00:00", "2026-09-07T10:00:00+00:00") == 0  # clock-skew clamp
+    assert _ttd_seconds("garbage", "2026-09-07T10:00:00+00:00") is None
+
+
+def test_legacy_db_gains_response_actions_mitre_ttp_column():
+    import sqlite3 as _sq, os as _os, tempfile as _tf
+    fd, path = _tf.mkstemp(suffix=".db")
+    _os.close(fd)
+    # Simulate a pre-migration DB: response_actions without mitre_ttp.
+    conn = _sq.connect(path)
+    conn.execute(
+        "CREATE TABLE response_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, engagement_id TEXT, "
+        "action_type TEXT, target TEXT, command TEXT, rationale TEXT, requires_approval INTEGER, logged_at TEXT)"
+    )
+    conn.commit()
+    conn.close()
+    # Opening via StateManager must run the idempotent migration without error.
+    st = StateManager(db_path=path)
+    cols = {row[1] for row in _sq.connect(path).execute("PRAGMA table_info(response_actions)").fetchall()}
+    assert "mitre_ttp" in cols

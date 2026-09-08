@@ -112,11 +112,53 @@ class DefenderMon:
     Returns a list of high-confidence alerts for Tier 2 escalation.
     """
 
-    def __init__(self, state_manager: StateManager):
+    def __init__(self, state_manager: StateManager, brain_tier: str = "local", tier=None):
         self.state = state_manager
+        # DefenderMon is a NON-LLM agent — brain_tier/tier are accepted only so it
+        # conforms to the uniform agent interface the Orchestrator's _run_agent
+        # dispatch uses (construct with brain_tier=, then await .run()). They are
+        # intentionally unused by the regex/threshold logic.
+        self.brain_tier = brain_tier
+        self.tier = tier
         # Each key maps to a deque of float timestamps (epoch seconds).
         # Only timestamps within the rule's window are counted toward the threshold.
         self._counters: dict[str, deque] = {}
+
+    async def run(self, task: str) -> list[dict]:
+        """Uniform entry point for the Orchestrator dispatch path.
+
+        DefenderMon does no LLM work — this simply runs the synchronous regex/
+        threshold analysis over the supplied text and returns any alerts that
+        fired (also persisted to state via analyze()).
+        """
+        text = task or ""
+        alerts = self.analyze(text)
+        # Honest signal: a standalone blue run from the dashboard is handed the
+        # task *description*, not logs. DefenderMon only detects on log tokens, so
+        # with none present the empty result is correct — not a failure. Say so,
+        # rather than silently returning [] and looking broken.
+        if not alerts and not self._has_log_tokens(text):
+            print(
+                "[defender_mon] 0 alerts — no log telemetry to analyze. This agent "
+                "scans log text (EventCodes, process/beacon/LSASS data); the task "
+                "description alone contains none. Supply real log input (Sysmon/EVTX, "
+                "Zeek/RITA, EDR telemetry) for the detectors to fire. NOTE: a purple "
+                "engagement does NOT change this — the orchestrator hands blue agents "
+                "the task string, not red's output, so blue still sees no logs."
+            )
+        return alerts
+
+    # Compact anchor tokens drawn from SIGMA_RULES — enough to tell "this is log
+    # data" from "this is a task sentence" without duplicating every pattern.
+    _LOG_TOKEN_RE = re.compile(
+        r"EventCode=|Logon_Type=|beacon_score|lsass|vssadmin|ParentImage|"
+        r"NewProcessName|TargetObject|TargetImage|sekurlsa::|lsadump::",
+        re.IGNORECASE,
+    )
+
+    def _has_log_tokens(self, text: str) -> bool:
+        """True if the text contains anything the SIGMA rules could match on."""
+        return bool(self._LOG_TOKEN_RE.search(text))
 
     def analyze(self, log_text: str) -> list[dict]:
         """

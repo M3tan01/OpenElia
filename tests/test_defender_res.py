@@ -24,15 +24,35 @@ def sm(tmp_path):
     return manager
 
 
-class _ConcreteDefenderRes(DefenderRes):
-    """Minimal concrete subclass — satisfies BaseAgent ABC for testing."""
-    async def run(self, task: str) -> None:
-        pass
-
-
 @pytest.fixture
 def res(sm):
-    return _ConcreteDefenderRes(sm, brain_tier="local")
+    # Instantiate the real DefenderRes directly. This guards the contract that
+    # DefenderRes implements BaseAgent's abstract run() — if run() is removed,
+    # this fixture (and the whole suite) fails at instantiation.
+    return DefenderRes(sm, brain_tier="local")
+
+
+class TestAgentContract:
+    def test_defender_res_is_instantiable(self, sm):
+        """DefenderRes must implement the abstract run() and instantiate cleanly."""
+        agent = DefenderRes(sm, brain_tier="local")
+        assert agent.AGENT_NAME == "defender_res"
+
+    def test_run_is_a_coroutine_function(self, sm):
+        import inspect
+        agent = DefenderRes(sm, brain_tier="local")
+        assert inspect.iscoroutinefunction(agent.run)
+
+
+class TestWriteResponseActionSchema:
+    def test_write_response_action_schema_advertises_mitre_ttp(self, res):
+        """write_response_action tool schema must advertise optional mitre_ttp property."""
+        tools = res._get_res_tools()
+        schema = next(t for t in tools if t["name"] == "write_response_action")["input_schema"]
+        assert "mitre_ttp" in schema["properties"]
+        assert schema["properties"]["mitre_ttp"]["type"] == "string"
+        # optional — must NOT be in required
+        assert "mitre_ttp" not in schema["required"]
 
 
 # ---------------------------------------------------------------------------

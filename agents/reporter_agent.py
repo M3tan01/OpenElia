@@ -89,7 +89,8 @@ class ReporterAgent(BaseAgent):
         alerts = state.get("blue_alerts", [])
         coc = self.artifact_manager.get_chain_of_custody()
         heatmap = self.graph_manager.get_mitre_heatmap(findings)
-        
+        coverage = self.state.get_coverage(self.state.active_engagement_id)
+
         # 2. Build the context for the LLM
         context = {
             "engagement": state.get("engagement", {}),
@@ -97,6 +98,8 @@ class ReporterAgent(BaseAgent):
             "findings": findings[:20], # Sample for summary
             "blue_alerts": alerts[:20],
             "mitre_coverage": heatmap,
+            "ptef_scorecard": coverage["scorecard"],
+            "rung_counts": coverage["rung_counts"],
             "forensic_timeline_count": len(coc)
         }
 

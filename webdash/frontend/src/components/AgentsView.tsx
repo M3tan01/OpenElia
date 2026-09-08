@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AgentInfo, ReportBriefResp, RunResp, apiPost } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { AgentInfo, ReportBriefResp, RunResp, RunStatusResp, apiGet, apiPost } from "../api";
 import { useAgentsRoster } from "../useAgentsRoster";
 import { agentDisplayName } from "../agentNames";
 import { Badge, Panel } from "./Panel";
@@ -48,8 +48,36 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
   const [brainTier, setBrainTier] = useState<"local" | "expensive">("local");
   const [running, setRunning] = useState(false);
   const [run, setRun] = useState<RunResp | null>(null);
+  const [outcome, setOutcome] = useState<RunStatusResp | null>(null);
   const [brief, setBrief] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Cancel any in-flight status poll if the card unmounts (e.g. switching agents).
+  const pollAbort = useRef(false);
+  useEffect(() => () => { pollAbort.current = true; }, []);
+
+  // Poll GET /api/run/{id}/status until the run leaves the "running" state, so the
+  // card surfaces the real outcome instead of just the launch id. Backend caps a
+  // single active run; a 2-minute client deadline stops runaway polling.
+  async function pollStatus(runId: string) {
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline && !pollAbort.current) {
+      await new Promise((res) => setTimeout(res, 1500));
+      if (pollAbort.current) return;
+      try {
+        const s = await apiGet<RunStatusResp>(`/api/run/${runId}/status`);
+        if (s.status !== "running") {
+          setOutcome(s);
+          return;
+        }
+      } catch {
+        // transient fetch failure — keep polling until the deadline
+      }
+    }
+    if (!pollAbort.current) {
+      setOutcome({ run_id: runId, status: "timeout" });
+    }
+  }
 
   const isReporter = agent.domain === "reporter";
   const isRed = agent.domain === "red";
@@ -77,7 +105,9 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
     setRunning(true);
     setErr(null);
     setRun(null);
+    setOutcome(null);
     setBrief(null);
+    pollAbort.current = false;
     try {
       if (isReporter) {
         // Reporter has no /run endpoint — it summarizes current findings.
@@ -108,6 +138,8 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
         });
       }
       setRun(r);
+      // Block the spinner on the actual run, not just the launch ack.
+      await pollStatus(r.run_id);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -216,12 +248,55 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
 
         {run && (
           <span className="font-mono text-[11px] text-phos">
-            launched: {run.run_id}
+            {running && !outcome
+              ? `running: ${run.run_id}…`
+              : `launched: ${run.run_id}`}
           </span>
         )}
 
         {err && <Badge ok={false}>{err}</Badge>}
       </div>
+
+      {/* terminal run outcome — polled from /api/run/{id}/status */}
+      {outcome && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge ok={outcome.status === "done"}>{outcome.status}</Badge>
+            {outcome.finished && (
+              <span className="font-mono text-[10px] text-dim">
+                {new Date(outcome.finished).toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setOutcome(null)}
+              className="font-mono text-[10px] text-dim hover:text-amber ml-auto"
+            >
+              dismiss
+            </button>
+          </div>
+          {outcome.error && (
+            <pre className="whitespace-pre-wrap font-mono text-[11px] text-redteam bg-void border border-line p-2 max-h-48 overflow-auto leading-relaxed">
+              {outcome.error}
+            </pre>
+          )}
+          {outcome.status === "done" && (
+            <div className="font-mono text-[11px] text-slate-200 bg-void border border-line p-2 leading-relaxed">
+              {outcome.result?.reason
+                ? outcome.result.reason
+                : "run completed"}
+              <span className="block text-[10px] text-dim mt-1">
+                findings (if any) appear in the Findings panel
+              </span>
+            </div>
+          )}
+          {outcome.status === "timeout" && (
+            <div className="font-mono text-[10px] text-dim italic">
+              still running after 2 min — check the Findings / Tasks panels
+            </div>
+          )}
+        </div>
+      )}
 
       {brief && (
         <div className="space-y-1">

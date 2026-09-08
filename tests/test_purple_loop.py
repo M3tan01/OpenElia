@@ -49,6 +49,17 @@ def _mock_purple_context(state_data, domains_called=None, red_tasks=None):
 
     mock_sm = MagicMock()
     mock_sm.read.return_value = state_data
+    _findings = state_data.get("findings", [])
+    _alerts = state_data.get("blue_alerts", [])
+    _cov_pct = 100.0 if _alerts and len(_alerts) >= len(_findings) else round(
+        len(_alerts) / max(len(_findings), 1) * 100, 1)
+    mock_sm.get_coverage.return_value = {
+        "coverage_pct": _cov_pct,
+        "caught": [], "missed": [], "pending": [],
+        "scorecard": [],
+        "rung_counts": {"PREVENTED": 0, "ALERTED": 0, "DETECTED": 0,
+                        "LOGGED": 0, "MISSED": 0, "PENDING": 0},
+    }
     mock_orch = MagicMock()
     mock_orch.route = AsyncMock(side_effect=fake_route)
 
@@ -215,6 +226,13 @@ async def test_purple_loop_red_task_adapts_with_blue_alerts_in_iteration_2():
     mock_sm = MagicMock()
     # reads: after_red_1=low_cov, after_blue_1=has_alert, after_red_2=has_alert, after_blue_2=has_alert
     mock_sm.read.side_effect = [low_cov_state, after_blue_1, after_blue_1, after_blue_1, after_blue_1]
+    mock_sm.get_coverage.return_value = {
+        "coverage_pct": 33.3,
+        "caught": [], "missed": [], "pending": [],
+        "scorecard": [],
+        "rung_counts": {"PREVENTED": 0, "ALERTED": 0, "DETECTED": 0,
+                        "LOGGED": 0, "MISSED": 0, "PENDING": 0},
+    }
     mock_orch = MagicMock()
     mock_orch.route = AsyncMock(side_effect=fake_route)
 

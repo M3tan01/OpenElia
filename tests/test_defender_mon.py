@@ -22,6 +22,46 @@ def mon(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Orchestrator dispatch contract
+# ---------------------------------------------------------------------------
+
+class TestOrchestratorContract:
+    """orchestrator._run_agent constructs DefenderMon(state, brain_tier=...) and
+    awaits agent.run(task). These guard that uniform interface."""
+
+    def test_accepts_brain_tier_kwarg(self, tmp_path):
+        db = str(tmp_path / "mon_bt.db")
+        sm = StateManager(db_path=db)
+        sm.initialize_engagement("10.0.0.1", "test scope")
+        mon = DefenderMon(sm, brain_tier="local")
+        assert mon is not None
+
+    def test_run_is_coroutine_and_returns_alerts(self, mon):
+        import asyncio
+        import inspect
+        assert inspect.iscoroutinefunction(mon.run)
+        # A mimikatz command should fire T1003 via run() the same as analyze().
+        alerts = asyncio.run(mon.run("sekurlsa::logonpasswords executed"))
+        assert isinstance(alerts, list)
+        assert any(a.get("mitre", "").startswith("T1003") for a in alerts)
+
+    def test_run_notes_no_log_input(self, mon, capsys):
+        # Dashboard hands a task *sentence* (no log tokens): 0 alerts is correct,
+        # and run() must say so instead of silently returning [] (looks broken).
+        import asyncio
+        alerts = asyncio.run(mon.run("check if there is a recon going on"))
+        assert alerts == []
+        assert "no log telemetry" in capsys.readouterr().out.lower()
+
+    def test_run_no_note_when_logs_present(self, mon, capsys):
+        # Real log tokens present but benign → still 0 alerts, but no "no telemetry"
+        # note (it HAD data to scan, it just didn't match).
+        import asyncio
+        asyncio.run(mon.run("EventCode=4624 Logon_Type=2 user=jsmith"))
+        assert "no log telemetry" not in capsys.readouterr().out.lower()
+
+
+# ---------------------------------------------------------------------------
 # Alert structure
 # ---------------------------------------------------------------------------
 

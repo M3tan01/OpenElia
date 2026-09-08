@@ -20,6 +20,27 @@ def test_pre_run_hook_returns_context_with_skills():
     assert ctx["agent_name"] == task.agent_name
 
 
+def test_pre_run_hook_writes_running_marker(tmp_path, monkeypatch):
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
+    task = _make_task(agent_name="pentester_recon")
+    pre_run_hook(task)
+
+    log_path = tmp_path / "task_results.jsonl"
+    assert log_path.exists()
+    record = json.loads(log_path.read_text().strip().splitlines()[-1])
+    assert record["task_id"] == task.task_id
+    assert record["status"] == "running"
+    assert record["completed_at"] is None  # so webdash.data.tasks() poll ignores it
+
+
+def test_running_marker_not_in_audit_chain(tmp_path, monkeypatch):
+    # 'running' is not a completion fact — it must never touch the immutable
+    # HMAC-chained audit log; only post_run_hook / error_hook append there.
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
+    pre_run_hook(_make_task())
+    assert not (tmp_path / "audit.log").exists()
+
+
 def test_post_run_hook_clears_context(tmp_path, monkeypatch):
     monkeypatch.setenv("STATE_DIR", str(tmp_path))
     task = _make_task()
@@ -44,6 +65,20 @@ def test_post_run_hook_writes_jsonl(tmp_path, monkeypatch):
     assert record["task_id"] == task.task_id
     assert record["status"] == "success"
     assert "port" in record["output_keys"]
+
+
+def test_pre_run_hook_running_superseded_by_post(tmp_path, monkeypatch):
+    # running marker then terminal record share a task_id; dedup (latest wins)
+    # is the frontend's job, but both lines must land so the stream can supersede.
+    monkeypatch.setenv("STATE_DIR", str(tmp_path))
+    task = _make_task()
+    pre_run_hook(task)
+    result = AgentResult(task_id=task.task_id, agent_name="test_agent", status="success", output={})
+    post_run_hook(task, result, {})
+
+    lines = (tmp_path / "task_results.jsonl").read_text().strip().splitlines()
+    statuses = [json.loads(l)["status"] for l in lines]
+    assert statuses == ["running", "success"]
 
 
 def test_error_hook_writes_audit_log(tmp_path, monkeypatch):

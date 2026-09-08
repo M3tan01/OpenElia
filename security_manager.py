@@ -159,8 +159,16 @@ class AuditLogger:
     canonical chain implementation across the entire codebase.
     """
 
-    def __init__(self, log_path="state/audit.log"):
+    def __init__(self, log_path=None):
+        import os
         from pathlib import Path
+        # Default resolves the state dir at call time so tests (and any operator
+        # override) can redirect the audit trail via OPENELIA_STATE_DIR — matching
+        # webdash/guards.py and mcp_servers/siem which resolve the same var. A
+        # hardcoded "state/audit.log" here bypassed that and leaked test-run
+        # security events into the live HMAC-chained forensic log.
+        if log_path is None:
+            log_path = Path(os.getenv("OPENELIA_STATE_DIR", "state")) / "audit.log"
         self.log_path = Path(log_path)
 
     def verify_chain(self) -> bool:
