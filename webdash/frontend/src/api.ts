@@ -39,7 +39,16 @@ export interface GraphResp { summary: Record<string, number>; nodes: GraphNode[]
 export interface CostResp { summary: { session_cost: number; total_historical_cost: number; budget_remaining: number }; series: { session: string; total_cost: number; calls: number }[]; }
 export interface ModelsResp { config: Record<string, unknown>; agents: Record<string, string[]>; }
 export interface CoverageTtp { ttp: string; title: string; }
-export interface CoverageResp { coverage_pct: number; caught: CoverageTtp[]; missed: CoverageTtp[]; pending: CoverageTtp[]; }
+export interface ScorecardEntry { ttp: string; title: string; rung: string; time_to_detect_s: number | null; }
+export type RungCounts = Record<string, number>;
+export interface CoverageResp {
+  coverage_pct: number;
+  caught: CoverageTtp[];
+  missed: CoverageTtp[];
+  pending: CoverageTtp[];
+  scorecard: ScorecardEntry[];
+  rung_counts: RungCounts;
+}
 export type RoEResp = {
   authorized_subnets: string[];
   blacklisted_ips: string[];
