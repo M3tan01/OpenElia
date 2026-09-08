@@ -24,11 +24,11 @@ def mock_state(tmp_path):
     }
     sm.get_coverage.return_value = {
         "scorecard": [
-            {"ttp": "T1190", "title": "SQLi", "rung": "detected", "time_to_detect_s": 30},
+            {"ttp": "T1190", "title": "SQLi", "rung": "DETECTED", "time_to_detect_s": 30},
         ],
         "rung_counts": {
-            "missed": 0, "logged": 0, "alerted": 0,
-            "detected": 1, "triaged": 0, "contained": 0,
+            "PREVENTED": 0, "ALERTED": 0, "DETECTED": 1,
+            "LOGGED": 0, "MISSED": 0, "PENDING": 0,
         },
     }
     return sm
