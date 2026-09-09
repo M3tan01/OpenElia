@@ -1,4 +1,6 @@
 import sqlite3
+from datetime import datetime, timezone
+
 import pytest
 from state_manager import StateManager
 
@@ -56,3 +58,63 @@ def test_initialize_engagement_defaults_campaign_id_null(tmp_path):
             "SELECT campaign_id FROM engagement WHERE id = ?", (eng["engagement"]["id"],)
         ).fetchone()
     assert row["campaign_id"] is None
+
+
+def _seed_cycle(sm, eid, *, finding_ttp, alert_ttp=None):
+    """Insert a finding (executed TTP) and optionally a matching blue alert."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sm._get_conn() as conn:
+        conn.execute(
+            "INSERT INTO findings (engagement_id, title, severity, mitre_ttp, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (eid, "SECRET-TITLE-DO-NOT-LEAK", "high", finding_ttp, now),
+        )
+        if alert_ttp:
+            conn.execute(
+                "INSERT INTO blue_alerts (engagement_id, type, mitre_ttp, escalated, timestamp) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (eid, "ids", alert_ttp, 0, now),
+            )
+        conn.commit()
+    sm.set_metadata("blue_run_status", "complete", eid)
+
+
+def test_snapshot_writes_one_row_per_scorecard_entry(tmp_path):
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "auth", campaign_id="C1")
+    eid = eng["engagement"]["id"]
+    _seed_cycle(sm, eid, finding_ttp="T1003", alert_ttp="T1003")
+    _seed_cycle(sm, eid, finding_ttp="T1046")  # missed
+
+    n = sm.record_coverage_snapshot(eid)
+
+    cov = sm.get_coverage(eid)
+    assert n == len(cov["scorecard"]) == 2
+    with sm._get_conn() as conn:
+        rows = conn.execute(
+            "SELECT ttp, rung, coverage_pct, ts FROM coverage_history WHERE campaign_id='C1'"
+        ).fetchall()
+    assert len(rows) == 2
+    assert len({r["ts"] for r in rows}) == 1            # one shared ts
+    assert {r["coverage_pct"] for r in rows} == {cov["coverage_pct"]}  # headline captured
+
+
+def test_snapshot_noop_when_campaign_null(tmp_path):
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "auth")  # no campaign
+    eid = eng["engagement"]["id"]
+    _seed_cycle(sm, eid, finding_ttp="T1003", alert_ttp="T1003")
+    assert sm.record_coverage_snapshot(eid) == 0
+    with sm._get_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) c FROM coverage_history").fetchone()["c"] == 0
+
+
+def test_snapshot_never_writes_finding_title(tmp_path):
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "auth", campaign_id="C1")
+    eid = eng["engagement"]["id"]
+    _seed_cycle(sm, eid, finding_ttp="T1003", alert_ttp="T1003")
+    sm.record_coverage_snapshot(eid)
+    with sm._get_conn() as conn:
+        blob = str(conn.execute("SELECT * FROM coverage_history").fetchall())
+    assert "SECRET-TITLE-DO-NOT-LEAK" not in blob  # PII boundary

@@ -753,3 +753,40 @@ class StateManager:
             "scorecard": scorecard,
             "rung_counts": rung_counts,
         }
+
+    def record_coverage_snapshot(self, engagement_id: str | None = None) -> int:
+        """Persist one coverage snapshot for the engagement's campaign.
+
+        Reads campaign_id off the engagement row (single source of truth). If
+        NULL, no-op → returns 0 (ad-hoc/legacy runs stay out of history). Else
+        runs get_coverage(eid) and INSERTs one coverage_history row per scorecard
+        entry, all sharing one UTC ts and the snapshot's authoritative
+        coverage_pct scalar (captured, never recomputed). Returns rows written.
+        """
+        eid = engagement_id or self.active_engagement_id
+        if not eid:
+            return 0
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT campaign_id FROM engagement WHERE id = ?", (eid,)
+            ).fetchone()
+        campaign_id = row["campaign_id"] if row else None
+        if not campaign_id:
+            return 0  # campaign-scoped only
+
+        cov = self.get_coverage(eid)
+        coverage_pct = cov["coverage_pct"]
+        ts = datetime.now(timezone.utc).isoformat()  # microsecond precision → no collision
+        scorecard = cov["scorecard"]
+        with self._get_conn() as conn:
+            conn.executemany(
+                "INSERT INTO coverage_history "
+                "(campaign_id, engagement_id, ttp, rung, time_to_detect_s, coverage_pct, ts) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (campaign_id, eid, e["ttp"], e["rung"], e["time_to_detect_s"], coverage_pct, ts)
+                    for e in scorecard
+                ],
+            )
+            conn.commit()
+        return len(scorecard)
