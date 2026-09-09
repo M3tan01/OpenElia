@@ -49,6 +49,22 @@ export interface CoverageResp {
   scorecard: ScorecardEntry[];
   rung_counts: RungCounts;
 }
+export interface TrendTtp { ttp: string; rung: string; time_to_detect_s: number | null; }
+export interface TrendSnapshot {
+  ts: string;
+  coverage_pct: number;
+  rung_counts: RungCounts;
+  ttps: TrendTtp[];
+}
+export interface CampaignTrendResp {
+  campaign_id: string;
+  snapshots: TrendSnapshot[];
+}
+
+export function getCampaignTrend(campaignId: string): Promise<CampaignTrendResp> {
+  return apiGet<CampaignTrendResp>(`/api/campaign/${encodeURIComponent(campaignId)}/trend`);
+}
+
 export type RoEResp = {
   authorized_subnets: string[];
   blacklisted_ips: string[];

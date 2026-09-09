@@ -7,6 +7,7 @@ import { APTProfilesView } from "./components/APTProfilesView";
 import { AttackGraph } from "./components/AttackGraph";
 import { AuditTimeline } from "./components/AuditTimeline";
 import { C2ConsoleView } from "./components/C2ConsoleView";
+import { CampaignTrendView } from "./components/CampaignTrendView";
 import { CleanupView } from "./components/CleanupView";
 import { CostMitre } from "./components/CostMitre";
 import { EngagementsView } from "./components/EngagementsView";
@@ -122,6 +123,7 @@ export default function App() {
                 case "stix":         return <Solo><StixHuntView /></Solo>;
                 case "apt":          return <Solo><APTProfilesView /></Solo>;
                 case "forge":        return <Solo><AdversaryForgeView /></Solo>;
+                case "campaign-trend": return <Solo><CampaignTrendView /></Solo>;
                 default:             return <C2ConsoleView snapshot={snapshot} stream={stream} refresh={refresh} />;
               }
             })()}
