@@ -790,3 +790,34 @@ class StateManager:
             )
             conn.commit()
         return len(scorecard)
+
+    def get_campaign_trend(self, campaign_id: str) -> list[dict]:
+        """Return per-snapshot coverage trend for a campaign, oldest first.
+
+        Rows grouped by ts. coverage_pct is read back from the stored scalar
+        (never recomputed); rung_counts and ttps are tallied on read. See spec §6.
+        """
+        rung_names = ("PREVENTED", "ALERTED", "DETECTED", "LOGGED", "MISSED", "PENDING")
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT ttp, rung, time_to_detect_s, coverage_pct, ts "
+                "FROM coverage_history WHERE campaign_id = ? ORDER BY ts ASC, id ASC",
+                (campaign_id,),
+            ).fetchall()
+
+        snapshots: dict[str, dict] = {}
+        for r in rows:
+            snap = snapshots.get(r["ts"])
+            if snap is None:
+                snap = {
+                    "ts": r["ts"],
+                    "coverage_pct": r["coverage_pct"],          # read back, not recomputed
+                    "rung_counts": {name: 0 for name in rung_names},
+                    "ttps": [],
+                }
+                snapshots[r["ts"]] = snap
+            snap["rung_counts"][r["rung"]] = snap["rung_counts"].get(r["rung"], 0) + 1
+            snap["ttps"].append(
+                {"ttp": r["ttp"], "rung": r["rung"], "time_to_detect_s": r["time_to_detect_s"]}
+            )
+        return list(snapshots.values())  # dict preserves insertion (ts-ascending) order

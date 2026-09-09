@@ -118,3 +118,46 @@ def test_snapshot_never_writes_finding_title(tmp_path):
     with sm._get_conn() as conn:
         blob = str(conn.execute("SELECT * FROM coverage_history").fetchall())
     assert "SECRET-TITLE-DO-NOT-LEAK" not in blob  # PII boundary
+
+
+def test_trend_groups_by_ts_orders_ascending(tmp_path):
+    """Verify that get_campaign_trend groups rows by ts, orders oldest first,
+    and reads coverage_pct from the stored snapshot (not recomputed)."""
+    import time
+
+    RUNGS = ("PREVENTED", "ALERTED", "DETECTED", "LOGGED", "MISSED", "PENDING")
+
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "auth", campaign_id="C1")
+    eid = eng["engagement"]["id"]
+
+    # Seed two cycles with different TTPs
+    _seed_cycle(sm, eid, finding_ttp="T1003", alert_ttp="T1003")
+    _seed_cycle(sm, eid, finding_ttp="T1046")
+
+    # Record first snapshot
+    sm.record_coverage_snapshot(eid)
+    time.sleep(0.001)  # guarantee distinct microsecond ts
+
+    # Record second snapshot
+    sm.record_coverage_snapshot(eid)
+
+    # Read the trend
+    trend = sm.get_campaign_trend("C1")
+
+    # Assertions per brief
+    assert len(trend) == 2, "Expected two snapshots, not merged"
+    assert trend[0]["ts"] < trend[1]["ts"], "Expected ascending ts order"
+
+    snap = trend[-1]
+    assert snap["coverage_pct"] == sm.get_coverage(eid)["coverage_pct"], \
+        "coverage_pct must be read back, not recomputed"
+    assert set(snap["rung_counts"]) == set(RUNGS), "Must have all rung names"
+    assert sum(snap["rung_counts"].values()) == len(snap["ttps"]) == 2, \
+        "Expected 2 TTP entries and rung_counts sum matches"
+
+
+def test_trend_unknown_campaign_returns_empty(tmp_path):
+    """Verify that unknown/absent campaign_id returns []."""
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    assert sm.get_campaign_trend("nope") == []
