@@ -230,6 +230,23 @@ def test_rung_logged_when_dismissing_analysis_present():
     assert _rung_of(cov, "T1003") == "LOGGED"
 
 
+def test_rung_detected_when_base_has_dismissed_and_live_alert():
+    """A base with one dismissed alert AND one live alert stays DETECTED, not LOGGED.
+
+    Dismissal is per-alert: only when EVERY alert on a base is dismissed does it
+    drop to LOGGED. A surviving un-dismissed alert wins the higher DETECTED rung.
+    """
+    st = _fresh_state()
+    st.initialize_engagement(target="t", scope="u")
+    eid = st.active_engagement_id
+    _seed(st, eid, findings=[("T1003", "LSASS")], alerts=["T1003", "T1003"], blue_status="complete")
+    # dismiss only the first alert; the second remains live
+    dismissed_aid = st.read(eid)["blue_alerts"][0]["id"]
+    st.add_blue_analysis({"alert_id": dismissed_aid, "verdict": "fp", "escalate": False}, engagement_id=eid)
+    cov = st.get_coverage(eid)
+    assert _rung_of(cov, "T1003") == "DETECTED"
+
+
 def test_rung_missed_when_blue_complete_no_signal():
     st = _fresh_state()
     st.initialize_engagement(target="t", scope="u")

@@ -620,10 +620,8 @@ class StateManager:
                 (engagement_id,),
             ).fetchall()
             dismiss_rows = conn.execute(
-                "SELECT ba.mitre_ttp AS ttp FROM blue_analyses an "
-                "JOIN blue_alerts ba ON an.alert_id = ba.id "
-                "WHERE an.engagement_id = ? AND an.escalate = 0 "
-                "AND ba.mitre_ttp IS NOT NULL AND ba.mitre_ttp != ''",
+                "SELECT alert_id FROM blue_analyses "
+                "WHERE engagement_id = ? AND escalate = 0 AND alert_id IS NOT NULL",
                 (engagement_id,),
             ).fetchall()
 
@@ -659,22 +657,28 @@ class StateManager:
             if base and row["timestamp"] and (base not in finding_first_ts or row["timestamp"] < finding_first_ts[base]):
                 finding_first_ts[base] = row["timestamp"]
 
+        # Dismissal is per-alert: a base with a dismissed alert AND a live alert
+        # is still DETECTED. Track dismissed alert ids, then per base whether any
+        # of its alerts survives un-dismissed. base -> LOGGED only when *all* its
+        # alerts are dismissed.
+        dismissed_alert_ids = {r["alert_id"] for r in dismiss_rows}
+
         alert_by_base: dict[str, dict] = {}
         for row in alert_detail_rows:
             base = _base_ttp(row["mitre_ttp"])
             if not base:
                 continue
-            slot = alert_by_base.setdefault(base, {"escalated": False, "first_ts": None})
+            slot = alert_by_base.setdefault(base, {"escalated": False, "first_ts": None, "has_undismissed": False})
             if row["escalated"]:
                 slot["escalated"] = True
+            if row["id"] not in dismissed_alert_ids:
+                slot["has_undismissed"] = True
             ts = row["timestamp"]
             if ts and (slot["first_ts"] is None or ts < slot["first_ts"]):
                 slot["first_ts"] = ts
 
         prevented_bases = {_base_ttp(r["mitre_ttp"]) for r in response_rows}
         prevented_bases.discard("")
-        dismissed_bases = {_base_ttp(r["ttp"]) for r in dismiss_rows}
-        dismissed_bases.discard("")
 
         rung_precedence = {"PREVENTED": 5, "ALERTED": 4, "DETECTED": 3, "LOGGED": 2, "MISSED": 1, "PENDING": 0}
         scorecard = []
@@ -683,10 +687,10 @@ class StateManager:
                 rung = "PREVENTED"
             elif base in alert_by_base and alert_by_base[base]["escalated"]:
                 rung = "ALERTED"
-            elif base in alert_by_base and base in dismissed_bases:
-                rung = "LOGGED"
-            elif base in alert_by_base:
+            elif base in alert_by_base and alert_by_base[base]["has_undismissed"]:
                 rung = "DETECTED"
+            elif base in alert_by_base:
+                rung = "LOGGED"
             elif blue_done:
                 rung = "MISSED"
             else:

@@ -51,10 +51,13 @@ def _write_running(task: AgentTask) -> None:
     `completed_at` is null so webdash.data.tasks() (which scopes by completed_at)
     ignores it; the terminal record from post_run_hook then supersedes it live
     (dedup is by task_id, latest status wins). Best-effort — a telemetry write
-    failure must never block the agent from running.
+    failure must never block the agent from running, so every failure mode is
+    swallowed here: not only disk/OSError, but a non-numeric `priority`
+    (round() -> TypeError) or a non-serializable field. Telemetry never
+    propagates into the agent's run path.
     """
-    state_dir = _state_dir()
     try:
+        state_dir = _state_dir()
         state_dir.mkdir(parents=True, exist_ok=True)
         record = {
             "task_id": task.task_id,
@@ -67,7 +70,7 @@ def _write_running(task: AgentTask) -> None:
         }
         with (state_dir / "task_results.jsonl").open("a") as fh:
             fh.write(json.dumps(record) + "\n")
-    except OSError:
+    except Exception:
         pass
 
 

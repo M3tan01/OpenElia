@@ -47,8 +47,9 @@ MITRE ATT&CK (the TTP taxonomy the rungs hang off). Not a SANS artifact.
 
 ## 3. Non-negotiable constraints
 
-- **PII boundary.** `coverage_history` stores only `{campaign_id, ttp, rung,
-  time_to_detect_s, ts}`. It **never** stores the finding/scorecard `title`
+- **PII boundary.** `coverage_history` stores only `{campaign_id, engagement_id,
+  ttp, rung, time_to_detect_s, coverage_pct, ts}` — all structured, non-free-text.
+  It **never** stores the finding/scorecard `title`
   (free-text, may contain PII). This is structural: the table has no `title`
   column, so the PTEF §5 n8n-egress PII concern cannot arise from this table.
 - **No secrets in code.** Nothing here reads or writes credentials.
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS coverage_history (
     ttp           TEXT NOT NULL,
     rung          TEXT NOT NULL,
     time_to_detect_s INTEGER,
+    coverage_pct  REAL NOT NULL,         -- snapshot headline; same value on every row of one snapshot
     ts            TEXT NOT NULL          -- UTC ISO-8601 microsecond precision, one value per snapshot
 )
 ```
@@ -93,6 +95,17 @@ CREATE INDEX IF NOT EXISTS idx_covhist_campaign ON coverage_history(campaign_id,
 ```
 
 - No `title` column — PII-free by construction (see §3).
+- `coverage_pct` is the **authoritative headline** captured from `get_coverage`
+  at write time (same scalar repeated on every row of the snapshot), **not**
+  recomputed from the stored rungs on read. The live headline
+  (`get_coverage` `state_manager.py:648-649`) is
+  `round(100 * len(caught) / (len(caught)+len(missed)), 1)`, computed from the
+  caught/missed **alert-presence** partition — which is *not* a pure function of
+  the scorecard rungs (e.g. a PREVENTED base with no alert is not in `caught`).
+  Persisting the scalar keeps the trend's newest point exactly equal to the live
+  `/api/coverage` headline and needs no rung→pct reconstruction (which could not
+  be made faithful). `rung_counts` *is* a pure function of rungs and is still
+  tallied on read.
 - `ts` is identical for every row written in one snapshot call → groups a cycle.
   Written at **microsecond precision** (`datetime.now(timezone.utc).isoformat()`)
   so back-to-back cycles in the CLI `cmd_purple` loop never collide onto one
@@ -136,13 +149,17 @@ def record_coverage_snapshot(self, engagement_id: str | None = None) -> int:
     Reads campaign_id off the engagement row. If NULL, no-op → returns 0
     (ad-hoc/legacy runs stay out of history; trend is campaign-scoped).
     Otherwise runs get_coverage(eid) and INSERTs one coverage_history row
-    per scorecard entry, all sharing a single UTC ts. Returns rows written.
+    per scorecard entry, all sharing a single UTC ts and the snapshot's
+    coverage_pct scalar. Returns rows written.
     """
 ```
 
 - Campaign membership is read back off the engagement, not passed in → no drift.
 - Reuses the existing `get_coverage` scorecard (rungs + `time_to_detect_s`) as
-  the single classification authority. This design adds **no** new rung logic.
+  the single classification authority, and `cov["coverage_pct"]` as the
+  authoritative headline written verbatim to each row. This design adds **no**
+  new rung logic and **no** new percent arithmetic — the headline is captured,
+  never recomputed (see §4.2).
 - Writes nothing when `campaign_id IS NULL`.
 
 ### 5.2 Call sites
@@ -152,8 +169,15 @@ extra line each — **not** inside the orchestrator:
 
 - **CLI purple loop.** `cmd_purple` (`main.py:579`), after
   `cov = state.get_coverage(...)`, per loop iteration → one snapshot per cycle.
-- **Dashboard purple run.** `webdash/runner.py:139`, after
-  `cov = sm.get_coverage(...)`.
+- **Dashboard purple run.** `webdash/runner.py:_execute`, immediately after
+  `rec["status"] = "done"` (`:88`), gated on `domain == "purple"`. This is the
+  **unconditional** completion point — it fires for every successful purple run.
+  It is **not** `_notify`/`:139`: that path runs only when a `callback_url` is
+  configured (guard at `:98`), so snapshotting there would silently skip every
+  webhookless dashboard purple run. The snapshot constructs its own per-request
+  `StateManager(db_path=…/engagement.db)` (mirroring the `_notify` pattern at
+  `:137`) and calls `record_coverage_snapshot()`, wrapped best-effort so a
+  telemetry-write failure never flips a completed run to error.
 
 **Why not the orchestrator cycle-completion point** (`orchestrator.py:156-157`,
 `if blue_batch: set_metadata("blue_run_status", "complete")`): that point also
@@ -163,26 +187,23 @@ exactly one completed purple cycle, never a half-cycle.
 
 ## 6. Read + aggregate path
 
-### 6.1 Shared coverage-percent helper (DRY)
+### 6.1 No percent recomputation (single source of truth)
 
-The percent formula currently lives inline in `get_coverage`. Extract it to a
-pure module-level helper so the live scorecard and the trend recompute cannot
-drift:
+An earlier draft proposed extracting a `_coverage_pct(rung_counts)` helper shared
+by `get_coverage` and `get_campaign_trend`. That is **rejected**: the live
+headline is *not* a function of the scorecard rungs. `get_coverage`
+(`state_manager.py:648-649`) computes
+`round(100 * len(caught) / (len(caught)+len(missed)), 1)` from the caught/missed
+**alert-presence** partition, which does not map 1:1 to the rungs (a PREVENTED
+base with no alert is absent from `caught`). Any rung→pct reconstruction would
+diverge from the headline.
 
-```python
-def _coverage_pct(rung_counts: dict[str, int]) -> float:
-    """Percentage of resolved TTPs the blue team caught.
-
-    Denominator excludes PENDING (not yet resolved). Numerator counts rungs at
-    or above the 'caught' threshold. Single source of truth — get_coverage and
-    get_campaign_trend both call this; neither reimplements the arithmetic.
-    """
-```
-
-`get_coverage` is refactored to call `_coverage_pct` (behavior-preserving — the
-existing scorecard tests still pass). `get_campaign_trend` calls the same helper
-on each snapshot's tallied `rung_counts`, guaranteeing a campaign's newest
-snapshot equals its current `/api/coverage` headline.
+Instead, `record_coverage_snapshot` **captures** `cov["coverage_pct"]` at write
+time and stores it on every row of the snapshot (§4.2, §5.1). `get_campaign_trend`
+**reads it back** — it never recomputes a percentage. This guarantees a campaign's
+newest snapshot equals its current `/api/coverage` headline by construction, with
+zero duplicated arithmetic. `get_coverage` is left unchanged (no refactor).
+`rung_counts`, being a pure tally of the stored rungs, *is* recomputed on read.
 
 ### 6.2 Trend read
 
@@ -193,16 +214,18 @@ def get_campaign_trend(self, campaign_id: str) -> list[dict]:
     Rows grouped by ts. Each snapshot dict:
       {
         "ts": str,
-        "coverage_pct": float,          # recomputed from this ts's rungs
+        "coverage_pct": float,          # read back from stored scalar (any row of the ts group)
         "rung_counts": {RUNG: int, ...},# tallied from this ts's rows
         "ttps": [{"ttp": str, "rung": str, "time_to_detect_s": int|None}, ...]
       }
     """
 ```
 
-- Aggregates are computed **on read** from the per-TTP rows — nothing aggregate
-  is stored. `coverage_pct` comes from the shared `_coverage_pct` helper (§6.1),
-  so a campaign's newest snapshot equals its current `/api/coverage` headline.
+- `coverage_pct` is **read back** from the stored per-snapshot scalar (all rows of
+  a `ts` group carry the same value; take any one) — never recomputed (§6.1), so
+  a campaign's newest snapshot equals its current `/api/coverage` headline.
+- `rung_counts` and `ttps` are aggregated **on read** by tallying the per-TTP rows
+  of each `ts` group.
 - Ordering by `ts` ascending gives a time series ready to plot.
 
 ## 7. API
@@ -253,9 +276,11 @@ New `CampaignTrendView.tsx`:
   writes nothing.
 - **Read-back off engagement** — writer uses the engagement's campaign, not any
   passed value.
-- **Shared helper** — `_coverage_pct` returns the same value the pre-refactor
-  `get_coverage` returned (regression: existing scorecard-pct assertions pass);
-  `get_coverage` and `get_campaign_trend` on identical rungs agree.
+- **Headline captured, not recomputed** — `record_coverage_snapshot` stores
+  `get_coverage(eid)["coverage_pct"]` verbatim on every row of the snapshot; the
+  newest `get_campaign_trend` snapshot's `coverage_pct` equals the live
+  `get_coverage` headline for the same engagement (equality by construction, not
+  by re-derivation from rungs).
 - **ts collision** — two `record_coverage_snapshot` calls back-to-back in a loop
   produce distinct `ts` values → `get_campaign_trend` returns two snapshots, not
   one merged.
@@ -268,15 +293,17 @@ New `CampaignTrendView.tsx`:
 
 ## 10. File map
 
-- `state_manager.py` — migrations (`:188-228` block), `initialize_engagement`
-  (`:369`), extract `_coverage_pct` helper + refactor `get_coverage` to call it,
-  new `record_coverage_snapshot`, new `get_campaign_trend`.
+- `state_manager.py` — migrations (`:188-228` block: new `campaign_id` column +
+  `coverage_history` table), `initialize_engagement` (`:369`, add `campaign_id`
+  param + INSERT column), new `record_coverage_snapshot`, new `get_campaign_trend`.
+  `get_coverage` is **unchanged** (no helper extraction — see §6.1).
 - `main.py` — `--campaign-id` on `purple` subparser (`:1048`); `cmd_purple`
   threads it (`:511`) and calls snapshot writer per iteration (`:579`).
 - `webdash/api/control.py` — `PurpleRun.campaign_id` (`:45`), `/run/purple`
   (`:258`).
 - `webdash/runner.py` — thread `campaign_id` through `start`/`_execute`/`_invoke`
-  (`:37,80,153-160`); call snapshot writer (`:139`).
+  (`:37,80,153-160`) into `initialize_engagement`; call snapshot writer in
+  `_execute` after `rec["status"] = "done"` (`:88`), gated `domain == "purple"`.
 - `webdash/api/monitor.py` — new `/api/campaign/{id}/trend` route.
 - `webdash/frontend/src/api.ts` — `TrendSnapshot`, `CampaignTrendResp`.
 - `webdash/frontend/src/components/CampaignTrendView.tsx` — new view.
