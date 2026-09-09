@@ -335,7 +335,8 @@ class StateManager:
                 "scope": row["scope"],
                 "started": row["started"],
                 "authorized": bool(row["authorized"]),
-                "is_locked": bool(row["is_locked"])
+                "is_locked": bool(row["is_locked"]),
+                "campaign_id": row["campaign_id"]
             }
             state["current_phase"] = row["current_phase"]
 
@@ -402,14 +403,15 @@ class StateManager:
     # Engagement lifecycle
     # ------------------------------------------------------------------ #
 
-    def initialize_engagement(self, target: str, scope: str) -> dict:
+    def initialize_engagement(self, target: str, scope: str,
+                              campaign_id: str | None = None) -> dict:
         eid = f"ENG-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
         with self._get_conn() as conn:
             conn.execute("UPDATE engagement SET is_active = 0")
             conn.execute("""
-                INSERT INTO engagement (id, target, scope, started, authorized, current_phase, is_active, is_locked)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (eid, target, scope, datetime.now(timezone.utc).isoformat(), 1, "recon", 1, 0))
+                INSERT INTO engagement (id, target, scope, started, authorized, current_phase, is_active, is_locked, campaign_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (eid, target, scope, datetime.now(timezone.utc).isoformat(), 1, "recon", 1, 0, campaign_id))
             
             for p in PHASE_ORDER:
                 status = "pending" if p in ["recon", "vuln", "exploit"] else "dormant"

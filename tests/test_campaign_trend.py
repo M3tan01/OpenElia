@@ -36,3 +36,23 @@ def test_coverage_history_has_no_title_column(tmp_path):
     db = str(tmp_path / "engagement.db")
     StateManager(db_path=db)
     assert "title" not in _cols(db, "coverage_history")  # PII boundary
+
+
+def test_initialize_engagement_persists_campaign_id(tmp_path):
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "authorized", campaign_id="Q3-uplift")
+    with sm._get_conn() as conn:
+        row = conn.execute(
+            "SELECT campaign_id FROM engagement WHERE id = ?", (eng["engagement"]["id"],)
+        ).fetchone()
+    assert row["campaign_id"] == "Q3-uplift"
+
+
+def test_initialize_engagement_defaults_campaign_id_null(tmp_path):
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "authorized")
+    with sm._get_conn() as conn:
+        row = conn.execute(
+            "SELECT campaign_id FROM engagement WHERE id = ?", (eng["engagement"]["id"],)
+        ).fetchone()
+    assert row["campaign_id"] is None
