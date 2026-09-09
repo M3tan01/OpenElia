@@ -50,6 +50,7 @@ class PurpleRun(BaseModel):
     proxy_port: int | None = None
     apt_profile: str | None = None
     agent: str | None = None
+    campaign_id: str | None = None
     confirm: bool = False
 
 
@@ -264,7 +265,7 @@ async def run_purple(req: PurpleRun, data: DashboardData = Depends(get_data), rm
     return await _launch(
         rm, domain="purple", task=req.task, targets=[req.target], stealth=req.stealth,
         proxy_port=req.proxy_port, brain_tier=req.brain_tier, apt_profile=req.apt_profile,
-        state_dir=str(data.dir), agent=req.agent,
+        state_dir=str(data.dir), agent=req.agent, campaign_id=req.campaign_id,
     )
 
 
