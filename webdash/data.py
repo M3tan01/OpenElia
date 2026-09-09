@@ -185,6 +185,19 @@ class DashboardData:
         sm.read()
         return sm.get_coverage(sm.active_engagement_id)
 
+    def campaign_trend(self, campaign_id: str) -> dict:
+        """Per-campaign detection-coverage trend, oldest snapshot first.
+
+        Passes StateManager.get_campaign_trend()'s snapshot list through
+        unchanged — the {ts, coverage_pct, rung_counts, ttps} shape is locked
+        and consumed verbatim by the frontend. Unknown campaign_id yields an
+        empty snapshots list (never raises, never 404s).
+        """
+        from state_manager import StateManager
+
+        sm = StateManager(db_path=str(self.db_path))
+        return {"campaign_id": campaign_id, "snapshots": sm.get_campaign_trend(campaign_id)}
+
     # --- cost / budget ----------------------------------------------------- #
     def cost(self) -> dict:
         from cost_tracker import CostTracker

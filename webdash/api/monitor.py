@@ -56,6 +56,12 @@ def get_coverage(data: DashboardData = Depends(get_data)) -> dict:
     return data.coverage()
 
 
+@router.get("/campaign/{campaign_id}/trend")
+def get_campaign_trend(campaign_id: str, data: DashboardData = Depends(get_data)) -> dict:
+    """Per-campaign detection-coverage trend over completed purple cycles (oldest first)."""
+    return data.campaign_trend(campaign_id)
+
+
 @router.get("/cost")
 def get_cost(data: DashboardData = Depends(get_data)) -> dict:
     """Cost summary + per-session series."""
