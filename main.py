@@ -508,7 +508,8 @@ async def cmd_purple(args) -> None:
             print("ERROR: --target is required for a new purple team simulation.")
             sys.exit(1)
         for target in targets:
-            state.initialize_engagement(target, args.scope or "Authorized purple team engagement")
+            state.initialize_engagement(target, args.scope or "Authorized purple team engagement",
+                                        campaign_id=getattr(args, "campaign_id", None))
             print(f"[main] Purple Team engagement initialized — target: {target}")
 
     _require_api_key(args.brain_tier)
@@ -589,6 +590,9 @@ async def cmd_purple(args) -> None:
             print(f"[Purple Loop] Newly covered this iteration: {', '.join(sorted(newly_covered))}")
         print(f"[Purple Loop] Coverage: {coverage_pct}% ({len(covered_now)}/{len(cov['scorecard'])} TTPs)")
         prev_covered = covered_now
+
+        # Persist one trend snapshot per completed cycle (no-op if no --campaign-id).
+        state.record_coverage_snapshot(state.active_engagement_id)
 
         prev_findings = current_findings
         prev_blue_alerts = current_alerts
@@ -1053,6 +1057,8 @@ def build_parser() -> argparse.ArgumentParser:
     purple_p.add_argument("--proxy-port", type=int)
     purple_p.add_argument("--resume", action="store_true")
     purple_p.add_argument("--iterations", type=int, default=2)
+    purple_p.add_argument("--campaign-id", dest="campaign_id",
+                          help="Stable campaign label; opts this run's engagement into trend history")
     
     forge_p = sub.add_parser("forge", parents=[common],
                              help="Forge an RoE/topology-constrained adversary profile")

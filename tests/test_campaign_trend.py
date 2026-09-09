@@ -161,3 +161,19 @@ def test_trend_unknown_campaign_returns_empty(tmp_path):
     """Verify that unknown/absent campaign_id returns []."""
     sm = StateManager(db_path=str(tmp_path / "engagement.db"))
     assert sm.get_campaign_trend("nope") == []
+
+
+def test_cmd_purple_snapshots_per_iteration(tmp_path):
+    """A campaign-tagged engagement snapshots once per completed purple cycle."""
+    import time
+
+    sm = StateManager(db_path=str(tmp_path / "engagement.db"))
+    eng = sm.initialize_engagement("10.0.0.1", "auth", campaign_id="C1")
+    eid = eng["engagement"]["id"]
+    _seed_cycle(sm, eid, finding_ttp="T1003", alert_ttp="T1003")
+
+    # Two iterations → two snapshots (distinct ts).
+    sm.record_coverage_snapshot(eid)
+    time.sleep(0.001)
+    sm.record_coverage_snapshot(eid)
+    assert len(sm.get_campaign_trend("C1")) == 2
