@@ -227,6 +227,42 @@ class StateManager:
                     pass  # column added by a concurrent initializer — fine
             conn.commit()
 
+            # Idempotent migration: add campaign_id to engagement if absent
+            # (series key for continuous purple teaming; nullable → legacy rows
+            # excluded from trend). Same race-safe pattern as above.
+            existing_eng_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(engagement)").fetchall()
+            }
+            if "campaign_id" not in existing_eng_cols:
+                try:
+                    conn.execute("ALTER TABLE engagement ADD COLUMN campaign_id TEXT")
+                except sqlite3.OperationalError:
+                    pass  # column added by a concurrent initializer — fine
+            conn.commit()
+
+            # coverage_history: one row per TTP per completed purple cycle.
+            # No `title` column by construction (PII boundary — see spec §3).
+            # coverage_pct is the authoritative headline captured at write time,
+            # repeated on every row of a snapshot; never recomputed on read.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS coverage_history (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    campaign_id   TEXT NOT NULL,
+                    engagement_id TEXT NOT NULL,
+                    ttp           TEXT NOT NULL,
+                    rung          TEXT NOT NULL,
+                    time_to_detect_s INTEGER,
+                    coverage_pct  REAL NOT NULL,
+                    ts            TEXT NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_covhist_campaign "
+                "ON coverage_history(campaign_id, ts)"
+            )
+            conn.commit()
+
     def _get_last_active_id(self) -> Optional[str]:
         with self._get_conn() as conn:
             row = conn.execute("SELECT id FROM engagement WHERE is_active = 1 ORDER BY started DESC LIMIT 1").fetchone()
