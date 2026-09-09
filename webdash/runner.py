@@ -47,6 +47,7 @@ class RunManager:
         state_dir: str = "state",
         agent: str | None = None,
         callback_url: str | None = None,
+        campaign_id: str | None = None,
     ) -> str:
         if self.active():
             raise RuntimeError("a run is already active")
@@ -64,6 +65,7 @@ class RunManager:
             "error": None,
             "callback_url": callback_url,
             "state_dir": state_dir,
+            "campaign_id": campaign_id,
         }
         self._active = run_id
         t = asyncio.create_task(
@@ -71,21 +73,33 @@ class RunManager:
                 run_id=run_id, domain=domain, task=task, targets=targets,
                 stealth=stealth, proxy_port=proxy_port, brain_tier=brain_tier,
                 apt_profile=apt_profile, agent=agent, state_dir=state_dir,
+                campaign_id=campaign_id,
             )
         )
         self._tasks.add(t)
         t.add_done_callback(self._tasks.discard)
         return run_id
 
-    async def _execute(self, run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None):
+    async def _execute(self, run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None, campaign_id=None):
         rec = self._runs[run_id]
         try:
             rec["result"] = await self._invoke(
                 domain=domain, task=task, targets=targets, stealth=stealth,
                 proxy_port=proxy_port, brain_tier=brain_tier, apt_profile=apt_profile,
-                agent=agent, state_dir=state_dir,
+                agent=agent, state_dir=state_dir, campaign_id=campaign_id,
             )
             rec["status"] = "done"
+            # Trend snapshot: unconditional completion point for purple runs.
+            # NOT in _notify (that is callback_url-gated) — a webhookless purple
+            # run must still snapshot. No-op if the engagement has no campaign_id.
+            if domain == "purple":
+                try:
+                    from state_manager import StateManager
+
+                    sm = StateManager(db_path=str(Path(state_dir) / "engagement.db"))
+                    sm.record_coverage_snapshot()
+                except Exception as exc:  # best-effort — never flip a done run to error
+                    print(f"trend snapshot failed: {type(exc).__name__}: {exc}")
         except (Exception, SystemExit) as exc:  # capture errors + kill-switch SystemExit; let CancelledError propagate
             rec["status"] = "error"
             rec["error"] = str(exc) or exc.__class__.__name__
@@ -150,14 +164,15 @@ class RunManager:
         except Exception as exc:
             print(f"n8n callback POST to {url} failed: {type(exc).__name__}: {exc}")
 
-    async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None) -> dict:
+    async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None, campaign_id=None) -> dict:
         """Actual engine call. Isolated for mocking in tests."""
         from orchestrator import Orchestrator
         from state_manager import StateManager
 
         sm = StateManager(db_path=str(Path(state_dir) / "engagement.db"))
         if not sm.read():
-            sm.initialize_engagement(targets[0] if targets else "unknown", "web dashboard engagement")
+            sm.initialize_engagement(targets[0] if targets else "unknown", "web dashboard engagement",
+                                     campaign_id=campaign_id)
         orch = Orchestrator(sm)
         return await orch.route(
             task,
