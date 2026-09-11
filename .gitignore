@@ -274,3 +274,6 @@ skills-lock.json
 # Git worktrees for isolated SDD workspaces
 .worktrees/
 .superpowers/
+
+# Browser-harness / Playwright MCP debug output (console + page snapshots)
+.playwright-mcp/
