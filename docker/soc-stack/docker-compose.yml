@@ -2,13 +2,14 @@ services:
   # ---------------------------------------------------------------------
   # TheHive (case management) — local-storage shape from
   # _vendor/thehive-templates-src/docker/thehive5-minimal/docker-compose.yml
+  # All ports bound to 127.0.0.1 only: OpenElia is a localhost-first console.
   # ---------------------------------------------------------------------
   thehive:
-    image: strangebee/thehive:5.7.5
+    image: strangebee/thehive:${THEHIVE_VERSION:-5.7.5}
     container_name: soc-thehive
     restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "127.0.0.1:${THEHIVE_PORT:-9000}:9000"
     environment:
       - MAX_HEAP_SIZE=1G
       - HEAP_NEWSIZE=1G
@@ -18,6 +19,72 @@ services:
       - thehive_index:/opt/thp/thehive/index
       - thehive_data:/opt/thp/thehive/data
       - thehive_logs:/var/log/thehive
+    networks:
+      - soc-stack
+
+  # ---------------------------------------------------------------------
+  # n8n (workflow backbone) — red/blue/purple/reporting flows so operators
+  # can see and edit what the agents do. Basic-auth gated, localhost only.
+  # ---------------------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-1.70.3}
+    container_name: soc-n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_HOST=127.0.0.1
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:?set N8N_BASIC_AUTH_PASSWORD in .env}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      - GENERIC_TIMEZONE=${TZ:-UTC}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - soc-stack
+
+  # ---------------------------------------------------------------------
+  # Cortex (analyzers/responders) + Elasticsearch backend.
+  # Heavy (ES needs ~2GB). Opt in with:  docker compose --profile analyzers up -d
+  # ES 7.x is required by Cortex 3.x.
+  # ---------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-7.17.9}
+    container_name: soc-elasticsearch
+    profiles: ["analyzers"]
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - soc-stack
+
+  cortex:
+    image: thehiveproject/cortex:${CORTEX_VERSION:-3.1.8}
+    container_name: soc-cortex
+    profiles: ["analyzers"]
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    ports:
+      - "127.0.0.1:${CORTEX_PORT:-9001}:9001"
+    environment:
+      - job_directory=/tmp/cortex-jobs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - cortex_jobs:/tmp/cortex-jobs
     networks:
       - soc-stack
 
@@ -31,3 +98,6 @@ volumes:
   thehive_index:
   thehive_data:
   thehive_logs:
+  n8n_data:
+  es_data:
+  cortex_jobs:
