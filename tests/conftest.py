@@ -60,4 +60,14 @@ def _isolate_state_dir(tmp_path, monkeypatch):
     # OPENELIA_STATE_DIR. Set both so every audit/task-result writer lands in tmp.
     monkeypatch.setenv("STATE_DIR", str(state_dir))
     monkeypatch.setenv("OPENELIA_STATE_DIR", str(state_dir))
+    # The audit chain now fails closed when AUDIT_HMAC_KEY is unset (it refuses
+    # to sign with the forgeable public fallback key). Supply a real key via env
+    # (SecretStore.get_secret falls back to os.getenv) so every test that appends
+    # to the audit log exercises the real HMAC path instead of the dev opt-out.
+    monkeypatch.setenv("AUDIT_HMAC_KEY", "test-audit-hmac-key-deterministic-32b")
+    # ScopeValidator now fail-closes on unsigned/tampered/expired RoE. The suite
+    # writes plain unsigned roe.json fixtures everywhere, so opt into the dev
+    # bypass here; tests that specifically exercise strict signing (see
+    # test_roe_signing.py) delenv this flag inside their own fixtures.
+    monkeypatch.setenv("OPENELIA_ALLOW_UNSIGNED_ROE", "1")
     yield
