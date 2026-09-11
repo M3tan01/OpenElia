@@ -61,7 +61,14 @@ class VectorManager:
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
             os.makedirs(self.db_path, exist_ok=True)
-            self._conn = sqlite3.connect(os.path.join(self.db_path, "memory.sqlite"))
+            # WAL + busy timeout so concurrent async writers (swarm mode) don't
+            # hit "database is locked" under the single-writer default. Mirrors
+            # StateManager._get_conn's posture for the same reason.
+            self._conn = sqlite3.connect(
+                os.path.join(self.db_path, "memory.sqlite"), timeout=10
+            )
+            self._conn.execute("PRAGMA journal_mode=WAL;")
+            self._conn.execute("PRAGMA synchronous=NORMAL;")
             self._conn.row_factory = sqlite3.Row
             self._init_schema(self._conn)
         return self._conn
