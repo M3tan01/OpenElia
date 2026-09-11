@@ -235,6 +235,26 @@ class ModelManager:
         return u
 
     @classmethod
+    def _provider_for_url(cls, url: str | None) -> str | None:
+        """Return the known named provider whose canonical host appears in ``url``.
+
+        Used to detect a stale EXPENSIVE_BRAIN_URL that points at a different
+        provider than the configured one. Local/Ollama hosts are ignored — only
+        the cloud providers (openai/anthropic/google) count. Returns None for a
+        custom/unknown endpoint (a proxy), which is treated as a legitimate
+        override rather than a mismatch.
+        """
+        if not url:
+            return None
+        for prov, canon in PROVIDER_BASE_URLS.items():
+            if prov in ("local", "ollama"):
+                continue
+            host = canon.split("//", 1)[-1].split("/", 1)[0]
+            if host and host in url:
+                return prov
+        return None
+
+    @classmethod
     def get_client_config(
         cls,
         brain_tier: str = "local",
@@ -274,16 +294,31 @@ class ModelManager:
                     "  python main.py model set cloud <provider> <model>\n"
                     "or set EXPENSIVE_MODEL for the provider-agnostic slot."
                 )
-            key_name  = PROVIDER_KEY_NAMES.get(provider, "EXPENSIVE_BRAIN_KEY")
-            api_key   = (
-                cls._provider_api_key(provider, key_name)
-                or SecretStore.get_secret("EXPENSIVE_BRAIN_KEY")
-                or "ollama"
+            # Key/endpoint resolution. The generic EXPENSIVE_BRAIN_* slots are a
+            # provider-agnostic escape hatch (e.g. a custom proxy/gateway URL) and
+            # are normally honored. BUT if a named provider is fully configured
+            # (its own key is set) and a leftover EXPENSIVE_BRAIN_URL points at a
+            # *different* known provider's endpoint, we refuse the generic URL and
+            # use the named provider outright — otherwise provider A's key would be
+            # sent to provider B (observed: stale Anthropic URL + Google key -> 401).
+            key_name     = PROVIDER_KEY_NAMES.get(provider)
+            named_key    = cls._provider_api_key(provider, key_name) if key_name else None
+            generic_url  = SecretStore.get_secret("EXPENSIVE_BRAIN_URL")
+            url_provider = cls._provider_for_url(generic_url)
+            cross_provider_mismatch = bool(
+                named_key and url_provider and url_provider != provider
             )
-            base_url  = (
-                SecretStore.get_secret("EXPENSIVE_BRAIN_URL")
-                or PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1/")
-            )
+
+            if named_key and (not generic_url or cross_provider_mismatch):
+                # Named provider is authoritative: no generic URL, or the generic
+                # URL is a different provider's home (stale-override guard).
+                api_key  = named_key
+                base_url = PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1/")
+            else:
+                # Escape hatch: honor the generic URL (custom proxy) and prefer the
+                # named key, then the generic key, then the local placeholder.
+                api_key  = named_key or SecretStore.get_secret("EXPENSIVE_BRAIN_KEY") or "ollama"
+                base_url = generic_url or PROVIDER_BASE_URLS.get(provider, "https://api.openai.com/v1/")
             return {
                 "base_url": cls._sanitize_url(base_url),
                 "api_key": api_key,
