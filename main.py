@@ -118,7 +118,7 @@ async def cmd_check(args) -> None:
         try:
             client.images.get("cyber-ops-recon:strict")
             print(f"    [✓] Image 'cyber-ops-recon:strict': Found")
-        except:
+        except docker.errors.ImageNotFound:
             print(f"    [✗] Image 'cyber-ops-recon:strict': Not found (Run: python main.py doctor)")
             overall_pass = False
     except Exception as e:

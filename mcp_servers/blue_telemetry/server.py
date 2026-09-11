@@ -75,7 +75,10 @@ async def handle_call_tool(
                 with open(LOG_FILE, "r") as f:
                     try:
                         events = json.load(f)
-                    except:
+                    except (json.JSONDecodeError, ValueError):
+                        # Corrupt/empty log → start a fresh list. Don't swallow
+                        # OSError etc., which would then overwrite the file on
+                        # a transient read error (data loss).
                         events = []
             
             events.append(event)

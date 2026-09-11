@@ -30,7 +30,10 @@ class CostTracker:
                     data = json.load(f)
                     # Handle legacy format if necessary
                     return data
-            except:
+            except (OSError, json.JSONDecodeError) as e:
+                # Missing/corrupt history → start fresh, but don't mask unrelated
+                # errors (e.g. KeyboardInterrupt) by swallowing everything.
+                console.print(f"[yellow][CostTracker] could not read {self.log_path}: {e}; starting fresh[/yellow]")
                 return {}
         return {}
 
