@@ -28,8 +28,33 @@ All container ports bind to 127.0.0.1 only.
    (`openssl rand -hex 24`) and encryption key (`openssl rand -hex 32`), `chmod 600`.
    **The generated n8n password is printed once — save it.**
 3. `docker compose up -d` the default services (add `--profile analyzers` if flagged).
-4. Run host `setup.sh` (venv, deps, sterile image, keyring) unless `--no-engine`.
-5. Print service URLs + the dashboard command.
+4. Auto-import the n8n playbooks in `workflows/n8n/*.json` via the REST API — **only if
+   `N8N_API_KEY` is set** in the `.env` (idempotent by workflow name; skipped otherwise).
+   See "n8n workflow auto-import" below.
+5. Run host `setup.sh` (venv, deps, sterile image, keyring) unless `--no-engine`.
+6. Print service URLs + the dashboard command.
+
+## n8n workflow auto-import
+
+The red/blue/purple/reporting playbooks live in `workflows/n8n/*.json`. `deploy.sh`
+imports them for you, but n8n's public REST API needs a key it only issues after the
+first login:
+
+1. First bring-up: leave `N8N_API_KEY` blank. Import is skipped (you'll see an `[i]`
+   line). Log in at `http://127.0.0.1:5678`.
+2. In n8n: **Settings → n8n API → Create an API key**. Paste it into
+   `docker/soc-stack/.env` as `N8N_API_KEY=…`.
+3. Re-run `./deploy.sh`. It POSTs each playbook (header `X-N8N-API-KEY`), skipping any
+   already present by name.
+
+Imported workflows are **inactive**. Before activating each in the n8n editor, wire two
+credentials and activate:
+- an **httpHeaderAuth** credential — `Authorization: Bearer <dashboard token>` for the
+  engine calls (the token rotates each `main.py dashboard --web`, so update it per run);
+- an **httpHeaderAuth** credential for TheHive's API on the HTTP nodes that POST to
+  `thehive:9000`.
+
+See `workflows/n8n/README.md` for the full credential + callback-URL walkthrough.
 
 ## Start the web console
 

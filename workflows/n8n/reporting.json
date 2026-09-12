@@ -1,0 +1,109 @@
+{
+  "name": "OpenElia — Reporting Playbook",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "d1a8c2d4-1f3a-4b6c-8d21-0f1a2b3c4d5e",
+      "name": "Report Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reporting",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "d2b9c3d5-2a4b-4c7d-9e32-1a2b3c4d5e6f",
+      "name": "Generate Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [240, 0],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8765/api/report/brief",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"brain_tier\": $json.body.brain_tier || \"local\", \"confirm\": true } }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "d3a0d4e6-3b5c-4d8e-af43-2b3c4d5e6f70",
+      "name": "TheHive Report Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [480, -100],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://thehive:9000/api/v1/case",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"title\": \"OpenElia executive brief — \" + $now.toISO(), \"description\": $json.markdown || \"(empty brief)\", \"severity\": 2, \"tags\": [\"openelia\", \"reporting\", \"automated\"] } }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "d4b1e5f7-4c6d-4e9f-b054-3c4d5e6f7081",
+      "name": "Respond With Report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [720, 0],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"markdown\": $('Generate Brief').item.json.markdown } }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "d5c2f608-5d7e-4fa0-8165-4d5e6f708192",
+      "name": "Respond Report Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [480, 140],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"report generation failed\", \"detail\": ($json.error && $json.error.message) || \"engine unreachable or rejected\" } }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Report Trigger": {
+      "main": [
+        [{ "node": "Generate Brief", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Brief": {
+      "main": [
+        [{ "node": "TheHive Report Case", "type": "main", "index": 0 }],
+        [{ "node": "Respond Report Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "TheHive Report Case": {
+      "main": [
+        [{ "node": "Respond With Report", "type": "main", "index": 0 }],
+        [{ "node": "Respond With Report", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

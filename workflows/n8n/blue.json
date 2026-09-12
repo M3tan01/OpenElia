@@ -1,0 +1,174 @@
+{
+  "name": "OpenElia — Blue Playbook",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "b1a8c2d4-1f3a-4b6c-8d21-0f1a2b3c4d5e",
+      "name": "Blue Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "blue",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "b2b9c3d5-2a4b-4c7d-9e32-1a2b3c4d5e6f",
+      "name": "Launch Blue Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [240, 0],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8765/api/n8n/trigger",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"domain\": \"blue\", \"target\": $json.body.target, \"task\": $json.body.task || \"Full defensive assessment\", \"stealth\": $json.body.stealth || false, \"brain_tier\": $json.body.brain_tier || \"local\", \"apt_profile\": $json.body.apt_profile || null, \"agent\": $json.body.agent || null, \"callback_url\": \"http://localhost:5678/webhook/blue-callback\", \"confirm\": true } }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "b3a0d4e6-3b5c-4d8e-af43-2b3c4d5e6f70",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [480, -100],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"run_id\": $json.run_id, \"status\": $json.status, \"accepted\": true } }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "b4b1e5f7-4c6d-4e9f-b054-3c4d5e6f7081",
+      "name": "Respond Launch Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [480, 120],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"accepted\": false, \"error\": \"engine trigger failed\", \"detail\": ($json.error && $json.error.message) || \"unreachable or rejected\" } }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    },
+    {
+      "id": "b5c2f608-5d7e-4fa0-8165-4d5e6f708192",
+      "name": "Blue Callback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 320],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "blue-callback",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "b6d30719-6e8f-40b1-9276-5e6f708192a3",
+      "name": "Run Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [240, 320],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b2c9e4d1-3b5f-4a7c-8e12-9f0a1b2c3d4e",
+              "leftValue": "={{ $json.body.status }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b7e4182a-7f90-41c2-a387-6f708192a3b4",
+      "name": "TheHive Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [480, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "http://thehive:9000/api/v1/case",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"title\": \"OpenElia blue run \" + $json.body.run_id, \"description\": \"Domain: \" + $json.body.domain + \"\\nTask: \" + $json.body.task + \"\\nTargets: \" + JSON.stringify($json.body.targets) + \"\\nStatus: \" + $json.body.status + \"\\n\\nResult:\\n\" + ($json.body.result || \"(none)\"), \"severity\": 2, \"tags\": [\"openelia\", \"blue\", \"automated\"] } }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "b8f5293b-8001-42d3-b498-708192a3b4c5",
+      "name": "TheHive Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [480, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "http://thehive:9000/api/v1/alert",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"type\": \"openelia-failure\", \"source\": \"openelia\", \"sourceRef\": $json.body.run_id, \"title\": \"OpenElia blue run did not complete (\" + $json.body.status + \")\", \"description\": \"Domain: \" + $json.body.domain + \"\\nStatus: \" + $json.body.status + \"\\nError: \" + ($json.body.error || \"(none)\"), \"severity\": 2, \"tags\": [\"openelia\", \"blue\", \"failure\"] } }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Blue Trigger": {
+      "main": [
+        [{ "node": "Launch Blue Engine", "type": "main", "index": 0 }]
+      ]
+    },
+    "Launch Blue Engine": {
+      "main": [
+        [{ "node": "Respond Accepted", "type": "main", "index": 0 }],
+        [{ "node": "Respond Launch Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Blue Callback": {
+      "main": [
+        [{ "node": "Run Completed?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run Completed?": {
+      "main": [
+        [{ "node": "TheHive Case", "type": "main", "index": 0 }],
+        [{ "node": "TheHive Alert", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

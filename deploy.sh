@@ -77,6 +77,78 @@ else
     "${COMPOSE[@]}" up -d
 fi
 
+# --- 3.5. Import n8n workflows via REST (optional; needs N8N_API_KEY) -------
+source "$ENV_FILE" 2>/dev/null || true
+N8N_BASE="http://127.0.0.1:${N8N_PORT:-5678}"
+WF_DIR="$REPO_ROOT/workflows/n8n"
+if [ -z "${N8N_API_KEY:-}" ]; then
+    echo "[i] N8N_API_KEY blank — skipping workflow auto-import."
+    echo "    Create a key at ${N8N_BASE} (Settings → n8n API), add it to"
+    echo "    $ENV_FILE, and re-run ./deploy.sh to import ${WF_DIR}/*.json."
+elif [ ! -d "$WF_DIR" ]; then
+    echo "[!] $WF_DIR not found — nothing to import."
+else
+    echo "[+] Waiting for n8n REST API at ${N8N_BASE} ..."
+    n8n_ready=0
+    for _ in $(seq 1 30); do
+        if curl -fsS --max-time 2 -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+             "${N8N_BASE}/api/v1/workflows?limit=1" >/dev/null 2>&1; then
+            n8n_ready=1; break
+        fi
+        sleep 2
+    done
+    if [ "$n8n_ready" != "1" ]; then
+        echo "[!] n8n REST not reachable after ~60s — skipping import."
+        echo "    Verify N8N_API_KEY is valid, then re-run ./deploy.sh."
+    else
+        echo "[+] Importing playbooks from ${WF_DIR} (idempotent by name)..."
+        N8N_BASE="$N8N_BASE" N8N_API_KEY="$N8N_API_KEY" WF_DIR="$WF_DIR" \
+        python3 - <<'PY'
+import json, os, sys, glob, urllib.request, urllib.error
+
+base = os.environ["N8N_BASE"].rstrip("/")
+key = os.environ["N8N_API_KEY"]
+wf_dir = os.environ["WF_DIR"]
+hdr = {"X-N8N-API-KEY": key, "Content-Type": "application/json"}
+
+def api(method, path, payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(base + path, data=data, headers=hdr, method=method)
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read() or "null")
+
+# Existing workflow names (public API paginates; one page of 250 is plenty here).
+try:
+    existing = {w.get("name") for w in api("GET", "/api/v1/workflows?limit=250").get("data", [])}
+except urllib.error.HTTPError as e:
+    print(f"    [x] Could not list workflows (HTTP {e.code}). Aborting import.")
+    sys.exit(1)
+
+files = sorted(glob.glob(os.path.join(wf_dir, "*.json")))
+if not files:
+    print("    [i] No *.json playbooks found.")
+    sys.exit(0)
+
+for path in files:
+    with open(path) as f:
+        wf = json.load(f)
+    name = wf.get("name") or os.path.basename(path)
+    if name in existing:
+        print(f"    = skip (already present): {name}")
+        continue
+    # Public API accepts name/nodes/connections/settings; strip anything else.
+    payload = {k: wf[k] for k in ("name", "nodes", "connections", "settings") if k in wf}
+    try:
+        api("POST", "/api/v1/workflows", payload)
+        print(f"    + imported: {name}")
+    except urllib.error.HTTPError as e:
+        print(f"    [x] import failed for {name}: HTTP {e.code} {e.read().decode(errors='replace')[:200]}")
+PY
+        echo "    Note: imported workflows are INACTIVE. In the n8n editor, wire the"
+        echo "    httpHeaderAuth + TheHive credentials, then activate each playbook."
+    fi
+fi
+
 # --- 4. Host engine (venv, deps, sterile image, keyring) -------------------
 if [ "$RUN_ENGINE" = "1" ]; then
     echo "[+] Setting up host engine via setup.sh..."
