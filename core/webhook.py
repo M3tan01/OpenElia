@@ -25,6 +25,24 @@ def load_webhook_allowlist(allowlist_secret_key: str) -> list[str]:
     return [h.strip().lower() for h in raw.split(",") if h.strip()]
 
 
+def _parse_allowlist_entry(entry: str) -> tuple[str, int | None]:
+    """Split an allowlist entry into (host, port).
+
+    ``"host"``      -> ``(host, None)`` — matches any port (backward compatible).
+    ``"host:port"`` -> ``(host, port)`` — restricts to that exact port.
+    A non-integer port -> ``("", None)`` — unmatchable (no real hostname equals
+    ""), so a malformed entry fails closed rather than allowing all ports.
+    IPv6 bracketed literals are not supported (project uses DNS hostnames).
+    """
+    if ":" not in entry:
+        return entry, None
+    host, _, port_str = entry.rpartition(":")
+    try:
+        return host, int(port_str)
+    except ValueError:
+        return "", None
+
+
 def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
     """Validate `url` against the hostname allowlist stored under
     `allowlist_secret_key`. Raises ValueError if not explicitly approved.
