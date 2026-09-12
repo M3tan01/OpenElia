@@ -52,3 +52,21 @@ def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
             f"Webhook hostname '{hostname}' is not in the approved {allowlist_secret_key} allowlist."
         )
     return url
+
+
+# Header the emitter sends and the n8n Webhook node's Header Auth credential
+# checks. This name and the n8n credential's "name" field are one contract —
+# changing it here means rotating the credential to match.
+WEBHOOK_AUTH_HEADER = "X-OpenElia-Token"
+
+
+def auth_headers(secret_key: str) -> dict[str, str]:
+    """Return the outbound auth header for a completion callback, sourced from
+    SecretStore (env fallback). Empty dict when the secret is unset — the POST
+    then goes out unauthenticated and a receiver enforcing Header Auth rejects
+    it with 403 (logged, never fatal). The token is never logged.
+    """
+    token = (SecretStore.get_secret(secret_key) or "").strip()
+    if not token:
+        return {}
+    return {WEBHOOK_AUTH_HEADER: token}
