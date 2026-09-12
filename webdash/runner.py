@@ -119,7 +119,7 @@ class RunManager:
         logged, not raised — a broken webhook must never affect run status."""
         import httpx
 
-        from core.webhook import validate_webhook_url
+        from core.webhook import auth_headers, validate_webhook_url
         from security_manager import PrivacyGuard
 
         url = rec["callback_url"]
@@ -157,9 +157,12 @@ class RunManager:
             except Exception as exc:  # best-effort enrichment — never block the POST
                 print(f"n8n coverage enrichment failed: {type(exc).__name__}: {exc}")
 
+        headers = auth_headers("N8N_WEBHOOK_TOKEN")
+        if not headers:
+            print("n8n callback: N8N_WEBHOOK_TOKEN unset — POST will be unauthenticated")
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, timeout=10)
+                response = await client.post(url, json=payload, headers=headers, timeout=10)
                 response.raise_for_status()
         except Exception as exc:
             print(f"n8n callback POST to {url} failed: {type(exc).__name__}: {exc}")
