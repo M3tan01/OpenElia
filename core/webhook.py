@@ -44,8 +44,10 @@ def _parse_allowlist_entry(entry: str) -> tuple[str, int | None]:
 
 
 def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
-    """Validate `url` against the hostname allowlist stored under
-    `allowlist_secret_key`. Raises ValueError if not explicitly approved.
+    """Validate `url` against the allowlist stored under `allowlist_secret_key`.
+
+    Allowlist entries are either ``host`` (matches any port) or ``host:port``
+    (restricts to that exact port). Raises ValueError if not explicitly approved.
     """
     allowlist = load_webhook_allowlist(allowlist_secret_key)
     if not allowlist:
@@ -65,11 +67,23 @@ def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
     if not hostname:
         raise ValueError("Webhook URL missing hostname.")
 
-    if hostname not in allowlist:
-        raise ValueError(
-            f"Webhook hostname '{hostname}' is not in the approved {allowlist_secret_key} allowlist."
-        )
-    return url
+    try:
+        port = parsed.port  # None when absent; raises ValueError on a bad port
+    except ValueError:
+        raise ValueError("Webhook URL has an invalid port.")
+    effective_port = port if port is not None else (443 if parsed.scheme == "https" else 80)
+
+    for entry in allowlist:
+        allowed_host, allowed_port = _parse_allowlist_entry(entry)
+        if allowed_host != hostname:
+            continue
+        if allowed_port is None or allowed_port == effective_port:
+            return url
+
+    raise ValueError(
+        f"Webhook target '{hostname}:{effective_port}' is not in the approved "
+        f"{allowlist_secret_key} allowlist."
+    )
 
 
 # Header the emitter sends and the n8n Webhook node's Header Auth credential
