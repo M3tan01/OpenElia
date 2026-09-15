@@ -2,14 +2,66 @@
 core/webhook.py — shared SSRF-guard for outbound webhook URLs.
 
 Any code posting to an operator-supplied URL (SIEM sync, n8n completion
-callback, ...) must validate it against a hostname allowlist stored in
-SecretStore first. Unknown hostnames are denied by default.
+callback, ...) must validate it first. A target is accepted when it is in
+RFC1918 private space (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) OR matches an
+explicit host[:port] allowlist stored in SecretStore. Everything else — public
+IPs, loopback, and link-local (incl. the 169.254.169.254 cloud-metadata
+endpoint) — is denied by default.
 """
 from __future__ import annotations
 
+import ipaddress
+import socket
 from urllib.parse import urlparse
 
 from secret_store import SecretStore
+
+# RFC1918 private IPv4 ranges. Internal callback targets (an n8n instance on the
+# operator's own network) live here and are always in-scope, independent of the
+# explicit allowlist. Kept deliberately narrow: loopback (127.0.0.0/8) and
+# link-local (169.254.0.0/16, which contains cloud-metadata 169.254.169.254) are
+# NOT RFC1918 and are NOT auto-accepted — that is why we do not use
+# ipaddress.is_private, which would also cover those.
+_RFC1918_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
+def _ip_is_rfc1918(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True only for an IPv4 address inside one of the three RFC1918 ranges."""
+    return isinstance(ip, ipaddress.IPv4Address) and any(ip in net for net in _RFC1918_NETWORKS)
+
+
+def _is_rfc1918_host(hostname: str) -> bool:
+    """True if `hostname` is (or resolves entirely to) RFC1918 private IPv4 space.
+
+    Literal IPs are checked directly. A hostname is resolved via getaddrinfo and
+    accepted only when it resolves to at least one address and EVERY resolved
+    address is RFC1918 — fail-closed: any public/IPv6/other address, or a
+    resolution failure, returns False so the target then falls through to the
+    explicit allowlist. NOTE: resolve-then-connect leaves a DNS-rebinding gap
+    (the later POST re-resolves); acceptable here for a lab-internal callback
+    guard, but do not treat this as a hardened public-facing SSRF control.
+    """
+    try:
+        return _ip_is_rfc1918(ipaddress.ip_address(hostname))
+    except ValueError:
+        pass  # not a literal IP — resolve it
+
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except OSError:
+        return False
+
+    resolved: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for _family, _type, _proto, _canon, sockaddr in infos:
+        try:
+            resolved.append(ipaddress.ip_address(sockaddr[0]))
+        except ValueError:
+            return False
+    return bool(resolved) and all(_ip_is_rfc1918(ip) for ip in resolved)
 
 
 def load_webhook_allowlist(allowlist_secret_key: str) -> list[str]:
@@ -44,17 +96,13 @@ def _parse_allowlist_entry(entry: str) -> tuple[str, int | None]:
 
 
 def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
-    """Validate `url` against the allowlist stored under `allowlist_secret_key`.
+    """Validate `url` as an outbound webhook target.
 
-    Allowlist entries are either ``host`` (matches any port) or ``host:port``
-    (restricts to that exact port). Raises ValueError if not explicitly approved.
+    Accepted if the host is RFC1918 private space (any port) OR matches an entry
+    in the allowlist under `allowlist_secret_key`. Allowlist entries are either
+    ``host`` (matches any port) or ``host:port`` (restricts to that exact port).
+    Raises ValueError if neither condition holds.
     """
-    allowlist = load_webhook_allowlist(allowlist_secret_key)
-    if not allowlist:
-        raise ValueError(
-            f"Webhook allowlist is empty. Set {allowlist_secret_key} to approved hostnames."
-        )
-
     try:
         parsed = urlparse(url)
     except Exception:
@@ -73,6 +121,19 @@ def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
         raise ValueError("Webhook URL has an invalid port.")
     effective_port = port if port is not None else (443 if parsed.scheme == "https" else 80)
 
+    # RFC1918 private ranges are always in-scope (internal callback targets) and
+    # port-independent — checked before the allowlist so an unset allowlist does
+    # not reject a legitimate internal target.
+    if _is_rfc1918_host(hostname):
+        return url
+
+    allowlist = load_webhook_allowlist(allowlist_secret_key)
+    if not allowlist:
+        raise ValueError(
+            f"Webhook target '{hostname}:{effective_port}' is not RFC1918 private "
+            f"space and the {allowlist_secret_key} allowlist is empty."
+        )
+
     for entry in allowlist:
         allowed_host, allowed_port = _parse_allowlist_entry(entry)
         if allowed_host != hostname:
@@ -81,8 +142,8 @@ def validate_webhook_url(url: str, allowlist_secret_key: str) -> str:
             return url
 
     raise ValueError(
-        f"Webhook target '{hostname}:{effective_port}' is not in the approved "
-        f"{allowlist_secret_key} allowlist."
+        f"Webhook target '{hostname}:{effective_port}' is not RFC1918 private space "
+        f"and is not in the approved {allowlist_secret_key} allowlist."
     )
 
 

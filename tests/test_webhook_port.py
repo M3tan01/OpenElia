@@ -66,3 +66,77 @@ def test_unparseable_url_port_is_rejected(monkeypatch):
     _set_allowlist(monkeypatch, "localhost")
     with pytest.raises(ValueError):
         validate_webhook_url("http://localhost:99999/hook", "WH_ALLOW")  # port out of range
+
+
+# --- RFC1918 private-range scope (webhook allowlist broadening) --------------
+
+import socket as _socket
+
+from core.webhook import _is_rfc1918_host
+
+
+def test_rfc1918_literal_ips_accepted():
+    assert _is_rfc1918_host("10.0.0.5")
+    assert _is_rfc1918_host("172.16.0.1")
+    assert _is_rfc1918_host("172.31.255.254")  # top of 172.16.0.0/12
+    assert _is_rfc1918_host("192.168.1.10")
+
+
+def test_public_and_reserved_ips_rejected():
+    assert not _is_rfc1918_host("8.8.8.8")            # public
+    assert not _is_rfc1918_host("172.32.0.1")         # just outside 172.16.0.0/12
+    assert not _is_rfc1918_host("127.0.0.1")          # loopback — not RFC1918
+    assert not _is_rfc1918_host("169.254.169.254")    # link-local metadata — not RFC1918
+
+
+def _patch_getaddrinfo(monkeypatch, ip):
+    monkeypatch.setattr(
+        core.webhook.socket, "getaddrinfo",
+        lambda host, *a, **k: [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (ip, 0))],
+    )
+
+
+def test_hostname_resolving_to_private_accepted(monkeypatch):
+    _patch_getaddrinfo(monkeypatch, "10.1.2.3")
+    assert _is_rfc1918_host("n8n.internal")
+
+
+def test_hostname_resolving_to_public_rejected(monkeypatch):
+    _patch_getaddrinfo(monkeypatch, "93.184.216.34")
+    assert not _is_rfc1918_host("evil.example.com")
+
+
+def test_hostname_resolution_failure_is_failclosed(monkeypatch):
+    def _boom(*a, **k):
+        raise OSError("no such host")
+    monkeypatch.setattr(core.webhook.socket, "getaddrinfo", _boom)
+    assert not _is_rfc1918_host("nonexistent.invalid")
+
+
+def test_rfc1918_target_accepted_with_empty_allowlist(monkeypatch):
+    _set_allowlist(monkeypatch, "")  # allowlist unset — RFC1918 still passes
+    assert validate_webhook_url("http://10.0.0.5:5678/hook", "WH_ALLOW") == "http://10.0.0.5:5678/hook"
+
+
+def test_rfc1918_target_accepted_on_any_port(monkeypatch):
+    _set_allowlist(monkeypatch, "")
+    assert validate_webhook_url("https://192.168.1.9:8443/x", "WH_ALLOW") == "https://192.168.1.9:8443/x"
+
+
+def test_public_target_rejected_with_empty_allowlist(monkeypatch):
+    import pytest
+    _set_allowlist(monkeypatch, "")
+    with pytest.raises(ValueError):
+        validate_webhook_url("http://8.8.8.8/hook", "WH_ALLOW")
+
+
+def test_metadata_endpoint_rejected(monkeypatch):
+    import pytest
+    _set_allowlist(monkeypatch, "")
+    with pytest.raises(ValueError):
+        validate_webhook_url("http://169.254.169.254/latest/meta-data", "WH_ALLOW")
+
+
+def test_rfc1918_accepted_even_when_allowlist_lists_other_host(monkeypatch):
+    _set_allowlist(monkeypatch, "splunk.corp:8088")
+    assert validate_webhook_url("http://10.5.5.5:9999/hook", "WH_ALLOW") == "http://10.5.5.5:9999/hook"
