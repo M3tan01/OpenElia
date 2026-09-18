@@ -413,3 +413,60 @@ def test_agents_roster_requires_token(client):
     """GET /api/agents with no auth header → 401."""
     resp = client.get("/api/agents")
     assert resp.status_code == 401
+
+
+# --- /api/check (readiness core, same probes as `main.py check`) ------------ #
+
+def test_check_requires_token(client):
+    """GET /api/check with no auth header → 401 (router-level token gate)."""
+    resp = client.get("/api/check")
+    assert resp.status_code == 401
+
+
+def test_check_returns_report_shape(client, auth, monkeypatch):
+    """GET /api/check with auth → 200 + serialized ReadinessReport.
+
+    The route awaits core.checks.run_readiness_check(); patch it to a fixed
+    report so the response is deterministic and never probes the host.
+    """
+    from core.checks import CheckItem, ReadinessReport
+    import core.checks as checks
+
+    async def fake_report():
+        return ReadinessReport(
+            overall_pass=True,
+            checks=(CheckItem("docker", "Docker", True, "Running"),),
+        )
+
+    monkeypatch.setattr(checks, "run_readiness_check", fake_report)
+
+    resp = client.get("/api/check", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["overall_pass"] is True
+    assert body["checks"][0]["name"] == "docker"
+    assert set(body["checks"][0].keys()) == {
+        "name", "label", "passed", "detail", "sub", "informational",
+    }
+
+
+# --- /api/sbom (SBOM core, same data as `main.py sbom`) --------------------- #
+
+def test_sbom_requires_token(client):
+    """GET /api/sbom with no auth header → 401 (router-level token gate)."""
+    resp = client.get("/api/sbom")
+    assert resp.status_code == 401
+
+
+def test_sbom_returns_dict_shape(client, auth, monkeypatch):
+    """GET /api/sbom with auth → 200 + build_sbom() dict (dep helpers stubbed)."""
+    import core.sbom as sbom
+
+    monkeypatch.setattr(sbom, "_python_dependencies", lambda: ["fastapi==0.110.0"])
+    monkeypatch.setattr(sbom, "_node_dependencies", lambda: {})
+
+    resp = client.get("/api/sbom", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["project"] == "OpenElia"
+    assert body["components"]["engine"]["dependencies"] == ["fastapi==0.110.0"]

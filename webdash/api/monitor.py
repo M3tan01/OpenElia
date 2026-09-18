@@ -142,6 +142,23 @@ def scope_check(target: str = Query(..., min_length=1)) -> dict:
     }
 
 
+@router.get("/check")
+async def get_check() -> dict:
+    """Operational readiness report (same probes as `main.py check`). Read-only."""
+    from core.checks import run_readiness_check
+
+    report = await run_readiness_check()
+    return report.as_dict()
+
+
+@router.get("/sbom")
+def get_sbom() -> dict:
+    """Software Bill of Materials (same data as `main.py sbom`). Read-only — no file write."""
+    from core.sbom import build_sbom
+
+    return build_sbom()
+
+
 @router.get("/playbooks")
 def get_playbooks() -> list[dict]:
     """Available declarative engagement playbooks (read-only)."""

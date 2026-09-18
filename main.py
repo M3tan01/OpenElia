@@ -10,12 +10,9 @@ import re
 import sys
 from dotenv import load_dotenv
 load_dotenv()
-import subprocess  # nosec: B404
 import shutil
 import shlex
 import json
-import http.client
-from urllib.parse import urlparse
 import ipaddress
 import hashlib
 from pathlib import Path
@@ -51,31 +48,10 @@ def print_openelia_banner():
     print(banner)
 
 
-def _is_safe_url(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-
-
-def _check_ollama() -> bool:
-    from model_manager import ModelManager, DEFAULT_OLLAMA_URL
-    # Stored OLLAMA_BASE_URL may lack the /v1 suffix (e.g. "http://localhost:11434").
-    # _sanitize_url appends /v1 for :11434 hosts so we hit the OpenAI-compat
-    # /v1/models endpoint (200) instead of the native /models path (404).
-    base_url = ModelManager._sanitize_url(
-        SecretStore.get_secret("OLLAMA_BASE_URL") or DEFAULT_OLLAMA_URL
-    )
-    try:
-        url = f"{base_url}/models"
-        if not _is_safe_url(url):
-            return False
-
-        parsed = urlparse(url)
-        conn = http.client.HTTPConnection(parsed.netloc, timeout=3) if parsed.scheme == "http" else http.client.HTTPSConnection(parsed.netloc, timeout=3)
-        conn.request("GET", parsed.path or "/")
-        response = conn.getresponse()
-        return 200 <= response.status < 400
-    except Exception:
-        return False
+# Readiness probes live in core/checks.py (one home, shared with the webdash
+# GET /api/check route). Re-imported here under the historical _-prefixed names
+# that _require_api_key and other CLI callers use.
+from core.checks import is_safe_url as _is_safe_url, check_ollama as _check_ollama
 
 
 def _require_api_key(brain_tier: str = "local") -> None:
@@ -99,109 +75,28 @@ def _require_api_key(brain_tier: str = "local") -> None:
         sys.exit(1)
 
 
-async def cmd_check(args) -> None:
-    """Tier 2: Operational Readiness Check"""
+def _print_readiness_report(report) -> None:
+    """Render a ReadinessReport to stdout in the classic check-command format."""
     print("🛡️ OpenElia Core Operational Readiness Check")
-    print("="*40)
-    
-    overall_pass = True
-
-    # 1. Docker Check
-    print("[ ] Checking Docker...", end="\r")
-    try:
-        import docker
-        client = docker.from_env()
-        client.ping()
-        print(f"[✓] Docker: Running")
-        
-        # Check image
-        try:
-            client.images.get("cyber-ops-recon:strict")
-            print(f"    [✓] Image 'cyber-ops-recon:strict': Found")
-        except docker.errors.ImageNotFound:
-            print(f"    [✗] Image 'cyber-ops-recon:strict': Not found (Run: python main.py doctor)")
-            overall_pass = False
-    except Exception as e:
-        print(f"[✗] Docker: Error ({str(e)})")
-        overall_pass = False
-
-    # 2. Ollama Check
-    print("[ ] Checking Ollama...", end="\r")
-    if _check_ollama():
-        from model_manager import ModelManager
-        model = ModelManager.get_config().get("local_model") or "not set — run: model set local <model>"
-        print(f"[✓] Ollama: Reachable (Target Model: {model})")
-    else:
-        print(f"[✗] Ollama: Not reachable at {SecretStore.get_secret('OLLAMA_BASE_URL') or 'localhost'}")
-        overall_pass = False
-
-    # 3. Connectivity Check
-    print("[ ] Checking CVE Intel API...", end="\r")
-    try:
-        intel_url = "https://cve.circl.lu/api/browse"
-        if _is_safe_url(intel_url):
-            parsed = urlparse(intel_url)
-            conn = http.client.HTTPSConnection(parsed.netloc, timeout=5)
-            conn.request("GET", parsed.path or "/")
-            response = conn.getresponse()
-            if 200 <= response.status < 400:
-                print(f"[✓] Intel API: Reachable (cve.circl.lu)")
-            else:
-                print(f"[✗] Intel API: Not reachable")
-                overall_pass = False
-        else:
-            print(f"[✗] Intel API: Unsafe URL detected")
-            overall_pass = False
-    except Exception:
-        print(f"[✗] Intel API: Not reachable")
-    # 4. Permissions Check
-    print("[ ] Checking Permissions...", end="\r")
-    paths = ["state", "artifacts", "mcp_servers"]
-    perm_pass = True
-    for p in paths:
-        if not os.access(p, os.W_OK):
-            print(f"    [✗] Write access denied: {p}")
-            perm_pass = False
-            overall_pass = False
-    if perm_pass:
-        print(f"[✓] Permissions: Write access confirmed for core directories")
-
-    # 5. RBAC Check
-    print("[ ] Checking RBAC Status...", end="\r")
-    from rbac_manager import RBACManager
-    is_admin = RBACManager.is_os_admin()
-    has_idp = os.path.exists(os.path.join(os.getenv("OPENELIA_STATE_DIR", "state"), "idp_session.json"))
-    allow_unpriv = os.getenv("OPENELIA_ALLOW_UNPRIV_RED") == "1"
-    status = "Admin" if is_admin else ("User+unpriv-red" if allow_unpriv else "User")
-    print(f"[✓] RBAC: Running as {status} | IdP Session: {'Found' if has_idp else 'Missing'}")
-
-    # 6. macOS Hardware Security Check
-    if sys.platform == "darwin":
-        print("[ ] Checking macOS Hardware Security...", end="\r")
-        touch_id_enabled = False
-        autofill_enabled = False
-        try:
-            # Check if Touch ID is supported/enrolled
-            bioutil_proc = subprocess.run(["bioutil", "-read", "-type", "fingerprint"], capture_output=True, text=True)  # nosec B603 B607 -- macOS system binary, no user input
-            if "total: 0" not in bioutil_proc.stdout and bioutil_proc.returncode == 0:
-                touch_id_enabled = True
-
-            # Check if Password Autofill is enabled for Touch ID
-            # This requires reading system defaults
-            autofill_proc = subprocess.run(["defaults", "read", "com.apple.TouchID", "AllowPasswordAutofill"], capture_output=True, text=True)  # nosec B603 B607 -- macOS system binary, no user input
-            if autofill_proc.stdout.strip() == "1":
-                autofill_enabled = True
-            
-            hw_status = f"[✓] macOS Hardware: TouchID={'Active' if touch_id_enabled else 'No Fingerprints'} | Autofill={'Enabled' if autofill_enabled else 'Disabled'}"
-            print(hw_status)
-        except Exception:
-            print("[✗] macOS Hardware: Failed to query bioutil/defaults")
-
-    print("="*40)
-    if overall_pass:
+    print("=" * 40)
+    for item in report.checks:
+        mark = "✓" if item.passed else "✗"
+        prefix = "    " if item.sub else ""
+        print(f"{prefix}[{mark}] {item.label}: {item.detail}")
+    print("=" * 40)
+    if report.overall_pass:
         print("✅ SYSTEM READY")
     else:
         print("❌ SYSTEM NOT READY - Fix the errors above or run 'python main.py doctor'.")
+
+
+async def cmd_check(args) -> None:
+    """Tier 2: Operational Readiness Check"""
+    from core.checks import run_readiness_check
+
+    report = await run_readiness_check()
+    _print_readiness_report(report)
+    if not report.overall_pass:
         sys.exit(1)
 
 
@@ -774,52 +669,22 @@ async def cmd_dashboard(args) -> None:
 
 async def cmd_sbom(args) -> None:
     """Tier 5: Generate Software Bill of Materials (SBOM)"""
-    print("[*] Generating OpenElia Software Bill of Materials...")
-    
-    import pkg_resources
     import json
-    
-    # 1. Python Inventory
-    python_deps = [f"{d.project_name}=={d.version}" for d in pkg_resources.working_set]
-    
-    # 2. Node.js Inventory (if exists)
-    node_deps = {}
-    if os.path.exists("src/package.json"):
-        with open("src/package.json", "r") as f:
-            pkg = json.load(f)
-            node_deps = pkg.get("dependencies", {})
-            
-    # 3. Docker Inventory
-    docker_info = "Local Fallback"
-    if os.path.exists("Dockerfile.offensive"):
-        docker_info = "cyber-ops-recon:strict (Debian Bookworm + Metasploit)"
 
-    bom = {
-        "project": "OpenElia",
-        "version": "1.0.0-Platinum",
-        "timestamp": datetime.now().isoformat(),
-        "components": {
-            "engine": {
-                "language": "Python 3.11+",
-                "dependencies": python_deps
-            },
-            "platform": {
-                "language": "TypeScript / Node.js",
-                "dependencies": node_deps
-            },
-            "sterile_environment": docker_info
-        },
-        "integrity": {
-            "audit_trail": "state/audit.log",
-            "forensic_db": "state/forensic_timeline.db"
-        }
-    }
-    
+    from core.sbom import build_sbom
+
+    print("[*] Generating OpenElia Software Bill of Materials...")
+
+    bom = build_sbom()
     with open("state/bom.json", "w") as f:
         json.dump(bom, f, indent=2)
-    
+
+    components = bom["components"]
+    total = len(components["engine"]["dependencies"]) + len(
+        components["platform"]["dependencies"]
+    )
     print("✅ SBOM generated: state/bom.json")
-    print(f"[*] Total Components Tracked: {len(python_deps) + len(node_deps)}")
+    print(f"[*] Total Components Tracked: {total}")
 
 
 async def cmd_report(args) -> None:
