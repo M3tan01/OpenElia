@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { apiGet, GraphResp } from "../api";
 import { Badge, Panel } from "./Panel";
 import { usePoll } from "../usePoll";
+import { createReconcileState, reconcileGraph } from "./graphReconcile";
 
 const NODE_COLOR: Record<string, string> = {
   host: "#ffb000", // amber — assets
@@ -23,9 +24,11 @@ export function AttackGraph() {
     return () => ro.disconnect();
   }, []);
 
-  const data = graph
-    ? { nodes: graph.nodes.map((n) => ({ ...n })), links: graph.links.map((l) => ({ ...l })) }
-    : { nodes: [], links: [] };
+  // Reconcile each poll into a reference-stable graphData that preserves node
+  // objects (and their live x/y/vx/vy) across updates. Passing a fresh object
+  // every render reheats react-force-graph's simulation → the constant twitch.
+  const reconcile = useRef(createReconcileState());
+  const data = useMemo(() => reconcileGraph(reconcile.current, graph), [graph]);
 
   return (
     <Panel
@@ -49,6 +52,8 @@ export function AttackGraph() {
             nodeRelSize={5}
             linkColor={() => "#2a3a36"}
             linkDirectionalArrowLength={3}
+            warmupTicks={40}
+            cooldownTicks={80}
           />
         ) : (
           <div className="text-xs text-slate-600 italic">no attack-surface data yet</div>
