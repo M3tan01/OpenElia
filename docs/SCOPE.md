@@ -16,7 +16,8 @@ A single-operator, localhost, lab/research purple-team orchestration tool:
   blue_remediate, blue_telemetry, threat_intel, vault — accessed only through `MCPGateway`.
 - **Security layers** (`security_manager.py`): RoE scope gate (fail-closed), semantic
   firewall, HMAC audit chain, PII privacy guard, OS-keyring secret store.
-- **Web dashboard** (`webdash/`): FastAPI + React console, **127.0.0.1 only**, token-gated.
+- **Web dashboard** (`webdash/`): FastAPI + React console, **LAN-exposed** (binds `0.0.0.0`;
+  `PrivateClientMiddleware` 403s any non-RFC1918/non-loopback peer), bearer-token-gated.
 
 ## What OpenElia is not (out of scope)
 

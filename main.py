@@ -759,13 +759,14 @@ async def cmd_playbook(args) -> None:
 
 
 async def cmd_dashboard(args) -> None:
-    # --web launches the FastAPI + React web dashboard (localhost only);
-    # default remains the Rich TUI.
+    # --web launches the FastAPI + React web dashboard, LAN-exposed by default
+    # (binds 0.0.0.0; PrivateClientMiddleware rejects non-RFC1918/loopback
+    # peers, bearer token remains the auth boundary); default is the Rich TUI.
     if getattr(args, "web", False):
         # cmd_dashboard runs inside main()'s asyncio.run loop → await the async
         # server (uvicorn.run() would try to start a second loop and crash).
         from webdash.server import serve as serve_web
-        await serve_web(host="127.0.0.1", port=getattr(args, "port", 8765))
+        await serve_web(host="0.0.0.0", port=getattr(args, "port", 8765))  # nosec B104
         return
     from dashboard import Dashboard
     Dashboard().run()
@@ -1027,7 +1028,7 @@ def build_parser() -> argparse.ArgumentParser:
     
     sub.add_parser("status", help="Show status")
     p_dash = sub.add_parser("dashboard", help="Launch live TUI (or --web for the browser dashboard)")
-    p_dash.add_argument("--web", action="store_true", help="Launch the FastAPI + React web dashboard (127.0.0.1)")
+    p_dash.add_argument("--web", action="store_true", help="Launch the FastAPI + React web dashboard (LAN-exposed: binds 0.0.0.0, RFC1918/loopback peers only, bearer-token auth)")
     p_dash.add_argument("--port", type=int, default=8765, help="Web dashboard port (default 8765)")
     sub.add_parser("sbom", help="Generate SBOM")
     sub.add_parser("archive", parents=[common], help="Package engagement archive")

@@ -7,17 +7,19 @@ gated control of red/blue/purple operations, the kill-switch, and brain-model se
 ## Launch
 
 ```bash
-python main.py dashboard --web            # 127.0.0.1:8765 ; --port to change
+python main.py dashboard --web            # 0.0.0.0:8765 (LAN-exposed) ; --port to change
 ```
 
-On start it prints:
+On start it prints (and, when bound off-loopback, a `LAN-EXPOSED` warning first):
 
 ```
-OpenElia dashboard →  http://127.0.0.1:8765/#token=<token>
+OpenElia dashboard →  http://0.0.0.0:8765/#token=<token>
 ```
 
 Open the **full URL including the `#token=…` fragment** — that token authorizes every
-`/api` call. Opening the bare host shows a "NO AUTH TOKEN" screen (expected).
+`/api` call. Opening the bare host shows a "NO AUTH TOKEN" screen (expected). On a
+LAN-exposed bind the `#token` fragment is reachable from the whole private network:
+do not share it, and don't leave it in browser history on a shared box.
 
 The TUI remains the default (`python main.py dashboard` without `--web`).
 
@@ -32,8 +34,14 @@ same-origin. Without a build the API works but `/` has no UI.
 
 ## Security model
 
-- Binds **127.0.0.1 only** (`run()` refuses any non-localhost host).
-- Bearer **token** on every `/api/*`. Generated on launch, stored in the OS keychain via
+- **LAN-exposed by default**: binds `0.0.0.0` so private-network operators can reach it.
+  `PrivateClientMiddleware` (`net_guard.py`) is the outermost middleware — it runs ahead
+  of every route and of token auth, and returns **403** unless the request's real TCP peer
+  IP is RFC1918-private (`10/8`, `172.16/12`, `192.168/16`) or loopback (`127/8`, `::1`).
+  `X-Forwarded-For` and other client headers are **not** consulted, so the gate cannot be
+  spoofed by a header. Public/routable peers never reach a handler.
+- Bearer **token** on every `/api/*` — the **primary** auth boundary (the IP gate sits
+  underneath it, not instead of it). Generated on launch, stored in the OS keychain via
   `SecretStore` (`WEBDASH_TOKEN`). The WebSocket carries it in the
   `Sec-WebSocket-Protocol` header (kept out of URLs/access logs).
 - **Control endpoints** (`/api/run/*`, `/api/lock`, `/api/unlock`) require: token +
@@ -43,14 +51,19 @@ same-origin. Without a build the API works but `/` has no UI.
 
 ### Limitations & hardening notes
 
-This console is built for a **single operator on localhost**. The following are
-accepted trade-offs at that scope — revisit every one before binding anywhere else:
+This console is built for **operators on a trusted private network**. The IP gate keeps
+public peers out, but the token is the only thing separating operators *within* that
+network — treat these as accepted trade-offs and revisit them for anything wider:
 
 - **No transport encryption.** Traffic is plain `http`/`ws`. The bearer token rides
-  the WebSocket subprotocol (kept off URLs/logs) but is still sent in clear. This is
-  safe *only* because the server binds `127.0.0.1`. **Never bind to `0.0.0.0` or a
-  routable interface without terminating TLS in front of it** (e.g. a localhost-only
-  reverse proxy). `run()` refuses non-localhost hosts to enforce this.
+  the WebSocket subprotocol (kept off URLs/logs) but is still sent in clear — now over
+  the LAN, not just loopback, so **anyone who can sniff the private segment sees it**.
+  The IP gate blocks routable peers, not a passive sniffer on the same wire. **Terminate
+  TLS in front (a reverse proxy) before treating the network as anything but trusted**,
+  and never route the port past your RFC1918 boundary without it.
+- **The `#token` fragment is LAN-reachable.** Shoulder-surfing, browser history on a
+  shared box, and referer leakage all now reach beyond the local machine. Don't share
+  the URL; relaunch to rotate if it may have leaked.
 - **Token expires; rotation is launch-time only.** The bearer token carries an issue
   timestamp and is rejected once older than `WEBDASH_TOKEN_TTL` (default 8h; set `0` to
   disable). An expired token is **rotated on the next `dashboard --web` launch**, which
@@ -58,8 +71,9 @@ accepted trade-offs at that scope — revisit every one before binding anywhere 
   when a token expires while a tab is open, every call returns `401 token expired` and the
   operator must relaunch and reopen the new URL. Legacy tokens minted before TTL existed
   (bare strings, no issue time) never expire until the next mint.
-- **No per-endpoint rate limiting.** The auth + confirm + scope gates are the only
-  throttle. Add rate limiting if the surface is ever exposed beyond localhost.
+- **No per-endpoint rate limiting.** The IP gate + auth + confirm + scope gates are the
+  only throttle. Now that the surface reaches the LAN, add rate limiting before treating
+  the network as hostile.
 
 ## Layout
 

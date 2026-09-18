@@ -31,7 +31,7 @@ OpenElia is a lab/research tool, not a turnkey product. Honest status of the mov
 *   🔴 **Red Team (Pentester)**: LLM-driven reconnaissance, vulnerability assessment, and exploitation using the **Atomic Red Team** library, gated by human-in-the-loop confirmation on sensitive actions.
 *   🔵 **Blue Team (Defender)**: Log analysis, SIEM-style telemetry, and remediation (block IP via iptables, kill process via SIGKILL). Operates in simulation mode by default; live execution requires `BLUE_REMEDIATE_LIVE=1` plus an RBAC token.
 *   🟣 **Purple Team**: N-iteration attack/defend loops with coverage delta tracking, early exit, and adaptive red task seeding based on previous blue alert types.
-*   📺 **Dashboard**: Real-time TUI with MITRE heatmap, findings, red/blue logs, and pivot session panel — or a local browser console (`dashboard --web`, 127.0.0.1 only) with the same telemetry plus interactive control (run red/blue/purple, kill-switch, model selection). See `webdash/README.md`.
+*   📺 **Dashboard**: Real-time TUI with MITRE heatmap, findings, red/blue logs, and pivot session panel — or a browser console (`dashboard --web`, LAN-exposed: binds `0.0.0.0`, RFC1918/loopback peers only, bearer-token auth) with the same telemetry plus interactive control (run red/blue/purple, kill-switch, model selection). See `webdash/README.md`.
 *   🧠 **Retry with self-correction**: On a tool error, an agent reflects on the cause and reissues a corrected command (max 3 retries).
 *   🕵️ **Stealth Mode (OPSEC)**: Randomized timing jitter and living-off-the-land command preferences to reduce noise.
 *   🐝 **Parallel host scanning**: A CIDR target fans out into concurrent per-host scanning threads.
@@ -82,7 +82,7 @@ OpenElia/
 │   ├── threat_intel/       # Threat intelligence
 │   └── vault/              # Secure credential storage
 ├── skills/                 # Domain-specific skill modules
-├── webdash/                # FastAPI + React browser console (127.0.0.1 only)
+├── webdash/                # FastAPI + React browser console (LAN-exposed; RFC1918/loopback gate)
 ├── state/                  # Persistent state and databases
 ├── requirements.txt        # Python dependencies
 ├── pyproject.toml          # Python project config
@@ -182,8 +182,8 @@ python3 main.py check
 # Launch the interactive War Room TUI
 python3 main.py dashboard
 
-# Launch the browser C2 console (FastAPI + React, 127.0.0.1 only)
-# Prints http://127.0.0.1:8765/#token=<token> — open the FULL url incl. the #token fragment.
+# Launch the browser C2 console (FastAPI + React, LAN-exposed: binds 0.0.0.0, RFC1918/loopback peers only)
+# Prints http://0.0.0.0:8765/#token=<token> — open the FULL url incl. the #token fragment.
 # First time only (static/ is gitignored — no UI until built):
 #   cd webdash/frontend && npm install && npm run build
 python3 main.py dashboard --web            # --port 8888 to change port

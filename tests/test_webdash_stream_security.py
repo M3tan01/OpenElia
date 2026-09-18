@@ -112,10 +112,24 @@ def test_verify_false_when_no_token(monkeypatch):
     assert security.verify("anything") is False
 
 
-# --- server localhost guard -------------------------------------------------- #
+# --- server bind banner ------------------------------------------------------ #
+# Posture change: the dashboard is now LAN-exposed by default (binds 0.0.0.0),
+# with PrivateClientMiddleware — not a bind-time guard — enforcing the network
+# boundary (see tests/test_net_guard.py). _banner no longer refuses any host.
 
-def test_run_refuses_non_localhost():
-    from webdash import server
+def test_banner_warns_on_non_loopback_bind(monkeypatch, capsys):
+    from webdash import server, security
 
-    with pytest.raises(ValueError):
-        server.run(host="0.0.0.0", port=8765)  # nosec B104 — asserting it is REFUSED
+    monkeypatch.setattr(security, "get_or_create_token", lambda: "tok")
+    server._banner("0.0.0.0", 8765)  # nosec B104 — LAN-exposed by design; must NOT raise
+    out = capsys.readouterr().out
+    assert "LAN-EXPOSED" in out
+
+
+def test_banner_no_lan_warning_on_loopback(monkeypatch, capsys):
+    from webdash import server, security
+
+    monkeypatch.setattr(security, "get_or_create_token", lambda: "tok")
+    server._banner("127.0.0.1", 8765)
+    out = capsys.readouterr().out
+    assert "LAN-EXPOSED" not in out

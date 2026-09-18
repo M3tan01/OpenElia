@@ -62,7 +62,10 @@ See `workflows/n8n/README.md` for the full credential + callback-URL walkthrough
 ./venv/bin/python main.py dashboard --web
 ```
 
-Open the printed `http://127.0.0.1:PORT/#token=…` URL (127.0.0.1 only, token-gated).
+Open the printed `http://0.0.0.0:PORT/#token=…` URL. LAN-exposed by default: binds
+`0.0.0.0`, `PrivateClientMiddleware` 403s any non-RFC1918/non-loopback peer, bearer-token
+gated. On a shared LAN the `#token` fragment is reachable — don't leak it; front with TLS
+for anything beyond a trusted segment.
 Switch brains in the sidebar **Brain Models** view — no restart, no hardcoded model.
 
 ## Local + expensive brains
