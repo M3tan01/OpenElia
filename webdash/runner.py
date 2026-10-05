@@ -48,6 +48,10 @@ class RunManager:
         agent: str | None = None,
         callback_url: str | None = None,
         campaign_id: str | None = None,
+        tool: str | None = None,
+        nmap_args: str | None = None,
+        msf_args: str | None = None,
+        action_id: int | None = None,
     ) -> str:
         if self.active():
             raise RuntimeError("a run is already active")
@@ -66,6 +70,7 @@ class RunManager:
             "callback_url": callback_url,
             "state_dir": state_dir,
             "campaign_id": campaign_id,
+            "tool": tool,
         }
         self._active = run_id
         t = asyncio.create_task(
@@ -73,20 +78,22 @@ class RunManager:
                 run_id=run_id, domain=domain, task=task, targets=targets,
                 stealth=stealth, proxy_port=proxy_port, brain_tier=brain_tier,
                 apt_profile=apt_profile, agent=agent, state_dir=state_dir,
-                campaign_id=campaign_id,
+                campaign_id=campaign_id, tool=tool, nmap_args=nmap_args, msf_args=msf_args,
+                action_id=action_id,
             )
         )
         self._tasks.add(t)
         t.add_done_callback(self._tasks.discard)
         return run_id
 
-    async def _execute(self, run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None, campaign_id=None):
+    async def _execute(self, run_id, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None, campaign_id=None, tool=None, nmap_args=None, msf_args=None, action_id=None):
         rec = self._runs[run_id]
         try:
             rec["result"] = await self._invoke(
                 domain=domain, task=task, targets=targets, stealth=stealth,
                 proxy_port=proxy_port, brain_tier=brain_tier, apt_profile=apt_profile,
                 agent=agent, state_dir=state_dir, campaign_id=campaign_id,
+                tool=tool, nmap_args=nmap_args, msf_args=msf_args, action_id=action_id,
             )
             rec["status"] = "done"
             # Trend snapshot: unconditional completion point for purple runs.
@@ -167,15 +174,55 @@ class RunManager:
         except Exception as exc:
             print(f"n8n callback POST to {url} failed: {type(exc).__name__}: {exc}")
 
-    async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None, campaign_id=None) -> dict:
+    async def _invoke(self, domain, task, targets, stealth, proxy_port, brain_tier, apt_profile, state_dir, agent=None, campaign_id=None, tool=None, nmap_args=None, msf_args=None, action_id=None) -> dict:
         """Actual engine call. Isolated for mocking in tests."""
-        from orchestrator import Orchestrator
         from state_manager import StateManager
 
         sm = StateManager(db_path=str(Path(state_dir) / "engagement.db"))
-        if not sm.read():
+        # remediation acts on an EXISTING engagement's response_actions by id; it
+        # must never fabricate an engagement from its sentinel target. Other tools
+        # legitimately bootstrap one from a real target/IP.
+        if not sm.read() and tool != "remediation":
             sm.initialize_engagement(targets[0] if targets else "unknown", "web dashboard engagement",
                                      campaign_id=campaign_id)
+
+        # Tier 4 tool runs bypass the generic Orchestrator route and invoke the
+        # specific agent entrypoint. nmap: PentesterRecon.run_nmap does a sterile
+        # scan then an agent loop to record structured results (CLI-parity). The
+        # target/args were already validated at the HTTP boundary (core.nmap).
+        if tool == "nmap":
+            from agents.red.pentester_recon import PentesterRecon
+
+            recon = PentesterRecon(sm, brain_tier=brain_tier)
+            await recon.run_nmap(targets[0], nmap_args=nmap_args or "-sV")
+            return {"tool": "nmap", "target": targets[0], "nmap_args": nmap_args or "-sV"}
+
+        # msf: PentesterOS runs the sterile msfconsole command (no agent loop,
+        # CLI-parity). Command is built + validated by core.msf; the target/args
+        # were already validated at the HTTP boundary before launch.
+        if tool == "msf":
+            from agents.red.pentester_os import PentesterOS
+
+            from core.msf import build_msf_command
+
+            built = build_msf_command(targets[0], msf_args, stealth)
+            pos = PentesterOS(sm)
+            output = await pos.run_sterile_command(built["command"], targets[0], proxy_port=proxy_port)
+            return {"tool": "msf", "target": targets[0], "msf_args": built["msf_extra"], "output": output}
+
+        # remediation: DefenderRes executes a previously approved, allowlisted
+        # response action by its DB row id (blue op, no target). action_id was
+        # validated at the HTTP boundary (core.remediation); the command
+        # allowlist in execute_remediation still gates the actual subprocess.
+        if tool == "remediation":
+            from agents.blue.defender_res import DefenderRes
+
+            res = DefenderRes(sm, brain_tier=brain_tier)
+            output = await res.execute_remediation(action_id)
+            return {"tool": "remediation", "action_id": action_id, "output": output}
+
+        from orchestrator import Orchestrator
+
         orch = Orchestrator(sm)
         return await orch.route(
             task,

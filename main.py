@@ -6,15 +6,12 @@ main.py — OpenElia CLI entry point.
 import argparse
 import asyncio
 import os
-import re
 import sys
 from dotenv import load_dotenv
 load_dotenv()
 import shutil
-import shlex
 import json
 import ipaddress
-import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -310,52 +307,27 @@ async def cmd_nmap(args) -> None:
     await recon.run_nmap(args.target, nmap_args=nmap_args)
 
 
-def _validate_ip_target(target: str) -> str:
-    """Validate target is a valid IP address or CIDR. Returns target on success."""
-    try:
-        ipaddress.ip_address(target)
-        return target
-    except ValueError:
-        pass
-    try:
-        ipaddress.ip_network(target, strict=False)
-        return target
-    except ValueError:
-        pass
-    raise ValueError(f"Invalid target '{target}': must be a valid IP address or CIDR range.")
-
 
 async def cmd_msf(args) -> None:
     """Interface with Metasploit Framework in Sterile Mode."""
     from agents.red.pentester_os import PentesterOS
     from state_manager import StateManager
-    
+    from core.msf import build_msf_command
+
     print(f"[*] Launching Metasploit Session for {args.target}...")
     _require_api_key(args.brain_tier)
-    
+
     try:
-        _validate_ip_target(args.target)
+        built = build_msf_command(args.target, args.args, args.stealth)
     except ValueError as e:
         print(f"ERROR: {e}")
         sys.exit(1)
-        
-    pos = PentesterOS(StateManager())
-    
-    # Launch msfconsole with a resource script or direct command
-    msf_extra = args.args or "show options"
 
     if args.stealth:
         print("[!] STEALTH enabled: Throttling MSF scanner.")
-        # Inject thread throttling before quoting so the substitution operates on
-        # the plain string, not on shell-quoted output.
-        msf_extra = re.sub(r"\brun\b", "set THREADS 1; run", msf_extra, flags=re.IGNORECASE)
-        msf_extra = re.sub(r"\bexploit\b", "set THREADS 1; exploit", msf_extra, flags=re.IGNORECASE)
 
-    safe_target = shlex.quote(args.target)
-    safe_extra = shlex.quote(msf_extra)
-    cmd = f"msfconsole -q -x 'set RHOSTS {safe_target}; {safe_extra}; exit'"
-        
-    output = await pos.run_sterile_command(cmd, args.target, proxy_port=args.proxy_port)
+    pos = PentesterOS(StateManager())
+    output = await pos.run_sterile_command(built["command"], args.target, proxy_port=args.proxy_port)
     print(output)
     print("✅ MSF operation complete.")
 
@@ -364,12 +336,18 @@ async def cmd_execute_remediation(args) -> None:
     """Execute a previously approved response action by its DB row ID."""
     from state_manager import StateManager
     from agents.blue.defender_res import DefenderRes
+    from core.remediation import validate_action_id
+    try:
+        action_id = validate_action_id(args.action_id)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
     state = StateManager()
     if not state.read():
         print("ERROR: No active engagement. Run blue first to generate response actions.")
         sys.exit(1)
     res = DefenderRes(state, brain_tier="local")
-    result = await res.execute_remediation(args.action_id)
+    result = await res.execute_remediation(action_id)
     print(result)
 
 
@@ -702,47 +680,31 @@ async def cmd_report(args) -> None:
 
 async def cmd_archive(args) -> None:
     """Tier 4: Package Engagement into a Forensic Case File"""
-    import zipfile
     from state_manager import StateManager
     from agents.reporter_agent import ReporterAgent
-    
+    from core.archive import build_case_archive
+
     state_mgr = StateManager()
     state = state_mgr.read()
     if not state:
         print("Error: No active engagement to archive.")
         return
-        
+
     print("[*] Triggering Reporter Agent for Final Synthesis...")
     reporter = ReporterAgent(state_mgr, brain_tier=args.brain_tier)
     await reporter.run("Generate final executive summary and MITRE tactical coverage for archiving.")
-    
-    eng_id = state["engagement"]["id"]
-    archive_name = f"OpenElia_Case_{eng_id}.zip"
-    archive_path = os.path.join("state", archive_name)
-    print(f"[*] Packaging Forensic Case File: {archive_name}...")
-    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        if os.path.exists("state/engagement.db"):
-            zipf.write("state/engagement.db", arcname="engagement.db")
-        if os.path.exists("state/audit.log"):
-            zipf.write("state/audit.log", arcname="audit.log")
-        if os.path.exists("state/bom.json"):
-            zipf.write("state/bom.json", arcname="bom.json")
-        if os.path.exists("artifacts"):
-            for root, _, files in os.walk("artifacts"):
-                for file in files:
-                    if file != ".gitkeep":
-                        zipf.write(os.path.join(root, file), arcname=os.path.join("evidence", file))
-        # Case Summary
-        summary = f"# OpenElia Case Summary\nID: {eng_id}\nTarget: {state['engagement']['target']}\nDate: {datetime.now().isoformat()}"
-        zipf.writestr("Case_Summary.md", summary)
 
-    # Master Hash
-    sha256_hash = hashlib.sha256()
-    with open(archive_path,"rb") as f:
-        for byte_block in iter(lambda: f.read(4096),b""):
-            sha256_hash.update(byte_block)
-    print(f"✅ Case File successfully packaged at {archive_path}")
-    print(f"🔒 Master SHA-256: {sha256_hash.hexdigest()}")
+    eng_id = state["engagement"]["id"]
+    print(f"[*] Packaging Forensic Case File: OpenElia_Case_{eng_id}.zip...")
+    # Presentation stays here: the CLI stamps a Date line into the summary; the
+    # zip + SHA-256 logic itself lives in core/archive.py, shared with the API.
+    summary = (
+        f"# OpenElia Case Summary\nID: {eng_id}\n"
+        f"Target: {state['engagement']['target']}\nDate: {datetime.now().isoformat()}"
+    )
+    result = build_case_archive(state, summary=summary)
+    print(f"✅ Case File successfully packaged at {result['archive_path']}")
+    print(f"🔒 Master SHA-256: {result['sha256']}")
 
 
 async def cmd_doctor(args) -> None:
@@ -818,35 +780,26 @@ async def cmd_grant(args) -> None:
     the same IDP_HMAC_KEY the verifier uses, so a hand-edited or forged file fails
     the signature check.
     """
-    from rbac_manager import sign_idp_session
+    # Logic (sign + write + chmod, or unlink) lives in core/grant.py, shared with
+    # POST /api/grant. Presentation — these prints and the root-gate advisory —
+    # stays here. See core/grant.py for the credential-injection threat note.
+    from core.grant import mint_grant_session, revoke_grant_session
 
-    state_dir = Path(os.getenv("OPENELIA_STATE_DIR", "state"))
-    state_dir.mkdir(parents=True, exist_ok=True)
-    idp_path = state_dir / "idp_session.json"
+    state_dir = os.getenv("OPENELIA_STATE_DIR", "state")
 
     if args.revoke:
-        if idp_path.exists():
-            idp_path.unlink()
-            print(f"[grant] Revoked IdP session — removed {idp_path}")
+        result = revoke_grant_session(state_dir=state_dir)
+        if result["revoked"]:
+            print(f"[grant] Revoked IdP session — removed {result['idp_path']}")
         else:
-            print(f"[grant] No IdP session to revoke at {idp_path}")
+            print(f"[grant] No IdP session to revoke at {result['idp_path']}")
         return
 
-    import time
-    exp = int(time.time()) + int(args.ttl_hours * 3600)
-    claims = {"user": args.user, "roles": [args.role], "exp": exp}
-    signed = sign_idp_session(claims)
-    idp_path.write_text(json.dumps(signed, indent=2))
-    # The session is a bearer token (verified by HMAC + role only, not bound to a
-    # host/user), so lock it to the owner — otherwise any local user could copy it
-    # into their own OPENELIA_STATE_DIR and inherit the grant. Best-effort on the
-    # state dir too. os.chmod is a no-op-ish on Windows; the multi-user threat is POSIX.
-    try:
-        os.chmod(idp_path, 0o600)
-        os.chmod(state_dir, 0o700)
-    except OSError as exc:
-        print(f"[grant] Warning: could not tighten permissions on {idp_path}: {exc}")
-    print(f"[grant] Signed IdP session written to {idp_path} (mode 0600)")
+    result = mint_grant_session(args.user, args.role, args.ttl_hours, state_dir=state_dir)
+    if not result["chmod_ok"]:
+        print(f"[grant] Warning: could not tighten permissions on {result['idp_path']}: {result['chmod_error']}")
+    print(f"[grant] Signed IdP session written to {result['idp_path']} (mode 0600)")
+    exp = result["expires_epoch"]
     print(f"[grant] user={args.user} role={args.role} expires={datetime.fromtimestamp(exp, timezone.utc).isoformat()}")
     print("[grant] Red/purple ops now authorized for this operator (subject to the OS-root gate).")
     if os.getenv("OPENELIA_ALLOW_UNPRIV_RED") != "1" and not (sys.platform != "win32" and os.getuid() == 0):

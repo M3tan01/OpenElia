@@ -269,6 +269,108 @@ async def run_purple(req: PurpleRun, data: DashboardData = Depends(get_data), rm
     )
 
 
+class NmapRun(BaseModel):
+    target: str
+    args: str = "-sV"
+    stealth: bool = False
+    brain_tier: str = "local"
+    proxy_port: int | None = None
+    confirm: bool = False
+
+
+@router.post("/nmap")
+async def run_nmap(req: NmapRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
+    """Tier 4 dangerous op — launch a sterile nmap scan as a tracked background run.
+
+    Guards mirror /run/red because nmap traverses the agent tool loop + kill-switch:
+    require_token (router) + require_confirm (400) + require_unlocked (423) +
+    scope_gate (403, target must be in RoE scope). Target + args are validated at
+    the boundary via core.nmap.validate_nmap_request (400) BEFORE the run launches,
+    so a malformed or injection-laden command line never reaches the sterile executor.
+    """
+    require_confirm(req.confirm)
+    require_unlocked(str(data.db_path))
+    from core.nmap import validate_nmap_request
+
+    try:
+        validate_nmap_request(req.target, req.args)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    scope_gate(req.target, f"nmap {req.args}")
+    return await _launch(
+        rm, domain="red", task=f"nmap scan {req.target}", targets=[req.target],
+        stealth=req.stealth, proxy_port=req.proxy_port, brain_tier=req.brain_tier,
+        state_dir=str(data.dir), tool="nmap", nmap_args=req.args,
+    )
+
+
+class MsfRun(BaseModel):
+    target: str
+    args: str | None = None
+    stealth: bool = False
+    brain_tier: str = "local"
+    proxy_port: int | None = None
+    confirm: bool = False
+
+
+@router.post("/msf")
+async def run_msf(req: MsfRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
+    """Tier 4 dangerous op — launch a sterile Metasploit run as a tracked background run.
+
+    Guards mirror /run/red and /api/nmap: require_token (router) + require_confirm
+    (400) + require_unlocked (423) + scope_gate (403, target must be in RoE scope).
+    core.msf.build_msf_command validates the target + builds the quoted command at
+    the boundary (400) BEFORE launch, so a malformed target or an injection-laden
+    args string never reaches the sterile executor.
+    """
+    require_confirm(req.confirm)
+    require_unlocked(str(data.db_path))
+    from core.msf import build_msf_command
+
+    try:
+        build_msf_command(req.target, req.args, req.stealth)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    scope_gate(req.target, f"msf {req.args or 'show options'}")
+    return await _launch(
+        rm, domain="red", task=f"msf run {req.target}", targets=[req.target],
+        stealth=req.stealth, proxy_port=req.proxy_port, brain_tier=req.brain_tier,
+        state_dir=str(data.dir), tool="msf", msf_args=req.args,
+    )
+
+
+class RemediationRun(BaseModel):
+    action_id: int
+    brain_tier: str = "local"
+    confirm: bool = False
+
+
+@router.post("/execute-remediation")
+async def run_execute_remediation(req: RemediationRun, data: DashboardData = Depends(get_data), rm: RunManager = Depends(get_run_manager)):
+    """Tier 4 dangerous op — execute a previously approved response action by DB id.
+
+    Blue op: it runs an allowlisted remediation command, not an offensive action
+    against a target, so the guard stack is require_token (router) + require_confirm
+    (400) + require_unlocked (423, defensive ops still respect the kill-switch) with
+    NO scope_gate (there is no target to range against RoE). action_id is validated
+    at the boundary via core.remediation.validate_action_id (400) BEFORE launch; the
+    command allowlist in DefenderRes.execute_remediation still gates the subprocess.
+    """
+    require_confirm(req.confirm)
+    require_unlocked(str(data.db_path))
+    from core.remediation import validate_action_id
+
+    try:
+        action_id = validate_action_id(req.action_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return await _launch(
+        rm, domain="blue", task=f"execute remediation action {action_id}",
+        targets=["remediation"], brain_tier=req.brain_tier,
+        state_dir=str(data.dir), tool="remediation", action_id=action_id,
+    )
+
+
 @router.post("/forge")
 async def run_forge(req: ForgeRun, data: DashboardData = Depends(get_data)) -> dict:
     # Forge only reads + generates a profile; it does NOT launch ops, so it needs
@@ -403,6 +505,137 @@ async def report_brief(req: ReportBrief, data: DashboardData = Depends(get_data)
     findings = state.get("findings", []) if state else []
     md = await ReporterAgent(sm, brain_tier=req.brain_tier).brief(findings)
     return {"markdown": md}
+
+
+class ReportFull(BaseModel):
+    brain_tier: Literal["local", "expensive"] = "local"
+    confirm: bool = False
+
+
+@router.post("/report/full")
+async def report_full(req: ReportFull, data: DashboardData = Depends(get_data)) -> dict:
+    """Generate the full engagement report (executive summary, MITRE heatmap,
+    forensic chain of custody) over current state. Token + confirm gated. Unlike
+    the brief, run() persists two artifacts (report .md + heatmap .json) as a
+    side effect — matching the CLI `report` command."""
+    require_confirm(req.confirm)
+    # run() drives the agent tool loop, which calls _check_kill_switch (raises
+    # SystemExit — a BaseException that would NOT convert to a clean HTTP
+    # response). Reject up front with a clean 423 when the engine is locked.
+    require_unlocked(str(data.db_path))
+    from state_manager import StateManager
+    from agents.reporter_agent import ReporterAgent
+
+    sm = StateManager(db_path=str(data.db_path))
+    if not sm.read():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="no active engagement — run a red or blue engagement first",
+        )
+    md = await ReporterAgent(sm, brain_tier=req.brain_tier).run(
+        "Generate full engagement report with MITRE heatmap and forensic chain of custody."
+    )
+    return {"markdown": md}
+
+
+class ArchiveReq(BaseModel):
+    brain_tier: Literal["local", "expensive"] = "local"
+    confirm: bool = False
+
+
+@router.post("/archive")
+async def archive(req: ArchiveReq, data: DashboardData = Depends(get_data)) -> dict:
+    """Package the engagement (state DB, audit log, SBOM, recovered artifacts) into
+    a forensic zip and return {engagement_id, archive_path, sha256}. Token + confirm
+    gated. Like report/full, run() drives the agent tool loop (kill-switch raises
+    SystemExit, a BaseException that would NOT convert to a clean HTTP response), so
+    reject up front with 423 when locked. Mirrors the CLI `archive` command; the zip
+    is written under the API's configured state dir (data.dir), not a hardcoded path."""
+    require_confirm(req.confirm)
+    require_unlocked(str(data.db_path))
+    from state_manager import StateManager
+    from agents.reporter_agent import ReporterAgent
+    from core.archive import build_case_archive
+
+    sm = StateManager(db_path=str(data.db_path))
+    state = sm.read()
+    if not state:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="no active engagement — run a red or blue engagement first",
+        )
+    summary = await ReporterAgent(sm, brain_tier=req.brain_tier).run(
+        "Generate the final executive case summary for the engagement archive."
+    )
+    return build_case_archive(state, state_dir=str(data.dir), summary=summary)
+
+
+class ModelSet(BaseModel):
+    tier: Literal["local", "cloud"]
+    model: str
+    provider: str | None = None
+    confirm: bool = False
+
+
+@router.post("/model/set")
+def model_set(req: ModelSet) -> dict:
+    """Switch the active brain model. Config-file mutation only — no target and
+    no agent tool loop, so token + confirm are the only guards (no kill-switch
+    or RoE scope path applies). Mirrors the CLI `model set` command; returns the
+    resulting config. Provider is validated against SUPPORTED_PROVIDERS here so
+    the network surface never trusts an arbitrary provider string."""
+    require_confirm(req.confirm)
+    from model_manager import ModelManager, SUPPORTED_PROVIDERS
+
+    if req.tier == "local":
+        ModelManager.set_local_model(req.model)
+    else:  # cloud
+        if not req.provider:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="provider is required for tier=cloud",
+            )
+        provider = req.provider.lower()
+        if provider not in SUPPORTED_PROVIDERS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown provider '{req.provider}'; supported: {SUPPORTED_PROVIDERS}",
+            )
+        ModelManager.set_cloud_model(provider, req.model)
+    return {"config": ModelManager.get_config()}
+
+
+class GrantReq(BaseModel):
+    user: str = "operator"
+    # role is signed into a bearer credential, so constrain it at the boundary —
+    # see core/grant.py's credential-injection note. Literal → 422 on anything else.
+    role: Literal["admin", "security_lead", "red_team_lead"] = "red_team_lead"
+    ttl_hours: float = 12.0
+    revoke: bool = False
+    confirm: bool = False
+
+
+@router.post("/grant")
+def grant_session(req: GrantReq, data: DashboardData = Depends(get_data)) -> dict:
+    """Mint (or revoke) the signed IdP session authorizing red/purple ops.
+
+    CREDENTIAL-INJECTION RESIDUAL RISK: this MINTS an offensive-authorization
+    bearer credential — the most sensitive Tier 3 surface. It is NOT bound to a
+    host/user, so any holder of the webdash bearer token who clears this gate can
+    self-grant red/purple authority (privilege bootstrap). Guards: router-level
+    require_token (401) + require_confirm (400); `role` is constrained by the
+    GrantReq Literal and re-checked in core/grant.py. No agent tool loop → no
+    require_unlocked; no target → no scope_gate (grant is what *creates* the scope
+    authority scope_gate later checks). The OS-root gate still applies at red/purple
+    *execution*, not here. See core/grant.py for the full threat note."""
+    require_confirm(req.confirm)
+    from core.grant import mint_grant_session, revoke_grant_session
+
+    if req.revoke:
+        return revoke_grant_session(state_dir=str(data.dir))
+    return mint_grant_session(
+        req.user, req.role, req.ttl_hours, state_dir=str(data.dir)
+    )
 
 
 class AdversaryDelete(BaseModel):
