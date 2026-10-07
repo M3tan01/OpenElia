@@ -194,7 +194,10 @@ class RunManager:
             from agents.red.pentester_recon import PentesterRecon
 
             recon = PentesterRecon(sm, brain_tier=brain_tier)
-            await recon.run_nmap(targets[0], nmap_args=nmap_args or "-sV")
+            # non_interactive=True: HITL already enforced at the HTTP boundary
+            # (confirm + scope_gate + unlock). The terminal Confirm.ask would
+            # block the uvicorn event loop — the HTTP caller never sees it.
+            await recon.run_nmap(targets[0], nmap_args=nmap_args or "-sV", non_interactive=True)
             return {"tool": "nmap", "target": targets[0], "nmap_args": nmap_args or "-sV"}
 
         # msf: PentesterOS runs the sterile msfconsole command (no agent loop,
@@ -207,7 +210,9 @@ class RunManager:
 
             built = build_msf_command(targets[0], msf_args, stealth)
             pos = PentesterOS(sm)
-            output = await pos.run_sterile_command(built["command"], targets[0], proxy_port=proxy_port)
+            # non_interactive=True: see nmap branch — HITL enforced at the HTTP
+            # boundary; the blocking Confirm.ask must not run on the event loop.
+            output = await pos.run_sterile_command(built["command"], targets[0], proxy_port=proxy_port, non_interactive=True)
             return {"tool": "msf", "target": targets[0], "msf_args": built["msf_extra"], "output": output}
 
         # remediation: DefenderRes executes a previously approved, allowlisted
