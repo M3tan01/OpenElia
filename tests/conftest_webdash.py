@@ -76,4 +76,8 @@ def client():
 
     from webdash.server import app
 
-    return TestClient(app)
+    # PrivateClientMiddleware gates on peer IP; TestClient's default peer is
+    # "testclient" (not an IP → 403). Present a loopback peer so the gate
+    # passes and these tests exercise the routes, not the network guard
+    # (that guard is covered in tests/test_net_guard.py).
+    return TestClient(app, client=("127.0.0.1", 50000))

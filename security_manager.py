@@ -29,6 +29,22 @@ class ScopeValidator:
             self._roe_mtime = os.path.getmtime(self.roe_path)
             with open(self.roe_path, "r") as f:
                 roe = json.load(f)
+            # Fail-closed: the RoE must be HMAC-signed and bound to a live
+            # engagement, so a copied/edited/stale roe.json cannot silently
+            # re-scope an engagement. Dev/test/migration bypass via the explicit
+            # OPENELIA_ALLOW_UNSIGNED_ROE=1 danger flag (mirrors the audit-key idiom).
+            if os.getenv("OPENELIA_ALLOW_UNSIGNED_ROE") != "1":
+                from roe_signing import verify_roe
+                ok, reason = verify_roe(roe)
+                if not ok:
+                    import sys
+                    print(
+                        f"[ScopeValidator] REJECTED {self.roe_path}: {reason} (fail-closed). "
+                        f"Sign it with 'python roe_signing.py sign {self.roe_path}' or set "
+                        f"OPENELIA_ALLOW_UNSIGNED_ROE=1 for dev.",
+                        file=sys.stderr,
+                    )
+                    return  # roe_loaded stays False → block all
             self.authorized_subnets = [
                 ipaddress.ip_network(s, strict=False)
                 for s in roe.get("authorized_subnets", [])
@@ -94,14 +110,29 @@ class ScopeValidator:
             self._resolution_cache[(self.roe_path, target)] = False
             return False
         except ValueError:
+            # target is a hostname, not a literal IP. Resolve EVERY A/AAAA
+            # record and require ALL of them to be in scope — a single in-scope
+            # record is not enough. Round-robin DNS and DNS-rebinding mean the
+            # address the tool ultimately connects to may be any record in the
+            # set, so if even one resolves out of scope we must fail closed.
+            #
+            # Do NOT cache the hostname->bool decision: DNS is time-varying, and
+            # a cached allow would pin a stale (or attacker-flipped) answer for
+            # the life of the process, defeating the RoE boundary. Only literal
+            # IP decisions (the recursive calls below) are cached, and those are
+            # deterministic. Residual: an attacker who flips DNS at the exact
+            # connect() moment can still rebind after this check — closing that
+            # fully requires IP-pinning at the socket layer, which is downstream
+            # of this gate. This narrows the window to the connect race only.
             import socket
             try:
-                resolved_ip = socket.gethostbyname(target)
-                result = self.is_allowed(resolved_ip)
-                self._resolution_cache[(self.roe_path, target)] = result
-                return result
+                infos = socket.getaddrinfo(target, None)
             except Exception:
                 return False
+            resolved = {info[4][0] for info in infos}
+            if not resolved:
+                return False
+            return all(self.is_allowed(ip) for ip in resolved)
 
     def is_tool_allowed(self, tool_name: str) -> bool:
         """Check if a specific tool is prohibited by the RoE."""
@@ -133,14 +164,38 @@ class ScopeValidator:
             return False, ""
 
 class SemanticFirewall:
+    """Defense-in-depth denylist for obviously-destructive payloads.
+
+    IMPORTANT: this is NOT the primary safety control and must never be relied
+    on as one. A regex denylist can never be complete — an attacker with control
+    of the payload can always encode, obfuscate, or find an un-listed equivalent.
+    The enforceable boundary is the RoE scope check (ScopeValidator.is_allowed):
+    it decides *where* an action may run. This firewall only catches a few
+    well-known "wipe the box" commands so a fat-fingered or obviously-malicious
+    payload is stopped even when the target happens to be in scope.
+
+    Patterns below cover common destructive families and their obvious flag
+    variants (e.g. `rm -rf` and `rm -fr`). Over-matching is acceptable here:
+    a false positive costs one extra confirmation, a false negative could wipe
+    an authorized host.
+    """
+
     DESTRUCTIVE_PATTERNS = [
-        r"rm\s+-rf\s+/*",
+        r"\brm\s+-[a-z]*r[a-z]*f[a-z]*",     # rm -rf, -Rf, -rfv ...
+        r"\brm\s+-[a-z]*f[a-z]*r[a-z]*",     # rm -fr (flags reversed)
+        r"\bshred\b",
+        r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",  # bash fork bomb
         r"vssadmin\s+delete\s+shadows",
-        r">\s*/dev/sda",
-        r"mkfs",
-        r"dd\s+if=/dev/zero",
+        r"wmic\s+shadowcopy\s+delete",
+        r">\s*/dev/sd[a-z]",
+        r"\bmkfs(\.\w+)?\b",
+        r"dd\s+if=/dev/(zero|random|urandom)",
         r"Format-Volume",
-        r"Remove-Item\s+-Recurse\s+-Force\s+C:\\"
+        r"Remove-Item\s+.*-Recurse\s+.*-Force",  # any flag order
+        r"Clear-Content\b",
+        r"\bdel\s+/[fsq]",                   # del /f /s /q
+        r"cipher\s+/w:",                     # secure-wipe free space
+        r"wevtutil\s+cl",                    # clear Windows event logs
     ]
 
     @classmethod
@@ -239,6 +294,15 @@ def enforce_security_gate(source: str, target: str, payload: str):
     logger = AuditLogger()
 
     # 1. Target Validation (Mathematical Boundary)
+    # The `target and` guard is intentional: some legitimate operations have no
+    # network target (e.g. local cleanup-rollback undos registered via
+    # cleanup_registry, which pass an empty target). Forcing scope validation on
+    # an empty target would fail-closed every such call and deadlock the
+    # kill-switch's own rollback path. An empty target has no destination to be
+    # out-of-scope; the quiet-hours, prohibited-tool, and semantic-firewall rails
+    # below still run unconditionally on the payload, so a destructive no-target
+    # payload is still caught. Only the two agent/MCP callers reach this with a
+    # real (always non-empty) IP, so this guard does not widen the attack surface.
     if target and not validator.is_allowed(target):
         logger.log_event(source, target, payload, "BLOCKED", "Mathematical Boundary Breach")
         raise PermissionError("Mathematical Boundary Breach: Target is not in authorized scope.")

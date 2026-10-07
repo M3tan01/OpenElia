@@ -74,9 +74,10 @@ class _CaptureClient:
     async def __aexit__(self, *exc):
         return False
 
-    async def post(self, url, json, timeout):
+    async def post(self, url, json, timeout, headers=None):
         self._sink["url"] = url
         self._sink["payload"] = json
+        self._sink["headers"] = headers or {}
 
         class _Resp:
             def raise_for_status(self_inner):
@@ -109,6 +110,11 @@ async def test_notify_purple_enriches_with_coverage(tmp_path, monkeypatch):
 
     state_dir = _seed_coverage(tmp_path, caught=True, blue_done=True)
     monkeypatch.setattr(core.webhook, "validate_webhook_url", lambda url, key: None)
+    _orig_get = core.webhook.SecretStore.get_secret
+    monkeypatch.setattr(
+        core.webhook.SecretStore, "get_secret",
+        lambda key: None if key == "N8N_WEBHOOK_TOKEN" else _orig_get(key),
+    )
     sink: dict = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: _CaptureClient(sink))
 
@@ -128,6 +134,11 @@ async def test_notify_non_purple_omits_coverage(tmp_path, monkeypatch):
 
     state_dir = _seed_coverage(tmp_path, caught=True, blue_done=True)
     monkeypatch.setattr(core.webhook, "validate_webhook_url", lambda url, key: None)
+    _orig_get = core.webhook.SecretStore.get_secret
+    monkeypatch.setattr(
+        core.webhook.SecretStore, "get_secret",
+        lambda key: None if key == "N8N_WEBHOOK_TOKEN" else _orig_get(key),
+    )
     sink: dict = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: _CaptureClient(sink))
 
@@ -138,3 +149,45 @@ async def test_notify_non_purple_omits_coverage(tmp_path, monkeypatch):
     payload = sink["payload"]
     assert "coverage_pct" not in payload
     assert "caught_ttps" not in payload
+
+
+async def test_notify_sends_auth_header_when_token_set(tmp_path, monkeypatch):
+    import httpx
+
+    import core.webhook
+    from webdash.runner import RunManager
+
+    state_dir = _seed_coverage(tmp_path, caught=True, blue_done=True)
+    monkeypatch.setattr(core.webhook, "validate_webhook_url", lambda url, key: None)
+    _orig_get = core.webhook.SecretStore.get_secret
+    monkeypatch.setattr(
+        core.webhook.SecretStore, "get_secret",
+        lambda key: "s3cr3t-token" if key == "N8N_WEBHOOK_TOKEN" else _orig_get(key),
+    )
+    sink: dict = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: _CaptureClient(sink))
+
+    await RunManager()._notify(_purple_rec(state_dir))
+
+    assert sink["headers"]["X-OpenElia-Token"] == "s3cr3t-token"
+
+
+async def test_notify_omits_auth_header_when_token_unset(tmp_path, monkeypatch):
+    import httpx
+
+    import core.webhook
+    from webdash.runner import RunManager
+
+    state_dir = _seed_coverage(tmp_path, caught=True, blue_done=True)
+    monkeypatch.setattr(core.webhook, "validate_webhook_url", lambda url, key: None)
+    _orig_get = core.webhook.SecretStore.get_secret
+    monkeypatch.setattr(
+        core.webhook.SecretStore, "get_secret",
+        lambda key: None if key == "N8N_WEBHOOK_TOKEN" else _orig_get(key),
+    )
+    sink: dict = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: _CaptureClient(sink))
+
+    await RunManager()._notify(_purple_rec(state_dir))
+
+    assert "X-OpenElia-Token" not in sink["headers"]

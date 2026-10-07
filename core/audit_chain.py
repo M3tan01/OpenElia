@@ -9,10 +9,11 @@ where `|` denotes concatenation and `prev_chain_hash` for the first entry
 is the genesis value (64 hex zeros). This makes any tampering with a
 historical entry detectable: the hash chain breaks at the modified record.
 
-The HMAC key is sourced from SecretStore("AUDIT_HMAC_KEY"). If not set,
-a deterministic PUBLIC fallback key is used so the chain always functions —
-but tamper-evidence is only effective once a real key is set. Store it in
-the keychain (prompted by OpenElia setup) or via the AUDIT_HMAC_KEY env var.
+The HMAC key is sourced from SecretStore("AUDIT_HMAC_KEY"). It is REQUIRED:
+if not set, the chain refuses to operate (RuntimeError) rather than sign with
+a forgeable public key. Store it in the keychain (prompted by OpenElia setup)
+or via the AUDIT_HMAC_KEY env var (openssl rand -hex 32). For local dev/tests
+only, OPENELIA_ALLOW_INSECURE_AUDIT_KEY=1 permits the insecure fallback key.
 """
 
 from __future__ import annotations
@@ -34,17 +35,36 @@ _fallback_warned = False  # emit the insecure-key warning at most once per proce
 
 
 def _hmac_key() -> bytes:
+    """Return the HMAC key for the audit chain.
+
+    Fail-closed by default: if AUDIT_HMAC_KEY is not set, signing with the
+    public fallback key would make the tamper-evident chain forgeable, so we
+    refuse to run rather than silently emitting a worthless chain. Operators
+    who genuinely want the insecure fallback (local dev, tests) must opt in
+    explicitly via OPENELIA_ALLOW_INSECURE_AUDIT_KEY=1 — mirroring the
+    codebase's OPENELIA_ALLOW_UNPRIV_RED danger-flag idiom.
+    """
     global _fallback_warned
     from secret_store import SecretStore
     raw = SecretStore.get_secret("AUDIT_HMAC_KEY")
     if raw:
         return raw.encode()
+
+    if os.getenv("OPENELIA_ALLOW_INSECURE_AUDIT_KEY") != "1":
+        raise RuntimeError(
+            "AUDIT_HMAC_KEY is not set. The audit chain refuses to sign with the "
+            "public fallback key because the resulting tamper-evidence would be "
+            "forgeable. Set a real key in the keychain (prompted by OpenElia setup) "
+            "or the AUDIT_HMAC_KEY environment variable (openssl rand -hex 32). "
+            "For local dev/tests ONLY, set OPENELIA_ALLOW_INSECURE_AUDIT_KEY=1 to "
+            "permit the insecure fallback key."
+        )
+
     if not _fallback_warned:
         _log.warning(
             "AUDIT_HMAC_KEY not set — audit chain is signing with the public "
-            "fallback key. Tamper-evidence is NOT effective until you set a "
-            "real key in the keychain (prompted by OpenElia setup) or the "
-            "AUDIT_HMAC_KEY environment variable."
+            "fallback key because OPENELIA_ALLOW_INSECURE_AUDIT_KEY=1. "
+            "Tamper-evidence is NOT effective. Never use this in production."
         )
         _fallback_warned = True
     return _FALLBACK_KEY

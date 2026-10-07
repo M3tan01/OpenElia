@@ -58,10 +58,22 @@ def mock_invoke(monkeypatch):
 
 @pytest.fixture
 def allowlist(monkeypatch):
-    """Approve 'localhost' under N8N_WEBHOOK_ALLOWLIST."""
+    """Approve 'localhost' under N8N_WEBHOOK_ALLOWLIST.
+
+    This mock fully replaces SecretStore.get_secret (bypassing its env
+    fallback), so it must also supply AUDIT_HMAC_KEY — the completion callback
+    writes to the audit chain, which now fails closed when that key is absent.
+    """
     from secret_store import SecretStore
 
-    monkeypatch.setattr(SecretStore, "get_secret", staticmethod(lambda key: "localhost" if key == "N8N_WEBHOOK_ALLOWLIST" else None))
+    def _fake_get_secret(key):
+        if key == "N8N_WEBHOOK_ALLOWLIST":
+            return "localhost"
+        if key == "AUDIT_HMAC_KEY":
+            return "test-audit-hmac-key-deterministic-32b"
+        return None
+
+    monkeypatch.setattr(SecretStore, "get_secret", staticmethod(_fake_get_secret))
 
 
 def _wait_done(client, auth, run_id, tries=30):

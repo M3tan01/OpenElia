@@ -3,7 +3,7 @@
 ## Quick Reference
 - **Setup:** `bash setup.sh` or `pip install -e .`
 - **Run:** `python main.py`
-- **Web UI:** `python main.py dashboard --web` (FastAPI+React C2 console, 127.0.0.1 only; open the printed `#token=…` URL). Build once: `cd webdash/frontend && npm run build`. See `webdash/README.md`.
+- **Web UI:** `python main.py dashboard --web` (FastAPI+React C2 console, LAN-exposed: binds `0.0.0.0`, `PrivateClientMiddleware` 403s non-RFC1918/non-loopback peers, bearer-token gated; open the printed `#token=…` URL). Build once: `cd webdash/frontend && npm run build`. See `webdash/README.md`.
 - **Test:** `pytest tests/ -v`
 - **Test (single):** `pytest tests/test_<name>.py -v`
 - **Lint:** `bandit -r . -f json -o bandit_report.json`
@@ -45,7 +45,7 @@ This project is a multi-agent cybersecurity operations library. It integrates a 
 
 ## Architecture
 - **Engine**: Python (`main.py`, `agents/`, `orchestrator.py`)
-- **Web UI**: FastAPI + React dashboard (`webdash/`, 127.0.0.1 only)
+- **Web UI**: FastAPI + React dashboard (`webdash/`, LAN-exposed: binds `0.0.0.0`, RFC1918/loopback peers only via `PrivateClientMiddleware`, bearer-token gated)
 - **Persistence**: SQLite Relational Backend (`state/engagement.db`).
 - **Intelligence Layer**:
   - `mcp-graph`: Attack Surface Knowledge Graph (`NetworkX`).

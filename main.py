@@ -6,18 +6,12 @@ main.py — OpenElia CLI entry point.
 import argparse
 import asyncio
 import os
-import re
 import sys
 from dotenv import load_dotenv
 load_dotenv()
-import subprocess  # nosec: B404
 import shutil
-import shlex
 import json
-import http.client
-from urllib.parse import urlparse
 import ipaddress
-import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -51,31 +45,10 @@ def print_openelia_banner():
     print(banner)
 
 
-def _is_safe_url(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-
-
-def _check_ollama() -> bool:
-    from model_manager import ModelManager, DEFAULT_OLLAMA_URL
-    # Stored OLLAMA_BASE_URL may lack the /v1 suffix (e.g. "http://localhost:11434").
-    # _sanitize_url appends /v1 for :11434 hosts so we hit the OpenAI-compat
-    # /v1/models endpoint (200) instead of the native /models path (404).
-    base_url = ModelManager._sanitize_url(
-        SecretStore.get_secret("OLLAMA_BASE_URL") or DEFAULT_OLLAMA_URL
-    )
-    try:
-        url = f"{base_url}/models"
-        if not _is_safe_url(url):
-            return False
-
-        parsed = urlparse(url)
-        conn = http.client.HTTPConnection(parsed.netloc, timeout=3) if parsed.scheme == "http" else http.client.HTTPSConnection(parsed.netloc, timeout=3)
-        conn.request("GET", parsed.path or "/")
-        response = conn.getresponse()
-        return 200 <= response.status < 400
-    except Exception:
-        return False
+# Readiness probes live in core/checks.py (one home, shared with the webdash
+# GET /api/check route). Re-imported here under the historical _-prefixed names
+# that _require_api_key and other CLI callers use.
+from core.checks import is_safe_url as _is_safe_url, check_ollama as _check_ollama
 
 
 def _require_api_key(brain_tier: str = "local") -> None:
@@ -99,109 +72,28 @@ def _require_api_key(brain_tier: str = "local") -> None:
         sys.exit(1)
 
 
-async def cmd_check(args) -> None:
-    """Tier 2: Operational Readiness Check"""
+def _print_readiness_report(report) -> None:
+    """Render a ReadinessReport to stdout in the classic check-command format."""
     print("🛡️ OpenElia Core Operational Readiness Check")
-    print("="*40)
-    
-    overall_pass = True
-
-    # 1. Docker Check
-    print("[ ] Checking Docker...", end="\r")
-    try:
-        import docker
-        client = docker.from_env()
-        client.ping()
-        print(f"[✓] Docker: Running")
-        
-        # Check image
-        try:
-            client.images.get("cyber-ops-recon:strict")
-            print(f"    [✓] Image 'cyber-ops-recon:strict': Found")
-        except:
-            print(f"    [✗] Image 'cyber-ops-recon:strict': Not found (Run: python main.py doctor)")
-            overall_pass = False
-    except Exception as e:
-        print(f"[✗] Docker: Error ({str(e)})")
-        overall_pass = False
-
-    # 2. Ollama Check
-    print("[ ] Checking Ollama...", end="\r")
-    if _check_ollama():
-        from model_manager import ModelManager
-        model = ModelManager.get_config().get("local_model") or "not set — run: model set local <model>"
-        print(f"[✓] Ollama: Reachable (Target Model: {model})")
-    else:
-        print(f"[✗] Ollama: Not reachable at {SecretStore.get_secret('OLLAMA_BASE_URL') or 'localhost'}")
-        overall_pass = False
-
-    # 3. Connectivity Check
-    print("[ ] Checking CVE Intel API...", end="\r")
-    try:
-        intel_url = "https://cve.circl.lu/api/browse"
-        if _is_safe_url(intel_url):
-            parsed = urlparse(intel_url)
-            conn = http.client.HTTPSConnection(parsed.netloc, timeout=5)
-            conn.request("GET", parsed.path or "/")
-            response = conn.getresponse()
-            if 200 <= response.status < 400:
-                print(f"[✓] Intel API: Reachable (cve.circl.lu)")
-            else:
-                print(f"[✗] Intel API: Not reachable")
-                overall_pass = False
-        else:
-            print(f"[✗] Intel API: Unsafe URL detected")
-            overall_pass = False
-    except Exception:
-        print(f"[✗] Intel API: Not reachable")
-    # 4. Permissions Check
-    print("[ ] Checking Permissions...", end="\r")
-    paths = ["state", "artifacts", "mcp_servers"]
-    perm_pass = True
-    for p in paths:
-        if not os.access(p, os.W_OK):
-            print(f"    [✗] Write access denied: {p}")
-            perm_pass = False
-            overall_pass = False
-    if perm_pass:
-        print(f"[✓] Permissions: Write access confirmed for core directories")
-
-    # 5. RBAC Check
-    print("[ ] Checking RBAC Status...", end="\r")
-    from rbac_manager import RBACManager
-    is_admin = RBACManager.is_os_admin()
-    has_idp = os.path.exists(os.path.join(os.getenv("OPENELIA_STATE_DIR", "state"), "idp_session.json"))
-    allow_unpriv = os.getenv("OPENELIA_ALLOW_UNPRIV_RED") == "1"
-    status = "Admin" if is_admin else ("User+unpriv-red" if allow_unpriv else "User")
-    print(f"[✓] RBAC: Running as {status} | IdP Session: {'Found' if has_idp else 'Missing'}")
-
-    # 6. macOS Hardware Security Check
-    if sys.platform == "darwin":
-        print("[ ] Checking macOS Hardware Security...", end="\r")
-        touch_id_enabled = False
-        autofill_enabled = False
-        try:
-            # Check if Touch ID is supported/enrolled
-            bioutil_proc = subprocess.run(["bioutil", "-read", "-type", "fingerprint"], capture_output=True, text=True)  # nosec B603 B607 -- macOS system binary, no user input
-            if "total: 0" not in bioutil_proc.stdout and bioutil_proc.returncode == 0:
-                touch_id_enabled = True
-
-            # Check if Password Autofill is enabled for Touch ID
-            # This requires reading system defaults
-            autofill_proc = subprocess.run(["defaults", "read", "com.apple.TouchID", "AllowPasswordAutofill"], capture_output=True, text=True)  # nosec B603 B607 -- macOS system binary, no user input
-            if autofill_proc.stdout.strip() == "1":
-                autofill_enabled = True
-            
-            hw_status = f"[✓] macOS Hardware: TouchID={'Active' if touch_id_enabled else 'No Fingerprints'} | Autofill={'Enabled' if autofill_enabled else 'Disabled'}"
-            print(hw_status)
-        except Exception:
-            print("[✗] macOS Hardware: Failed to query bioutil/defaults")
-
-    print("="*40)
-    if overall_pass:
+    print("=" * 40)
+    for item in report.checks:
+        mark = "✓" if item.passed else "✗"
+        prefix = "    " if item.sub else ""
+        print(f"{prefix}[{mark}] {item.label}: {item.detail}")
+    print("=" * 40)
+    if report.overall_pass:
         print("✅ SYSTEM READY")
     else:
         print("❌ SYSTEM NOT READY - Fix the errors above or run 'python main.py doctor'.")
+
+
+async def cmd_check(args) -> None:
+    """Tier 2: Operational Readiness Check"""
+    from core.checks import run_readiness_check
+
+    report = await run_readiness_check()
+    _print_readiness_report(report)
+    if not report.overall_pass:
         sys.exit(1)
 
 
@@ -415,52 +307,27 @@ async def cmd_nmap(args) -> None:
     await recon.run_nmap(args.target, nmap_args=nmap_args)
 
 
-def _validate_ip_target(target: str) -> str:
-    """Validate target is a valid IP address or CIDR. Returns target on success."""
-    try:
-        ipaddress.ip_address(target)
-        return target
-    except ValueError:
-        pass
-    try:
-        ipaddress.ip_network(target, strict=False)
-        return target
-    except ValueError:
-        pass
-    raise ValueError(f"Invalid target '{target}': must be a valid IP address or CIDR range.")
-
 
 async def cmd_msf(args) -> None:
     """Interface with Metasploit Framework in Sterile Mode."""
     from agents.red.pentester_os import PentesterOS
     from state_manager import StateManager
-    
+    from core.msf import build_msf_command
+
     print(f"[*] Launching Metasploit Session for {args.target}...")
     _require_api_key(args.brain_tier)
-    
+
     try:
-        _validate_ip_target(args.target)
+        built = build_msf_command(args.target, args.args, args.stealth)
     except ValueError as e:
         print(f"ERROR: {e}")
         sys.exit(1)
-        
-    pos = PentesterOS(StateManager())
-    
-    # Launch msfconsole with a resource script or direct command
-    msf_extra = args.args or "show options"
 
     if args.stealth:
         print("[!] STEALTH enabled: Throttling MSF scanner.")
-        # Inject thread throttling before quoting so the substitution operates on
-        # the plain string, not on shell-quoted output.
-        msf_extra = re.sub(r"\brun\b", "set THREADS 1; run", msf_extra, flags=re.IGNORECASE)
-        msf_extra = re.sub(r"\bexploit\b", "set THREADS 1; exploit", msf_extra, flags=re.IGNORECASE)
 
-    safe_target = shlex.quote(args.target)
-    safe_extra = shlex.quote(msf_extra)
-    cmd = f"msfconsole -q -x 'set RHOSTS {safe_target}; {safe_extra}; exit'"
-        
-    output = await pos.run_sterile_command(cmd, args.target, proxy_port=args.proxy_port)
+    pos = PentesterOS(StateManager())
+    output = await pos.run_sterile_command(built["command"], args.target, proxy_port=args.proxy_port)
     print(output)
     print("✅ MSF operation complete.")
 
@@ -469,12 +336,18 @@ async def cmd_execute_remediation(args) -> None:
     """Execute a previously approved response action by its DB row ID."""
     from state_manager import StateManager
     from agents.blue.defender_res import DefenderRes
+    from core.remediation import validate_action_id
+    try:
+        action_id = validate_action_id(args.action_id)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
     state = StateManager()
     if not state.read():
         print("ERROR: No active engagement. Run blue first to generate response actions.")
         sys.exit(1)
     res = DefenderRes(state, brain_tier="local")
-    result = await res.execute_remediation(args.action_id)
+    result = await res.execute_remediation(action_id)
     print(result)
 
 
@@ -759,13 +632,14 @@ async def cmd_playbook(args) -> None:
 
 
 async def cmd_dashboard(args) -> None:
-    # --web launches the FastAPI + React web dashboard (localhost only);
-    # default remains the Rich TUI.
+    # --web launches the FastAPI + React web dashboard, LAN-exposed by default
+    # (binds 0.0.0.0; PrivateClientMiddleware rejects non-RFC1918/loopback
+    # peers, bearer token remains the auth boundary); default is the Rich TUI.
     if getattr(args, "web", False):
         # cmd_dashboard runs inside main()'s asyncio.run loop → await the async
         # server (uvicorn.run() would try to start a second loop and crash).
         from webdash.server import serve as serve_web
-        await serve_web(host="127.0.0.1", port=getattr(args, "port", 8765))
+        await serve_web(host="0.0.0.0", port=getattr(args, "port", 8765))  # nosec B104
         return
     from dashboard import Dashboard
     Dashboard().run()
@@ -773,52 +647,22 @@ async def cmd_dashboard(args) -> None:
 
 async def cmd_sbom(args) -> None:
     """Tier 5: Generate Software Bill of Materials (SBOM)"""
-    print("[*] Generating OpenElia Software Bill of Materials...")
-    
-    import pkg_resources
     import json
-    
-    # 1. Python Inventory
-    python_deps = [f"{d.project_name}=={d.version}" for d in pkg_resources.working_set]
-    
-    # 2. Node.js Inventory (if exists)
-    node_deps = {}
-    if os.path.exists("src/package.json"):
-        with open("src/package.json", "r") as f:
-            pkg = json.load(f)
-            node_deps = pkg.get("dependencies", {})
-            
-    # 3. Docker Inventory
-    docker_info = "Local Fallback"
-    if os.path.exists("Dockerfile.offensive"):
-        docker_info = "cyber-ops-recon:strict (Debian Bookworm + Metasploit)"
 
-    bom = {
-        "project": "OpenElia",
-        "version": "1.0.0-Platinum",
-        "timestamp": datetime.now().isoformat(),
-        "components": {
-            "engine": {
-                "language": "Python 3.11+",
-                "dependencies": python_deps
-            },
-            "platform": {
-                "language": "TypeScript / Node.js",
-                "dependencies": node_deps
-            },
-            "sterile_environment": docker_info
-        },
-        "integrity": {
-            "audit_trail": "state/audit.log",
-            "forensic_db": "state/forensic_timeline.db"
-        }
-    }
-    
+    from core.sbom import build_sbom
+
+    print("[*] Generating OpenElia Software Bill of Materials...")
+
+    bom = build_sbom()
     with open("state/bom.json", "w") as f:
         json.dump(bom, f, indent=2)
-    
+
+    components = bom["components"]
+    total = len(components["engine"]["dependencies"]) + len(
+        components["platform"]["dependencies"]
+    )
     print("✅ SBOM generated: state/bom.json")
-    print(f"[*] Total Components Tracked: {len(python_deps) + len(node_deps)}")
+    print(f"[*] Total Components Tracked: {total}")
 
 
 async def cmd_report(args) -> None:
@@ -836,47 +680,31 @@ async def cmd_report(args) -> None:
 
 async def cmd_archive(args) -> None:
     """Tier 4: Package Engagement into a Forensic Case File"""
-    import zipfile
     from state_manager import StateManager
     from agents.reporter_agent import ReporterAgent
-    
+    from core.archive import build_case_archive
+
     state_mgr = StateManager()
     state = state_mgr.read()
     if not state:
         print("Error: No active engagement to archive.")
         return
-        
+
     print("[*] Triggering Reporter Agent for Final Synthesis...")
     reporter = ReporterAgent(state_mgr, brain_tier=args.brain_tier)
     await reporter.run("Generate final executive summary and MITRE tactical coverage for archiving.")
-    
-    eng_id = state["engagement"]["id"]
-    archive_name = f"OpenElia_Case_{eng_id}.zip"
-    archive_path = os.path.join("state", archive_name)
-    print(f"[*] Packaging Forensic Case File: {archive_name}...")
-    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        if os.path.exists("state/engagement.db"):
-            zipf.write("state/engagement.db", arcname="engagement.db")
-        if os.path.exists("state/audit.log"):
-            zipf.write("state/audit.log", arcname="audit.log")
-        if os.path.exists("state/bom.json"):
-            zipf.write("state/bom.json", arcname="bom.json")
-        if os.path.exists("artifacts"):
-            for root, _, files in os.walk("artifacts"):
-                for file in files:
-                    if file != ".gitkeep":
-                        zipf.write(os.path.join(root, file), arcname=os.path.join("evidence", file))
-        # Case Summary
-        summary = f"# OpenElia Case Summary\nID: {eng_id}\nTarget: {state['engagement']['target']}\nDate: {datetime.now().isoformat()}"
-        zipf.writestr("Case_Summary.md", summary)
 
-    # Master Hash
-    sha256_hash = hashlib.sha256()
-    with open(archive_path,"rb") as f:
-        for byte_block in iter(lambda: f.read(4096),b""):
-            sha256_hash.update(byte_block)
-    print(f"✅ Case File successfully packaged at {archive_path}")
-    print(f"🔒 Master SHA-256: {sha256_hash.hexdigest()}")
+    eng_id = state["engagement"]["id"]
+    print(f"[*] Packaging Forensic Case File: OpenElia_Case_{eng_id}.zip...")
+    # Presentation stays here: the CLI stamps a Date line into the summary; the
+    # zip + SHA-256 logic itself lives in core/archive.py, shared with the API.
+    summary = (
+        f"# OpenElia Case Summary\nID: {eng_id}\n"
+        f"Target: {state['engagement']['target']}\nDate: {datetime.now().isoformat()}"
+    )
+    result = build_case_archive(state, summary=summary)
+    print(f"✅ Case File successfully packaged at {result['archive_path']}")
+    print(f"🔒 Master SHA-256: {result['sha256']}")
 
 
 async def cmd_doctor(args) -> None:
@@ -952,35 +780,26 @@ async def cmd_grant(args) -> None:
     the same IDP_HMAC_KEY the verifier uses, so a hand-edited or forged file fails
     the signature check.
     """
-    from rbac_manager import sign_idp_session
+    # Logic (sign + write + chmod, or unlink) lives in core/grant.py, shared with
+    # POST /api/grant. Presentation — these prints and the root-gate advisory —
+    # stays here. See core/grant.py for the credential-injection threat note.
+    from core.grant import mint_grant_session, revoke_grant_session
 
-    state_dir = Path(os.getenv("OPENELIA_STATE_DIR", "state"))
-    state_dir.mkdir(parents=True, exist_ok=True)
-    idp_path = state_dir / "idp_session.json"
+    state_dir = os.getenv("OPENELIA_STATE_DIR", "state")
 
     if args.revoke:
-        if idp_path.exists():
-            idp_path.unlink()
-            print(f"[grant] Revoked IdP session — removed {idp_path}")
+        result = revoke_grant_session(state_dir=state_dir)
+        if result["revoked"]:
+            print(f"[grant] Revoked IdP session — removed {result['idp_path']}")
         else:
-            print(f"[grant] No IdP session to revoke at {idp_path}")
+            print(f"[grant] No IdP session to revoke at {result['idp_path']}")
         return
 
-    import time
-    exp = int(time.time()) + int(args.ttl_hours * 3600)
-    claims = {"user": args.user, "roles": [args.role], "exp": exp}
-    signed = sign_idp_session(claims)
-    idp_path.write_text(json.dumps(signed, indent=2))
-    # The session is a bearer token (verified by HMAC + role only, not bound to a
-    # host/user), so lock it to the owner — otherwise any local user could copy it
-    # into their own OPENELIA_STATE_DIR and inherit the grant. Best-effort on the
-    # state dir too. os.chmod is a no-op-ish on Windows; the multi-user threat is POSIX.
-    try:
-        os.chmod(idp_path, 0o600)
-        os.chmod(state_dir, 0o700)
-    except OSError as exc:
-        print(f"[grant] Warning: could not tighten permissions on {idp_path}: {exc}")
-    print(f"[grant] Signed IdP session written to {idp_path} (mode 0600)")
+    result = mint_grant_session(args.user, args.role, args.ttl_hours, state_dir=state_dir)
+    if not result["chmod_ok"]:
+        print(f"[grant] Warning: could not tighten permissions on {result['idp_path']}: {result['chmod_error']}")
+    print(f"[grant] Signed IdP session written to {result['idp_path']} (mode 0600)")
+    exp = result["expires_epoch"]
     print(f"[grant] user={args.user} role={args.role} expires={datetime.fromtimestamp(exp, timezone.utc).isoformat()}")
     print("[grant] Red/purple ops now authorized for this operator (subject to the OS-root gate).")
     if os.getenv("OPENELIA_ALLOW_UNPRIV_RED") != "1" and not (sys.platform != "win32" and os.getuid() == 0):
@@ -1027,7 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
     
     sub.add_parser("status", help="Show status")
     p_dash = sub.add_parser("dashboard", help="Launch live TUI (or --web for the browser dashboard)")
-    p_dash.add_argument("--web", action="store_true", help="Launch the FastAPI + React web dashboard (127.0.0.1)")
+    p_dash.add_argument("--web", action="store_true", help="Launch the FastAPI + React web dashboard (LAN-exposed: binds 0.0.0.0, RFC1918/loopback peers only, bearer-token auth)")
     p_dash.add_argument("--port", type=int, default=8765, help="Web dashboard port (default 8765)")
     sub.add_parser("sbom", help="Generate SBOM")
     sub.add_parser("archive", parents=[common], help="Package engagement archive")

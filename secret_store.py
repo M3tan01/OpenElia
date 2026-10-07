@@ -207,6 +207,8 @@ class SecretStore:
             ("CYBER_RISK_INSTRUCTION", "Custom risk instruction injected into every agent prompt"),
             # SIEM webhook forwarding
             ("SIEM_WEBHOOK_ALLOWLIST", "Comma-separated approved SIEM hostnames (e.g. splunk.corp.com,siem.internal)"),
+            # n8n completion-callback auth — shared secret for the X-OpenElia-Token header
+            ("N8N_WEBHOOK_TOKEN", "Shared secret to authenticate completion callbacks to n8n (any strong random string; openssl rand -hex 32)"),
             # Blue team live remediation
             ("BLUE_REMEDIATE_RBAC_TOKEN", "RBAC token for live iptables/kill execution (any strong random string)"),
             # Audit log tamper-evidence — without this the chain signs with a PUBLIC fallback key
